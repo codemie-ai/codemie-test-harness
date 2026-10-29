@@ -1,0 +1,8 @@
+states:
+  - id: coverage
+    #assistant_id: assistantId
+    #custom_node_id: customNodeId
+    #tool_id: toolId
+    task: Run
+    next:
+      state_id: end

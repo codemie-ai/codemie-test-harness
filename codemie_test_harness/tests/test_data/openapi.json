@@ -1,0 +1,388 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "CodeMie API",
+    "description": "Smart AI assistant 'CodeMie' API",
+    "version": "0.16.0"
+  },
+  "servers": [
+    {
+      "url": "CODEMIE_API_DOMAIN",
+      "description": "Production server"
+    }
+  ],
+  "paths": {
+    "/v1/info": {
+      "get": {
+        "summary": "Get API information",
+        "description": "Returns basic information about the CodeMie API including version and description",
+        "operationId": "getInfo",
+        "responses": {
+          "200": {
+            "description": "Successful response with API information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Codemie",
+                      "description": "API service name"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "0.16.0",
+                      "description": "Current API version"
+                    },
+                    "description": {
+                      "type": "string",
+                      "example": "Smart AI assistant 'CodeMie'",
+                      "description": "API description"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "version",
+                    "description"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Info"
+        ]
+      }
+    },
+    "/v1/assistants": {
+      "get": {
+        "summary": "Get assistants",
+        "description": "Retrieve a list of assistants",
+        "operationId": "getAssistants",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of assistants to return",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of assistants to skip",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Assistant"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Assistants"
+        ]
+      },
+      "post": {
+        "summary": "Create a new assistant",
+        "description": "Create a new assistant with the provided details",
+        "operationId": "createAssistant",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAssistantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Assistant created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Assistant"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Assistants"
+        ]
+      }
+    },
+    "/v1/assistants/id/{assistant_id}": {
+      "get": {
+        "summary": "Get assistant by ID",
+        "description": "Retrieve a specific assistant by its ID",
+        "operationId": "getAssistantById",
+        "parameters": [
+          {
+            "name": "assistant_id",
+            "in": "path",
+            "description": "The ID of the assistant to retrieve",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Assistant"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Assistant not found"
+          }
+        },
+        "tags": [
+          "Assistants"
+        ]
+      }
+    },
+    "/v1/assistants/slug/{assistant_slug}": {
+      "get": {
+        "summary": "Get assistant by slug",
+        "description": "Retrieve a specific assistant by its slug",
+        "operationId": "getAssistantBySlug",
+        "parameters": [
+          {
+            "name": "assistant_slug",
+            "in": "path",
+            "description": "The slug of the assistant to retrieve",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Assistant"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Assistant not found"
+          }
+        },
+        "tags": [
+          "Assistants"
+        ]
+      }
+    },
+    "/v1/assistants/prebuilt": {
+      "get": {
+        "summary": "Get prebuilt assistants",
+        "description": "Retrieve a list of prebuilt assistants",
+        "operationId": "getPrebuiltAssistants",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Assistant"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Assistants"
+        ]
+      }
+    },
+    "/v1/index": {
+      "get": {
+        "summary": "Get indexing progress",
+        "description": "Retrieve the current indexing progress",
+        "operationId": "getIndexingProgress",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "progress": {
+                      "type": "number",
+                      "format": "float",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "in_progress",
+                        "completed",
+                        "failed"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Index"
+        ]
+      }
+    },
+    "/v1/index/users": {
+      "get": {
+        "summary": "Get index users",
+        "description": "Retrieve users from the index",
+        "operationId": "getIndexUsers",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Index"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Assistant": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the assistant"
+          },
+          "slug": {
+            "type": "string",
+            "description": "URL-friendly identifier for the assistant"
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name of the assistant"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the assistant's capabilities"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the assistant was created"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the assistant was last updated"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name"
+        ]
+      },
+      "CreateAssistantRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Display name of the assistant"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the assistant's capabilities"
+          },
+          "slug": {
+            "type": "string",
+            "description": "URL-friendly identifier for the assistant (optional, will be auto-generated if not provided)"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Info",
+      "description": "API information endpoints"
+    },
+    {
+      "name": "Assistants",
+      "description": "Assistant management operations"
+    },
+    {
+      "name": "Index",
+      "description": "Indexing operations"
+    }
+  ]
+}

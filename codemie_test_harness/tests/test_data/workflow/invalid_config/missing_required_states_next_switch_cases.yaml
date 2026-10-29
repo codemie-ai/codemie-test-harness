@@ -1,0 +1,18 @@
+assistants:
+  - id: coverage_assistant
+    model: gpt-5-2-2025-12-11
+    system_prompt: >
+      System prompt text.
+
+states:
+  - assistant_id: coverage_assistant
+    id: coverage
+    task: Run
+    next:
+      switch:
+#        cases:
+#          - condition: "language == 'Java'"
+#            state_id: end
+#          - condition: "language == 'Python'"
+#            state_id: end
+        default: end

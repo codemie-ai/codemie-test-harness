@@ -1,0 +1,13 @@
+.idea/
+dist
+venv
+.venv
+.DS_Store
+__pycache__
+.vscode
+codemie_test_harness/.env
+.env
+codemie_test_harness/tests/test_data/files/large-files/large_file.txt
+.codemie
+test_screenshots
+codemie-test-reports/

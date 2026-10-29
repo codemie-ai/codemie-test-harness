@@ -1,0 +1,14 @@
+assistants:
+  - id: coverage_assistant
+    model: gpt-5-2-2025-12-11
+    system_prompt: >
+      System prompt text.
+    tools:
+      - name: Invalid-tool
+
+states:
+  - assistant_id: coverage_assistant
+    id: coverage
+    task: Run
+    next:
+      state_id: end

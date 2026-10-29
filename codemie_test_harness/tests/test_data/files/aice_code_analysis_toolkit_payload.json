@@ -1,0 +1,409 @@
+{
+    "update_date": "2025-11-07T15:27:35.300052",
+    "service_location_url": "https://aice.example.invalid/aice/datasource/api/v1//",
+    "id": "e49a68a4-03f2-470f-8964-3064f7fe59a0",
+    "name": "TestAutomation",
+    "date": "2025-09-02T12:47:43.190302",
+    "configuration": {
+      "auth_type": "Bearer"
+    },
+    "provided_toolkits": [
+      {
+        "toolkit_id": "02325457-4666-499a-b18d-475c2566dc6c",
+        "name": "TestAutomationCodeAnalysisToolkit",
+        "description": "This ToolKit provides tools for indexing the source code of provided repository and set of methods to get insights of the code and code snippets.",
+        "toolkit_config": {
+          "type": "Code Analysis Datasource Configuration",
+          "description": "Configuration for this toolkit",
+          "parameters": {
+            "branch": {
+              "description": "Branch to checkout, defaults to master",
+              "type": "String",
+              "required": false,
+              "enum": null,
+              "example": "develop",
+              "title": "Branch"
+            },
+            "api_url": {
+              "description": "Link to git repository with codebase for analysis",
+              "type": "URL",
+              "required": true,
+              "enum": null,
+              "example": "https://gitlab.example.com/codemie",
+              "title": "Repository Link"
+            },
+            "access_token": {
+              "description": "Git access token with appropriate scopes for repository read access",
+              "type": "Secret",
+              "required": true,
+              "enum": null,
+              "example": "Token",
+              "title": "Token"
+            },
+            "datasource_id": {
+              "description": "Unique identifier for the datasource",
+              "type": "UUID",
+              "required": true,
+              "enum": null,
+              "example": "123e4567-e89b-12d3-a456-426614174000",
+              "title": "Datasource ID"
+            }
+          }
+        },
+        "provided_tools": [
+          {
+            "name": "create_datasource",
+            "description": "Creates a new datasource by indexing a Git repository for code analysis. The indexing process extracts code structure, dependencies, and other metadata to enable subsequent queries.",
+            "args_schema": {
+              "exclude_files": {
+                "type": "String",
+                "required": false,
+                "description": "List of comma-separated gitignore-style patterns for files to exclude. Applied after include_files.",
+                "enum": null,
+                "title": "Exclude Files",
+                "example": "*.log, tests/, **/build/**"
+              },
+              "include_files": {
+                "type": "String",
+                "required": false,
+                "description": "List of comma-separated gtignore-style patterns for files to include. If specified, only matching files are kept.",
+                "enum": null,
+                "title": "Include Files",
+                "example": "*.py, **/*.js"
+              },
+              "datasource_root": {
+                "type": "String",
+                "required": true,
+                "description": "Root directory in the datasource to be analyzed",
+                "enum": null,
+                "title": "Root Directory",
+                "example": "./src"
+              }
+            },
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "life_cycle_management",
+              "tool_action_type": "create"
+            },
+            "tool_result_type": "Json",
+            "sync_invocation_supported": false,
+            "async_invocation_supported": true
+          },
+          {
+            "name": "get_outgoing_dependencies",
+            "description": "Analyzes and returns information about external dependencies and imports used by specified files or code components, helping to understand code relationships and dependency chains.",
+            "args_schema": {
+              "end_line": {
+                "type": "Number",
+                "required": false,
+                "description": "Ending line number to get outgoing dependencies till, defaults to end of file",
+                "enum": null,
+                "title": "End Line",
+                "example": "200"
+              },
+              "file_path": {
+                "type": "String",
+                "required": true,
+                "description": "Path of the file to get outgoing dependencies from",
+                "enum": null,
+                "title": "Relative Path",
+                "example": "./src/services/api.py"
+              },
+              "start_line": {
+                "type": "Number",
+                "required": false,
+                "description": "Starting line number to get outgoing dependencies from, defaults to 1",
+                "enum": null,
+                "title": "Start Line",
+                "example": "5"
+              }
+            },
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "data_retrieval",
+              "tool_action_type": "read"
+            },
+            "tool_result_type": "Json",
+            "sync_invocation_supported": true,
+            "async_invocation_supported": false
+          },
+          {
+            "name": "get_datasource",
+            "description": "Get information about an existing datasource.",
+            "args_schema": {},
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "data_retrieval",
+              "tool_action_type": "read"
+            },
+            "tool_result_type": "Json",
+            "sync_invocation_supported": true,
+            "async_invocation_supported": false
+          },
+          {
+            "name": "reindex_datasource",
+            "description": "Updates an existing datasource by re-indexing the associated Git repository to incorporate the latest changes and maintain synchronization with the current codebase.",
+            "args_schema": {},
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "life_cycle_management",
+              "tool_action_type": "modify"
+            },
+            "tool_result_type": "Json",
+            "sync_invocation_supported": false,
+            "async_invocation_supported": true
+          },
+          {
+            "name": "delete_datasource",
+            "description": "Removes an existing datasource and all its indexed data from the system, freeing up resources and cleaning up stale references.",
+            "args_schema": {},
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "life_cycle_management",
+              "tool_action_type": "remove"
+            },
+            "tool_result_type": "Json",
+            "sync_invocation_supported": false,
+            "async_invocation_supported": true
+          },
+          {
+            "name": "get_files_tree",
+            "description": "Retrieves a hierarchical representation of the file system structure of the indexed repository, showing directories and files in a tree format for easy navigation.",
+            "args_schema": {
+              "path": {
+                "type": "String",
+                "required": true,
+                "description": "Relative path within the repository to start the tree structure from",
+                "enum": null,
+                "title": "Relative Path",
+                "example": "./src/components"
+              },
+              "level": {
+                "type": "Number",
+                "required": false,
+                "description": "Maximum depth of the tree structure, defaults to full depth",
+                "enum": null,
+                "title": "Level",
+                "example": "3"
+              },
+              "limit": {
+                "type": "Number",
+                "required": false,
+                "description": "Maximum number of files to include in the tree structure, defaults to all files",
+                "enum": null,
+                "title": "Limit",
+                "example": "100"
+              }
+            },
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "data_retrieval",
+              "tool_action_type": "read"
+            },
+            "tool_result_type": "String",
+            "sync_invocation_supported": true,
+            "async_invocation_supported": false
+          },
+          {
+            "name": "get_files_list",
+            "description": "Retrieves a list of files and directories within the specified path in the indexed repository, showing file names and types for easy reference.",
+            "args_schema": {
+              "path": {
+                "type": "String",
+                "required": true,
+                "description": "Relative path within the repository to list files from",
+                "enum": null,
+                "title": "Relative Path",
+                "example": "./src/controllers"
+              },
+              "limit": {
+                "type": "Integer",
+                "required": false,
+                "description": "Maximum number of files to include in the list, defaults to all files",
+                "enum": null,
+                "title": "Limit",
+                "example": "50"
+              },
+              "recursive": {
+                "type": "Number",
+                "required": false,
+                "description": "Flag to include files recursively, defaults to false",
+                "enum": null,
+                "title": "Recursive",
+                "example": "true"
+              }
+            },
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "data_retrieval",
+              "tool_action_type": null
+            },
+            "tool_result_type": "Json",
+            "sync_invocation_supported": true,
+            "async_invocation_supported": false
+          },
+          {
+            "name": "get_trimmed_code",
+            "description": "Retrieves a simplified version of code from specified files with non-essential elements (like comments and some whitespace) removed to focus on the core functionality.",
+            "args_schema": {
+              "file_path": {
+                "type": "String",
+                "required": true,
+                "description": "Path of the file to extract trimmed code from",
+                "enum": null,
+                "title": "Relative Path",
+                "example": "./src/utils/helpers.py"
+              },
+              "exclude_private": {
+                "type": "Boolean",
+                "required": false,
+                "description": "Flag to exclude private members from the trimmed code, defaults to true",
+                "enum": null,
+                "title": "Exclude Private",
+                "example": "true"
+              },
+              "show_line_numbers": {
+                "type": "Boolean",
+                "required": false,
+                "description": "Flag to include line numbers in the trimmed code, defaults to false",
+                "enum": null,
+                "title": "Show Line Numbers",
+                "example": "false"
+              }
+            },
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "data_retrieval",
+              "tool_action_type": null
+            },
+            "tool_result_type": "String",
+            "sync_invocation_supported": true,
+            "async_invocation_supported": false
+          },
+          {
+            "name": "get_metadata",
+            "description": "Retrieves metadata information about specified files in the indexed repository, including file size, line count, and other relevant details.",
+            "args_schema": {
+              "file_path": {
+                "type": "String",
+                "required": true,
+                "description": "Relative path to the file to get metadata for",
+                "enum": null,
+                "title": "Relative Path",
+                "example": "./src/config/settings.py"
+              }
+            },
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "data_retrieval",
+              "tool_action_type": null
+            },
+            "tool_result_type": "String",
+            "sync_invocation_supported": true,
+            "async_invocation_supported": false
+          },
+          {
+            "name": "unload_datasource",
+            "description": "Unloads (detaches) an existing datasource from in-memory cache without deleting persisted metadata or files. Use this to free RAM when a datasource is idle; it can be lazily reloaded later on demand.",
+            "args_schema": {},
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "life_cycle_management",
+              "tool_action_type": "modify"
+            },
+            "tool_result_type": "Json",
+            "sync_invocation_supported": false,
+            "async_invocation_supported": true
+          },
+          {
+            "name": "get_code_members",
+            "description": "Get the code members (functions, classes, etc.) from a specific file.",
+            "args_schema": {
+              "end_line": {
+                "type": "Number",
+                "required": false,
+                "description": "Ending line number to extract code members till, defaults to end of file",
+                "enum": null,
+                "title": "End Line",
+                "example": "100"
+              },
+              "file_path": {
+                "type": "String",
+                "required": true,
+                "description": "Path of the file to extract code members from",
+                "enum": null,
+                "title": "Relative Path",
+                "example": "./src/main.py"
+              },
+              "start_line": {
+                "type": "Number",
+                "required": false,
+                "description": "Starting line number to extract code members from, defaults to 1",
+                "enum": null,
+                "title": "Start Line",
+                "example": "1"
+              }
+            },
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "data_retrieval",
+              "tool_action_type": "read"
+            },
+            "tool_result_type": "Json",
+            "sync_invocation_supported": true,
+            "async_invocation_supported": false
+          },
+          {
+            "name": "get_code",
+            "description": "Fetches the complete, unmodified source code of specified files or code segments from the indexed repository, preserving all original formatting and comments.",
+            "args_schema": {
+              "end_line": {
+                "type": "Number",
+                "required": false,
+                "description": "Ending line number to extract code till, defaults to end of file",
+                "enum": null,
+                "title": "End Line",
+                "example": "50"
+              },
+              "file_path": {
+                "type": "String",
+                "required": true,
+                "description": "Path of the file to extract code from",
+                "enum": null,
+                "title": "Relative Path",
+                "example": "./src/models/user.py"
+              },
+              "start_line": {
+                "type": "Integer",
+                "required": false,
+                "description": "Starting line number to extract code from, defaults to 1",
+                "enum": null,
+                "title": "Start Line",
+                "example": "10"
+              },
+              "show_line_numbers": {
+                "type": "Number",
+                "required": false,
+                "description": "Flag to include line numbers in the code, defaults to false",
+                "enum": null,
+                "title": "Show Line Numbers",
+                "example": "false"
+              }
+            },
+            "tool_metadata": {
+              "tool_type": "stateful",
+              "tool_purpose": "data_retrieval",
+              "tool_action_type": "read"
+            },
+            "tool_result_type": "String",
+            "sync_invocation_supported": true,
+            "async_invocation_supported": false
+          }
+        ],
+        "toolkit_metadata": {
+          "life_cycle_id": "datasource_id",
+          "managed_fields": null
+        }
+      }
+    ]
+  }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<request>
+    <method>POST</method>
+    <url>https://example.com/api</url>
+    <headers>
+        <header name="accept">application/json</header>
+        <header name="Content-Type">application/xml</header>
+    </headers>
+    <body>
+        <message>Hello, this is a test request.</message>
+    </body>
+</request>

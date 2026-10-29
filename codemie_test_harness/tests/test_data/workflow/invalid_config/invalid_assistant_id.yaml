@@ -1,0 +1,13 @@
+assistants:
+  - assistant_id: e3bb4613-d3ed-4391-8350-8702175b0e2x
+    id: coverage_assistant
+    model: gpt-5-2-2025-12-11
+    system_prompt: >
+      System prompt text.
+
+states:
+  - assistant_id: coverage_assistant
+    id: coverage
+    task: Run
+    next:
+      state_id: end

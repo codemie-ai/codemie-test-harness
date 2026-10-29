@@ -1,0 +1,17 @@
+
+file_upload_request:
+  method: POST
+  url: "https://example.com/upload"
+  headers:
+    accept: "application/json"
+    Content-Type: "multipart/form-data"
+  query_parameters:
+    name: "example_file"
+    description: "Sample file upload"
+  form_data:
+    files:
+      file_path: "path/to/sample.txt"
+      mime_type: "text/plain"
+  expected_response:
+    status_code: 200
+    body: "Success"
