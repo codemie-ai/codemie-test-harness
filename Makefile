@@ -1,4 +1,4 @@
-.PHONY: install test unit-test build publish install-hooks scan-internal license-check license-fix license-scan
+.PHONY: install test build publish install-hooks scan-internal license-check license-fix license-scan
 
 # `make install` resolves codemie-sdk-python from poetry.lock, exactly like CI.
 # Optional override on top of the locked environment (never written to
@@ -12,9 +12,6 @@ install:
 		echo "Pinning codemie-sdk-python==$(SDK_VERSION)..."; \
 		poetry run pip install "codemie-sdk-python==$(SDK_VERSION)"; \
 	fi
-
-unit-test:
-	poetry run pytest -p no:cacheprovider -p pytester unit_tests
 
 # Installs scripts/pre-commit-hook.sh as the repo-wide git pre-commit hook.
 # It only lints staged test-harness/*.py files, so it is safe to run even
