@@ -2,7 +2,7 @@
 
 Contributions are welcome. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before you start.
 
-The test suites need internal CodeMie environments. You can change and review the code without them, but you cannot run the suites yourself. CI does not run them either. The CodeMie team runs the real suites internally from the scheduled gitops autotest jobs after a change is merged.
+The test suites need a running CodeMie installation. Run the suites your change touches against your own installation before you open a pull request (see [README.md](README.md#run-on-your-machine)). CI does not run them: it has no installation. The CodeMie team runs the full suites from its scheduled jobs after a change is merged.
 
 ## How to Contribute
 
