@@ -11,3 +11,4 @@ codemie_test_harness/tests/test_data/files/large-files/large_file.txt
 .codemie
 test_screenshots
 codemie-test-reports/
+docs/superpowers/qa-tasks/
