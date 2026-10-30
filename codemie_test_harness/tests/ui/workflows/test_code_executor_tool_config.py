@@ -26,6 +26,7 @@ MULTILINE_CODE = "line1 = 'hello'\nline2 = 'world'\nprint(line1, line2)"
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_code_executor_code_field_is_textarea_and_persists_multiline_code(
     page, test_workflow
 ):

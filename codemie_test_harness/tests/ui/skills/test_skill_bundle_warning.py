@@ -58,6 +58,7 @@ def skills_to_delete(skill_utils):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skill_editor_shows_no_bundle_warning_within_the_file_limit(
     page, tmp_path, bundle_file_count_limit
 ):
@@ -74,6 +75,7 @@ def test_skill_editor_shows_no_bundle_warning_within_the_file_limit(
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skill_editor_warns_about_bundle_files_over_the_limit_and_still_saves(
     page, tmp_path, bundle_file_count_limit, skills_to_delete
 ):

@@ -64,6 +64,7 @@ states:
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_workflow_page_elements_visibility(page, test_workflow):
     """Test that all main elements are visible on Edit Workflow page."""
     edit_page = EditWorkflowPage(page)
@@ -90,6 +91,7 @@ def test_edit_workflow_page_elements_visibility(page, test_workflow):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_workflow_form_pre_populated_data(page, test_workflow):
     """Test that form fields are pre-populated with existing workflow data."""
     edit_page = EditWorkflowPage(page)
@@ -112,6 +114,7 @@ def test_edit_workflow_form_pre_populated_data(page, test_workflow):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_workflow_form_interactions(page, test_workflow):
     """Test form field interactions and input validation."""
     # Start from Workflows page
@@ -181,6 +184,7 @@ def test_edit_workflow_form_interactions(page, test_workflow):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_workflow_yaml_editor_functionality_with_history(page, test_workflow):
     """Test YAML editor functionality - edit, save, and verify changes persist."""
     # Step 1 & 2: Start from Workflows page, find and open workflow for edit
@@ -280,6 +284,7 @@ def test_edit_workflow_yaml_editor_functionality_with_history(page, test_workflo
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_workflow_sidebar_functionality(page, test_workflow):
     """Test sidebar functionality from Edit Workflow page."""
     edit_page = EditWorkflowPage(page)
@@ -302,6 +307,7 @@ def test_edit_workflow_sidebar_functionality(page, test_workflow):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_workflow_menu_navigation(page, test_workflow):
     """Test menu navigation from Edit Workflow page."""
     edit_page = EditWorkflowPage(page)
@@ -324,6 +330,7 @@ def test_edit_workflow_menu_navigation(page, test_workflow):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_workflow_tabs_navigation(page, test_workflow):
     """Test that form data persists when switching between tabs with unsaved changes warning."""
     edit_page = EditWorkflowPage(page)
@@ -361,6 +368,7 @@ def test_edit_workflow_tabs_navigation(page, test_workflow):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_workflow_config_panel_basic_tab(page, test_workflow):
     """Test workflow config panel basic tab validations in Edit Workflow page."""
     edit_page = EditWorkflowPage(page)

@@ -32,6 +32,7 @@ from codemie_test_harness.tests.ui.pageobject.workflows import WorkflowDetailsPa
 @pytest.mark.sanity
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_chat_displays_description(page, test_workflow_with_description):
     """Workflow with a configured description shows it in the workflow chat intro area.
 

@@ -47,6 +47,7 @@ DISCARD_ACTIONS = [
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.parametrize("action_name, trigger_action", TRIGGER_ACTIONS)
+@pytest.mark.prod_regression
 def test_unsaved_changes_after_adding_name(page, action_name, trigger_action):
     """
     Parametrized test that verifies unsaved changes popup appears after adding assistant name
@@ -81,6 +82,7 @@ def test_unsaved_changes_after_adding_name(page, action_name, trigger_action):
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.parametrize("action_name, trigger_action", TRIGGER_ACTIONS)
+@pytest.mark.prod_regression
 def test_unsaved_changes_after_adding_description(page, action_name, trigger_action):
     """
     Parametrized test that verifies unsaved changes popup appears after adding description
@@ -115,6 +117,7 @@ def test_unsaved_changes_after_adding_description(page, action_name, trigger_act
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.parametrize("action_name, trigger_action", TRIGGER_ACTIONS)
+@pytest.mark.prod_regression
 def test_unsaved_changes_after_adding_system_prompt(page, action_name, trigger_action):
     """
     Parametrized test that verifies unsaved changes popup appears after adding system prompt
@@ -150,6 +153,7 @@ def test_unsaved_changes_after_adding_system_prompt(page, action_name, trigger_a
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.parametrize("action_name, trigger_action", TRIGGER_ACTIONS)
+@pytest.mark.prod_regression
 def test_edit_assistant_unsaved_changes_after_modifying_name(
     page, assistant, action_name, trigger_action
 ):
@@ -188,6 +192,7 @@ def test_edit_assistant_unsaved_changes_after_modifying_name(
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.parametrize("action_name, trigger_action, expected_url", DISCARD_ACTIONS)
+@pytest.mark.prod_regression
 def test_unsaved_changes_discard_after_adding_name(
     page, action_name, trigger_action, expected_url
 ):
@@ -222,6 +227,7 @@ def test_unsaved_changes_discard_after_adding_name(
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_no_unsaved_changes_dialog_when_no_changes(page):
     """
     Test that verifies NO unsaved changes dialog appears when there are no changes made.

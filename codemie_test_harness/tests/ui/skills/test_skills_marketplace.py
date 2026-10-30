@@ -42,6 +42,7 @@ from codemie_test_harness.tests.ui.test_data.skill_test_data import (
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skills_marketplace_page_elements_visibility(page):
     """
     Test #13: Verify Marketplace page loads with browse UI.
@@ -77,6 +78,7 @@ def test_skills_marketplace_page_elements_visibility(page):
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_publish_private_skill_to_marketplace(page):
     """
     Test #17: Publish a private skill to marketplace via 3-dot menu.
@@ -128,6 +130,7 @@ def test_publish_private_skill_to_marketplace(page):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_marketplace_filter_by_category(page):
     """
     Test #19: Filter marketplace skills by category.
@@ -173,6 +176,7 @@ def test_marketplace_filter_by_category(page):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_marketplace_filter_by_created(page):
     """
     Test #20: Filter marketplace skills by Created By.
@@ -219,6 +223,7 @@ def test_marketplace_filter_by_created(page):
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_marketplace_search_skills_by_name(page):
     """
     Test #21: Search skills in marketplace.

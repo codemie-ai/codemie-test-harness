@@ -28,6 +28,7 @@ from codemie_test_harness.tests.ui.pageobject.available_models_page import (
 @pytest.mark.chat
 @pytest.mark.premium_model
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_premium_badge_and_tooltip_in_chat_model_picker(
     page, navigate_to_new_chat_page, premium_model_name
 ):
@@ -60,6 +61,7 @@ def test_premium_badge_and_tooltip_in_chat_model_picker(
 @pytest.mark.chat
 @pytest.mark.premium_model
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_premium_badge_and_tooltip_in_configuration_panel(
     page, navigate_to_new_chat_page, premium_model_name
 ):
@@ -93,6 +95,7 @@ def test_premium_badge_and_tooltip_in_configuration_panel(
 @pytest.mark.chat
 @pytest.mark.premium_model
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_no_premium_badge_for_non_premium_model_in_chat_picker(
     page, navigate_to_new_chat_page, non_premium_model_name
 ):
@@ -120,6 +123,7 @@ def test_no_premium_badge_for_non_premium_model_in_chat_picker(
 @pytest.mark.chat
 @pytest.mark.premium_model
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_selecting_premium_model_shows_all_indicators(
     page, navigate_to_new_chat_page, premium_model_name
 ):
@@ -158,6 +162,7 @@ def test_selecting_premium_model_shows_all_indicators(
 @pytest.mark.chat
 @pytest.mark.premium_model
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_premium_notice_reappears(
     page,
     navigate_to_new_chat_page,
@@ -207,6 +212,7 @@ def test_premium_notice_reappears(
 @pytest.mark.chat
 @pytest.mark.premium_model
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_premium_indicators_clear_on_switch_to_non_premium(
     page,
     navigate_to_new_chat_page,
@@ -237,6 +243,7 @@ def test_premium_indicators_clear_on_switch_to_non_premium(
 @pytest.mark.chat
 @pytest.mark.premium_model
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_help_models_page_shows_premium_marks_and_filters(page, premium_model_name):
     """Available models page must load with:
     - model table with at least one premium-marked row for a known premium model
@@ -268,6 +275,7 @@ def test_help_models_page_shows_premium_marks_and_filters(page, premium_model_na
 @pytest.mark.chat
 @pytest.mark.premium_model
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_help_models_premium_only_filter(
     page,
     premium_model_name,

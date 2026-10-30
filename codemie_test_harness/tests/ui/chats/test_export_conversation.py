@@ -135,6 +135,7 @@ def chat_with_markdown_reply(assistant, open_seeded_chat):
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_export_dialog_opens_with_format_options_and_json_default(
     page, navigate_to_new_chat_page
 ):
@@ -168,6 +169,7 @@ def test_export_dialog_opens_with_format_options_and_json_default(
 @pytest.mark.chat
 @pytest.mark.ui
 @pytest.mark.parametrize("export_format", DOCUMENT_FORMATS, ids=lambda f: f.label)
+@pytest.mark.prod_regression
 def test_export_dialog_tool_outputs_checkbox_follows_format(
     page, navigate_to_new_chat_page, export_format
 ):
@@ -202,6 +204,7 @@ def test_export_dialog_tool_outputs_checkbox_follows_format(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_export_json_downloads_file_with_tool_outputs(
     chat_with_tool_outputs, export_data, tmp_path
 ):
@@ -242,6 +245,7 @@ def test_export_json_downloads_file_with_tool_outputs(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_export_json_of_flagged_assistant_has_no_tool_outputs(
     assistant,
     enable_hide_tool_outputs_on_assistant,
@@ -284,6 +288,7 @@ def test_export_json_of_flagged_assistant_has_no_tool_outputs(
 @pytest.mark.chat
 @pytest.mark.ui
 @pytest.mark.parametrize("export_format", DOCUMENT_FORMATS, ids=lambda f: f.label)
+@pytest.mark.prod_regression
 def test_export_default_document_has_only_prompts_and_responses(
     chat_with_tool_outputs, export_data, tmp_path, export_format
 ):
@@ -322,6 +327,7 @@ def test_export_default_document_has_only_prompts_and_responses(
 @pytest.mark.chat
 @pytest.mark.ui
 @pytest.mark.parametrize("export_format", DOCUMENT_FORMATS, ids=lambda f: f.label)
+@pytest.mark.prod_regression
 def test_export_document_with_tool_outputs_is_labelled_and_complete(
     chat_with_tool_outputs, export_data, tmp_path, export_format
 ):
@@ -357,6 +363,7 @@ def test_export_document_with_tool_outputs_is_labelled_and_complete(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_export_shows_loading_state_and_blocks_duplicates(
     chat_with_tool_outputs, tmp_path
 ):
@@ -407,6 +414,7 @@ def test_export_shows_loading_state_and_blocks_duplicates(
         "docx-checked-then-json",
     ],
 )
+@pytest.mark.prod_regression
 def test_export_request_carries_tool_outputs_flag_only_when_expected(
     page, navigate_to_new_chat_page, case
 ):
@@ -438,6 +446,7 @@ def test_export_request_carries_tool_outputs_flag_only_when_expected(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_export_docx_preserves_assistant_formatting(chat_with_markdown_reply, tmp_path):
     """
     TC-008 (DOCX): headings (levels 1/2), bullet and numbered lists, table, hyperlink and a
@@ -465,6 +474,7 @@ def test_export_docx_preserves_assistant_formatting(chat_with_markdown_reply, tm
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_export_pdf_preserves_assistant_formatting(chat_with_markdown_reply, tmp_path):
     """
     TC-008 (PDF): text-level check that headings, list items, table cells, link text and
@@ -494,6 +504,7 @@ def test_export_pdf_preserves_assistant_formatting(chat_with_markdown_reply, tmp
 @pytest.mark.chat
 @pytest.mark.ui
 @pytest.mark.parametrize("dismiss_mode", list(DismissMode), ids=lambda m: m.value)
+@pytest.mark.prod_regression
 def test_export_dialog_dismiss_triggers_no_export(
     page, navigate_to_new_chat_page, dismiss_mode
 ):

@@ -52,6 +52,7 @@ _ASSISTANT_STATE_NAME = "branch_creator"
 @pytest.mark.jira
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_dropdown_shows_effective_integration_selection(
     page, workflow_with_real_assistant, client
 ):
@@ -91,6 +92,7 @@ def test_dropdown_shows_effective_integration_selection(
 @pytest.mark.jira
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_scoped_save_checkbox_unticked(
     page, workflow_with_real_assistant, client
 ):
@@ -149,6 +151,7 @@ def test_workflow_scoped_save_checkbox_unticked(
 @pytest.mark.jira
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_checkbox_ticked_save_promotes_to_assistant_scope(
     page, workflow_with_real_assistant, client
 ):
@@ -227,6 +230,7 @@ def test_checkbox_ticked_save_promotes_to_assistant_scope(
 @pytest.mark.jira
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_checkbox_pre_ticked_when_no_assistant_scoped_selection(
     page, workflow_with_real_assistant, client
 ):
@@ -266,6 +270,7 @@ def test_checkbox_pre_ticked_when_no_assistant_scoped_selection(
 @pytest.mark.jira
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_checkbox_unticked_when_assistant_scoped_selection_exists(
     page, workflow_with_real_assistant, client
 ):
@@ -314,6 +319,7 @@ def test_checkbox_unticked_when_assistant_scoped_selection_exists(
 @pytest.mark.jira
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_page_panel_has_no_apply_to_assistant_checkbox(
     page, workflow_with_real_assistant
 ):
@@ -355,6 +361,7 @@ def test_assistant_page_panel_has_no_apply_to_assistant_checkbox(
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_without_per_user_slots_shows_no_mapping_section(page, test_workflow):
     """S14: Opening the workflow node panel for an assistant that has no
     user-selectable (all-pinned) integration slots must NOT show the

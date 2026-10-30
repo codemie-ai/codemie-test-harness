@@ -47,6 +47,7 @@ ZIP_BUNDLE_MULTI_MD = str(TEST_DATA_DIR / "bundle_two_md.zip")
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_import_skill_from_markdown_and_verify_in_list(page):
     """
     Test #6-7: Import markdown file, verify form population, save, and verify in list.
@@ -88,6 +89,7 @@ def test_import_skill_from_markdown_and_verify_in_list(page):
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_import_zip_bundle_with_multiple_md_files_shows_friendly_error(page):
     """TC-001: ZIP bundle with multiple .md files shows a user-friendly error.
 

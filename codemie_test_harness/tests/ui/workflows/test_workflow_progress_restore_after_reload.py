@@ -48,6 +48,7 @@ _FINAL_EXECUTION_STATUSES = {
 @pytest.mark.workflow
 @pytest.mark.conversations
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_answer_node_shows_in_progress_thought_card_after_reload(
     page, slow_response_workflow, conversation_utils, workflow_utils
 ):
@@ -114,6 +115,7 @@ def test_answer_node_shows_in_progress_thought_card_after_reload(
 @pytest.mark.sanity
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_execution_progress_restored_after_reload(
     workflow_chat_reloaded_mid_execution,
 ):
@@ -130,6 +132,7 @@ def test_workflow_execution_progress_restored_after_reload(
 @pytest.mark.workflow
 @pytest.mark.conversations
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_restore_failed_message_shown_when_execution_state_cannot_be_restored(
     page, test_workflow, conversation_utils
 ):

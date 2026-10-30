@@ -29,6 +29,7 @@ from codemie_test_harness.tests.ui.test_data.datasource_test_data import (
 @pytest.mark.datasource
 @pytest.mark.ui
 @pytest.mark.not_for_parallel_run
+@pytest.mark.prod_regression
 def test_integration_appears_and_disappears_after_refresh(
     page, managed_integration, integration_utils
 ):

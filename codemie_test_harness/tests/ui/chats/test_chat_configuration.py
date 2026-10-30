@@ -49,6 +49,7 @@ from codemie_test_harness.tests.ui.test_data.chat_test_data import (
 @pytest.mark.sanity
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_configuration_panel_visibility_and_access(page, navigate_to_new_chat_page):
     """
     Test that configuration tab is visible and accessible.
@@ -75,6 +76,7 @@ def test_configuration_panel_visibility_and_access(page, navigate_to_new_chat_pa
 @pytest.mark.sanity
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_configuration_panel_structure_and_elements(page, navigate_to_new_chat_page):
     """
     Test configuration panel structure and essential elements.
@@ -97,6 +99,7 @@ def test_configuration_panel_structure_and_elements(page, navigate_to_new_chat_p
 @pytest.mark.sanity
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_configuration_panel_closing_functionality(page, navigate_to_new_chat_page):
     """
     This test verifies that users can close the configuration panel
@@ -113,6 +116,7 @@ def test_configuration_panel_closing_functionality(page, navigate_to_new_chat_pa
 @pytest.mark.sanity
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chat_configuration_llm_update(
     page, navigate_to_new_chat_page, first_available_llm_label
 ):
@@ -137,6 +141,7 @@ def test_chat_configuration_llm_update(
 @pytest.mark.sanity
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_configuration_save_button_functionality(
     page, navigate_to_new_chat_page, assistant
 ):
@@ -181,6 +186,7 @@ def test_assistant_configuration_save_button_functionality(
 @pytest.mark.sanity
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_configuration_cancel_button_functionality(
     page, navigate_to_new_chat_page, assistant
 ):

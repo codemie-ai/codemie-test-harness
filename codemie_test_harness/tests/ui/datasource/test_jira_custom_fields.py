@@ -37,6 +37,7 @@ from codemie_test_harness.tests.utils.jira_seed import require_custom_fields
 @pytest.mark.jira
 @pytest.mark.ui
 @pytest.mark.smoke
+@pytest.mark.prod_regression
 def test_create_jira_datasource_form_shows_custom_fields_picker(page, jira_integration):
     """
     After selecting the Jira KB datasource type on the Create Datasource form,
@@ -90,6 +91,7 @@ def jira_datasource_with_custom_fields(jira_integration, jira_seed_issue):
 @pytest.mark.datasource
 @pytest.mark.jira
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_jira_datasource_form_prepopulates_custom_fields(
     page, jira_datasource_with_custom_fields
 ):

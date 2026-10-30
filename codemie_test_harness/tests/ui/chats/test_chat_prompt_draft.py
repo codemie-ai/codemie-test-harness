@@ -40,6 +40,7 @@ from codemie_test_harness.tests.ui.test_data.chat_test_data import DRAFT_TEXT
 @pytest.mark.sanity
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_draft_persists_until_sent_across_chat_navigation(page, two_conversations):
     """Comprehensive draft lifecycle test covering AC-1, AC-2, and AC-4.
 

@@ -25,6 +25,7 @@ python-gitlab = "^5.6.0"
 boto3 = "^1.39.8"
 aws-assume-role-lib = "^2.10.0"
 pyyaml = "^6.0.2"
+pillow = "^13.0.0"
 codemie-plugins = "^0.1.123"
 pytest-reportportal = "^5.5.2"
 pytest-playwright = "^0.8.0"
@@ -126,6 +127,7 @@ markers = [
     "user: User management admin API tests",
     "cli_analytics: CLI Analytics tests",
     "project: Project management tests",
+    "prod_regression: UI tests safe to run on PROD (regular user or admin, not a maintainer)",
     "requires_capability(name): needs a /v1/config capability, skipped in gated runs when absent",
     "requires_setting(KEY): needs a harness setting, skipped in gated runs when unset",
 ]

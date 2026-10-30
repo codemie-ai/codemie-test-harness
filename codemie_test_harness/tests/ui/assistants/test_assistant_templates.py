@@ -31,6 +31,7 @@ def prebuilt_assistant_templates(assistant_utils):
 @pytest.mark.assistant_templates
 @pytest.mark.pagination
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_templates_pagination_full_flow(page, prebuilt_assistant_templates):
     """TC-002: Assistant Templates pagination full flow.
 

@@ -31,6 +31,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name, wait_fo
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_with_categories_saved_and_prefilled_on_edit(
     page, workflow_utils, workflow_categories, cleanup_generated_workflow
 ):
@@ -66,6 +67,7 @@ def test_create_workflow_with_categories_saved_and_prefilled_on_edit(
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_workflow_blocks_fourth_category(page, test_workflow, workflow_categories):
     names = [category.name for category in workflow_categories]
     allowed_names = names[:MAX_UI_CATEGORIES]
@@ -85,6 +87,7 @@ def test_edit_workflow_blocks_fourth_category(page, test_workflow, workflow_cate
 @pytest.mark.workflow
 @pytest.mark.ui
 @pytest.mark.parametrize("scope", ["my", "all"])
+@pytest.mark.prod_regression
 def test_sidebar_category_filter_narrows_and_restores_workflow_list(
     page, categorized_workflows, scope
 ):

@@ -134,6 +134,7 @@ def file_datasource_to_clone(datasource_utils, default_embedding_llm):
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_action_in_list_actions_menu(page, git_datasource_to_clone):
     """The Data Sources list actions menu of a source offers 'Clone'."""
     datasource_page = DataSourcePage(page)
@@ -147,6 +148,7 @@ def test_clone_action_in_list_actions_menu(page, git_datasource_to_clone):
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_button_on_details_page(page, git_datasource_to_clone):
     """The source details page offers a 'Clone' button."""
     datasource_page = DataSourcePage(page)
@@ -165,6 +167,7 @@ def test_clone_button_on_details_page(page, git_datasource_to_clone):
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_opens_prefilled_form_for_source(page, git_datasource_to_clone):
     """Clone opens /data-sources/<id>/clone with the source configuration prefilled and the name empty."""
     datasource_page = DataSourcePage(page)
@@ -190,6 +193,7 @@ def test_clone_opens_prefilled_form_for_source(page, git_datasource_to_clone):
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_saves_independent_datasource(
     page,
     datasource_utils,
@@ -278,6 +282,7 @@ def test_clone_saves_independent_datasource(
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_with_empty_name_is_blocked(page, git_datasource_to_clone):
     """Saving a clone with the name left empty shows the required-name validation and stays on the clone page."""
     datasource_page = DataSourcePage(page)
@@ -302,6 +307,7 @@ def test_clone_with_empty_name_is_blocked(page, git_datasource_to_clone):
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_with_duplicate_name_is_rejected(
     page, datasource_utils, git_datasource_to_clone, clone_cleanup
 ):
@@ -341,6 +347,7 @@ def test_clone_with_duplicate_name_is_rejected(
 # @case clone-datasource_TC_005
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_route_for_unknown_datasource_is_blocked(page):
     """/clone for a non-existent data source shows 'Data source not found' and Save is disabled."""
     clone_page = CreateEditDatasourcePage(page)
@@ -355,6 +362,7 @@ def test_clone_route_for_unknown_datasource_is_blocked(page):
 # @case clone-datasource_TC_012
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_file_datasource_clears_uploaded_files(page, file_datasource_to_clone):
     """Cloning a file data source keeps its settings but the uploaded file list is empty."""
     source = file_datasource_to_clone

@@ -29,8 +29,10 @@ from codemie_test_harness.tests.utils.gitlab_seed import (
     SEED_TARGET_BRANCH,
     SEED_TITLE,
     SeedBranches,
+    SeedImageUpload,
     SeedMergeRequest,
     find_seed_merge_request,
+    parse_upload_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -224,6 +226,30 @@ class GitBudUtils:
             )
         except GitlabError:
             pass
+
+    def upload_image(self, filename: str, data: bytes) -> SeedImageUpload:
+        """
+        Upload a file to the project through the GitLab uploads API
+        Args:
+            filename: Name the file is served under (its extension is what the GitLab tool sees)
+            data: Raw file bytes
+        Returns:
+            SeedImageUpload addressing the file through /api/v4/projects/:id/uploads
+        Raises:
+            GitlabUploadError: If the upload fails
+            ValueError: If GitLab answers with an unexpected upload url
+        """
+        uploaded = self.project.upload(filename, filedata=data)
+        secret, stored_name = parse_upload_url(uploaded["url"])
+        logger.info(
+            f"Uploaded {stored_name} ({len(data)} bytes) to project {self.project.id}"
+        )
+        return SeedImageUpload(
+            project_id=self.project.id,
+            secret=secret,
+            filename=stored_name,
+            size=len(data),
+        )
 
     def get_merge_request_id_by_title(self, mr_title: str) -> int:
         """

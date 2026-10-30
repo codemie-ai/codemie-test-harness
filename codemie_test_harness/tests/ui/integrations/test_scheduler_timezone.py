@@ -84,6 +84,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.integration
 @pytest.mark.scheduler
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_scheduler_form_shows_timezone_field_and_allows_selection(
     page: Page,
     assistant,
@@ -142,6 +143,7 @@ def test_scheduler_form_shows_timezone_field_and_allows_selection(
 @pytest.mark.integration
 @pytest.mark.scheduler
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_scheduler_edit_page_displays_saved_timezone(
     page: Page,
     assistant,
@@ -192,6 +194,7 @@ def test_scheduler_edit_page_displays_saved_timezone(
 @pytest.mark.scheduler
 @pytest.mark.ui
 @pytest.mark.parametrize("tz, expected_label", _TIMEZONE_OFFSET_CASES)
+@pytest.mark.prod_regression
 def test_scheduler_timezone_dropdown_option_shows_utc_offset(
     page: Page,
     tz: str,

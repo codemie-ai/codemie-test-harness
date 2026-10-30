@@ -40,6 +40,7 @@ BUILTIN_SUBAGENT_ID = "GENERAL_PURPOSE_SUBAGENT"
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skill_subagent_toggle_visible(page, skill):
     """TC-018a: Built-in subagent toggle is visible on the skill settings page."""
     created_skill = skill(
@@ -54,6 +55,7 @@ def test_skill_subagent_toggle_visible(page, skill):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skill_subagent_toggle_enable_persist(page, skill, skill_utils):
     """TC-018b: Enable toggle → save → reload → toggle is ON and API returns the value."""
     created_skill = skill(
@@ -84,6 +86,7 @@ def test_skill_subagent_toggle_enable_persist(page, skill, skill_utils):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skill_subagent_toggle_disable_persist(page, raw_skill, skill_utils):
     """TC-018c: Enable then disable toggle → save → reload → toggle is OFF and API reflects []."""
     created = raw_skill(

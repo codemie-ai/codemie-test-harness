@@ -40,6 +40,7 @@ from codemie_test_harness.tests.ui.test_data.skill_test_data import (
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skills_page_elements_visibility(page):
     """
     Test #1: Verify Skills page loads with create/import buttons.
@@ -64,6 +65,7 @@ def test_skills_page_elements_visibility(page):
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_skill_page_elements_visibility(page):
     """
     Test #2: Verify Create Skill form has all required fields.
@@ -91,6 +93,7 @@ def test_create_skill_page_elements_visibility(page):
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_skill_via_web_form_minimal_fields(page):
     """
     Test #3: Create skill with name and instructions (happy path).
@@ -126,6 +129,7 @@ def test_create_skill_via_web_form_minimal_fields(page):
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_skill_via_web_form_all_fields(page):
     """
     Test #4: Create skill with all fields populated.
@@ -163,6 +167,7 @@ def test_create_skill_via_web_form_all_fields(page):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skill_scope_toggle_private_and_project(page):
     """
     Test #8: Toggle between Private and Project scope.
@@ -186,6 +191,7 @@ def test_skill_scope_toggle_private_and_project(page):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_skill_with_project_scope(page):
     """
     Test #10: Create skill with Project scope enabled.

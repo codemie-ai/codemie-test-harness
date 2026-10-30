@@ -15,6 +15,7 @@
 """Test data for marketplace validation tests."""
 
 import random
+import uuid
 
 import pytest
 
@@ -127,6 +128,22 @@ COMPLETE_VALID_CONFIG = {
     "categories": [COMPLETE_CATEGORIES],
 }
 
+
+def get_publishable_assistant_config() -> dict:
+    """Return ``COMPLETE_VALID_CONFIG`` with a name unique to this call.
+
+    With the approval gate armed, a publish is blocked with 422 on any CRITICAL
+    gate finding (description under 100 chars, system prompt under 200 chars,
+    no category, ...) and ``ignore_recommendations`` cannot waive it, so an
+    assistant meant to be published must carry real content. The name doubles
+    as the slug, so two assistants in one test need distinct names.
+    """
+    return {
+        **COMPLETE_VALID_CONFIG,
+        "assistant_name": f"CodeMie Platform Guide ID{random.randint(1000, 999999)}",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Sorting test data
 # ---------------------------------------------------------------------------
@@ -173,3 +190,8 @@ SORT_QUERY_NAME_PARAMS = [
     pytest.param("asc", False, id="name-asc"),
     pytest.param("desc", True, id="name-desc"),
 ]
+
+
+def get_unknown_assistant_id() -> str:
+    """Return a well-formed assistant id that matches no stored assistant."""
+    return str(uuid.uuid4())

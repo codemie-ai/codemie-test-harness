@@ -33,6 +33,7 @@ from codemie_test_harness.tests.ui.pageobject.assistants.assistants_page import 
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.mcp
+@pytest.mark.prod_regression
 def test_mcp_server_configuration_panel_visibility(page, assistant):
     """
     Test that MCP server configuration panel is visible and accessible.
@@ -57,6 +58,7 @@ def test_mcp_server_configuration_panel_visibility(page, assistant):
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.mcp
+@pytest.mark.prod_regression
 def test_add_mcp_server_from_browse_catalog(page, assistant):
     """
     Test adding an MCP server from the browse catalog.
@@ -94,6 +96,7 @@ def test_add_mcp_server_from_browse_catalog(page, assistant):
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.mcp
+@pytest.mark.prod_regression
 def test_add_mcp_server_using_manual_setup(page, assistant):
     """
     Test adding an MCP server using manual setup.
@@ -141,6 +144,7 @@ def test_add_mcp_server_using_manual_setup(page, assistant):
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.mcp
+@pytest.mark.prod_regression
 def test_remove_mcp_server_from_assistant(page, assistant):
     """
     Test removing an MCP server from an assistant via UI.
@@ -179,6 +183,7 @@ def test_remove_mcp_server_from_assistant(page, assistant):
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.mcp
+@pytest.mark.prod_regression
 def test_add_global_mcp_from_catalog_preserves_inheritance(page, assistant, client):
     """TC-001: Add global MCP from Browse Catalog in default mode preserves inheritance.
 

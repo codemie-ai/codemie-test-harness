@@ -26,6 +26,7 @@ from codemie_test_harness.tests.ui.test_data.chat_test_data import (
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_chat_like_dislike_feedback_state_visible_and_persists_after_reload(
     page, navigate_to_new_chat_page
 ):

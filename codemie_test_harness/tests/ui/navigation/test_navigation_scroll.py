@@ -41,6 +41,7 @@ from codemie_test_harness.tests.ui.test_data.navigation_test_data import (
 
 @pytest.mark.parametrize("viewport", LIMITED_VIEWPORTS, ids=LIMITED_VIEWPORT_IDS)
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_nav_links_scroll_and_bottom_block_stays_reachable(page, viewport):
     nav = NavigationMenuPage(page)
     nav.ensure_expanded()
@@ -63,6 +64,7 @@ def test_nav_links_scroll_and_bottom_block_stays_reachable(page, viewport):
     ids=["mouse_wheel", "keyboard_tab"],
 )
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_nav_scrolls_by_wheel_and_keyboard(page, input_method):
     nav = NavigationMenuPage(page)
     nav.ensure_expanded()
@@ -76,6 +78,7 @@ def test_nav_scrolls_by_wheel_and_keyboard(page, input_method):
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_nav_item_selectable_after_scrolling_nav(page):
     nav = NavigationMenuPage(page)
     nav.ensure_expanded()
@@ -93,6 +96,7 @@ def test_nav_item_selectable_after_scrolling_nav(page):
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_nav_collapse_resize_and_main_scroll_not_regressed(page):
     AssistantsPage(page).should_be_on_assistants_page()
     nav = NavigationMenuPage(page)
@@ -114,6 +118,7 @@ def test_nav_collapse_resize_and_main_scroll_not_regressed(page):
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_nav_dividers_keep_height_at_limited_viewport(page):
     nav = NavigationMenuPage(page)
     nav.ensure_expanded()

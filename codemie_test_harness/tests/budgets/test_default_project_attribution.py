@@ -63,6 +63,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.budget
 @pytest.mark.api
 @pytest.mark.enterprise
+@pytest.mark.marketplace
 @pytest.mark.timeout(1500)
 @pytest.mark.parametrize(
     "is_member, has_default, expected_charged",

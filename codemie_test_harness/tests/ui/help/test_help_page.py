@@ -43,6 +43,7 @@ def _config_link(customer_config_utils, component_id: str) -> str:
 @pytest.mark.smoke
 @pytest.mark.ui
 @pytest.mark.help
+@pytest.mark.prod_regression
 def test_help_page_elements_persistence(page):
     """UI Test Suite for Help Page Elements Persistence"""
     # Navigate to Help page
@@ -61,6 +62,7 @@ def test_help_page_elements_persistence(page):
 
 @pytest.mark.ui
 @pytest.mark.help
+@pytest.mark.prod_regression
 def test_help_page_internal_links(page):
     """UI Test Suite for Help Page Internal Links"""
     help_page = HelpPage(page)
@@ -96,6 +98,7 @@ def test_help_page_internal_links(page):
 
 @pytest.mark.ui
 @pytest.mark.help
+@pytest.mark.prod_regression
 def test_help_page_external_links(page, customer_config_utils):
     """UI Test Suite for Help Page External Links"""
     help_page = HelpPage(page)

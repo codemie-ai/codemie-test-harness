@@ -12,13 +12,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+from datetime import datetime, timedelta
+
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
-from hamcrest import greater_than_or_equal_to, assert_that
+from hamcrest import (
+    assert_that,
+    greater_than_or_equal_to,
+    less_than_or_equal_to,
+    equal_to,
+)
 from playwright.sync_api import expect
 from reportportal_client import step
 from codemie_test_harness.tests.ui.pageobject.datasources.datasource_sidebar import (
     DataSourceSidebar,
 )
+
+
+# "Last indexed" renders as e.g. "Jul 17, 14:52 (55 days ago)": minute precision,
+# no year, in the browser's local time zone.
+LAST_INDEXED_PATTERN = re.compile(r"^\s*([A-Z][a-z]{2}\s+\d{1,2},\s+\d{1,2}:\d{2})")
+LAST_INDEXED_FORMAT = "%b %d, %H:%M"
+
+
+def parse_last_indexed(text: str) -> datetime:
+    """Parse the date part of a 'Last indexed' value into a naive local datetime.
+
+    The UI omits the year, so the current year is assumed. Raises ValueError when
+    the text does not start with a 'Mon D, HH:MM' timestamp.
+    """
+    match = LAST_INDEXED_PATTERN.match(text)
+    if match is None:
+        raise ValueError(f"Unrecognised 'Last indexed' value: {text!r}")
+    parsed = datetime.strptime(match.group(1), LAST_INDEXED_FORMAT)
+    return parsed.replace(year=datetime.now().year)
 
 
 class ViewDatasourcePage(BasePage):
@@ -155,6 +182,16 @@ class ViewDatasourcePage(BasePage):
     @property
     def details_graphdb_tenant_url_value(self):
         return self.details_value("Graphdb Tenant Url:")
+
+    @property
+    def last_indexed_label(self):
+        """'Last indexed' label on the Data Source Details page."""
+        return self.page.get_by_text("Last indexed", exact=False).first
+
+    @property
+    def last_indexed_value(self):
+        """Value element next to the 'Last indexed' label, e.g. 'Jul 17, 14:52 (55 days ago)'."""
+        return self.last_indexed_label.locator("xpath=following-sibling::*[1]")
 
     # Configuration Section
     @property
@@ -514,4 +551,73 @@ class ViewDatasourcePage(BasePage):
         self.project_value.hover()
         self.page.wait_for_timeout(300)
         expect(self.page.locator('[role="tooltip"]')).to_contain_text(display_name)
+        return self
+
+    @step
+    def get_last_indexed(self) -> datetime:
+        """Return the displayed 'Last indexed' value as a local datetime (minute precision)."""
+        expect(self.last_indexed_label).to_be_visible()
+        expect(self.last_indexed_value).to_be_visible()
+        expect(self.last_indexed_value).to_contain_text(LAST_INDEXED_PATTERN)
+        return parse_last_indexed(self.last_indexed_value.inner_text())
+
+    @step
+    def try_get_last_indexed(self) -> datetime | None:
+        """Return the displayed 'Last indexed' value, or None when the row is absent.
+
+        Used on the shared, session-scoped `code_datasource` fixture, which may
+        already carry a value from an earlier test in the same session. Waits for the page header first so a
+        still-loading page is not mistaken for an absent row.
+        """
+        expect(self.datasource_name).to_be_visible()
+        if self.last_indexed_label.count() == 0:
+            return None
+        return self.get_last_indexed()
+
+    @step
+    def should_see_last_indexed(self):
+        """Verify the 'Last indexed' row is shown with a parsable timestamp."""
+        expect(self.last_indexed_label).to_be_visible()
+        expect(self.last_indexed_value).to_contain_text(LAST_INDEXED_PATTERN)
+        return self
+
+    @step
+    def should_see_last_indexed_between(
+        self,
+        trigger_started: datetime,
+        trigger_finished: datetime,
+        tolerance: timedelta = timedelta(minutes=1),
+    ):
+        """Verify 'Last indexed' is the reindex TRIGGER time.
+
+        `trigger_started` / `trigger_finished` bracket the moment the reindex was
+        requested. The UI shows minute precision and the stand clock may differ
+        slightly from the test machine, so both bounds are truncated to the minute
+        and widened by `tolerance`. A stamp taken at completion is rejected only
+        when the reindex runs longer than that window; on a faster reindex the two
+        times are indistinguishable at minute precision.
+        """
+        shown = self.get_last_indexed()
+        lower = trigger_started.replace(second=0, microsecond=0) - tolerance
+        upper = trigger_finished.replace(second=0, microsecond=0) + tolerance
+        assert_that(
+            shown,
+            greater_than_or_equal_to(lower),
+            "Last indexed must not be earlier than the reindex trigger time",
+        )
+        assert_that(
+            shown,
+            less_than_or_equal_to(upper),
+            "Last indexed must equal the reindex trigger time, not a later completion time",
+        )
+        return self
+
+    @step
+    def should_see_last_indexed_equal_to(self, expected: datetime):
+        """Verify 'Last indexed' is exactly the previously read value (not reverted)."""
+        assert_that(
+            self.get_last_indexed(),
+            equal_to(expected),
+            "Last indexed must stay unchanged after refreshing and reopening the details",
+        )
         return self

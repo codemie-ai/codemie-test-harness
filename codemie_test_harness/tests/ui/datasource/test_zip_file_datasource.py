@@ -36,6 +36,7 @@ from codemie_test_harness.tests.utils.constants import FILES_PATH
 @pytest.mark.datasource
 @pytest.mark.file
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_zip_file_accepted_by_file_upload_input(page):
     """The file input/drop zone accepts a .zip file for a File datasource
     without triggering a validation error.
@@ -59,6 +60,7 @@ def test_zip_file_accepted_by_file_upload_input(page):
 @pytest.mark.file
 @pytest.mark.ui
 @pytest.mark.sanity
+@pytest.mark.prod_regression
 def test_zip_file_datasource_shows_extracted_files_after_creation(page):
     """Each file extracted from an uploaded ZIP is visible as a separate
     processed document on the Data Source's View page after creation.
@@ -88,6 +90,7 @@ def test_zip_file_datasource_shows_extracted_files_after_creation(page):
 @pytest.mark.datasource
 @pytest.mark.file
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_file_upload_hint_text_mentions_zip_support(page):
     """File-format hint text under the upload control mentions ZIP support."""
     create_page = CreateEditDatasourcePage(page)

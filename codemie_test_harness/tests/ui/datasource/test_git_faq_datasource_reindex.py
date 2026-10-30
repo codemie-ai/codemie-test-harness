@@ -51,6 +51,7 @@ def git_faq_datasource(datasource_utils, gitlab_integration):
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_git_faq_datasource_full_reindex_from_list_refreshes_updated_date(
     page, datasource_utils, git_faq_datasource
 ):

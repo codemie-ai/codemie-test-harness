@@ -27,6 +27,7 @@ from codemie_test_harness.tests.ui.test_data.links_names_test_data import (
 
 @pytest.mark.ui
 @pytest.mark.integration
+@pytest.mark.prod_regression
 def test_integration_help_links_validation(page):
     """UI Test Suite for Integration Help Links Validation"""
     create_integration_page = CreateIntegrationPage(page)

@@ -53,6 +53,7 @@ from codemie_test_harness.tests.ui.test_data.chat_test_data import (
 @pytest.mark.sanity
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chat_page_elements_visibility(page, navigate_to_new_chat_page):
     """
     Test that all main elements are visible on Chat page.
@@ -82,6 +83,7 @@ def test_chat_page_elements_visibility(page, navigate_to_new_chat_page):
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_new_chat_button_visibility_and_interaction(page, navigate_to_new_chat_page):
     """
     Test new chat button visibility and basic interaction.
@@ -113,6 +115,7 @@ def test_new_chat_button_visibility_and_interaction(page, navigate_to_new_chat_p
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chats_sidebar_elements(page):
     """
     Test chats sidebar elements.
@@ -134,6 +137,7 @@ def test_chats_sidebar_elements(page):
 @pytest.mark.sanity
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_hover_sidebar_toggle_button_shows_and_hides_ctrl_b_tooltip(page):
     """Test the Ctrl+B tooltip on the Chats page sidebar toggle button.
 
@@ -168,6 +172,7 @@ def test_hover_sidebar_toggle_button_shows_and_hides_ctrl_b_tooltip(page):
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chat_input_field_interactions(page, navigate_to_new_chat_page):
     """
     Test chat input field interactions and input handling.
@@ -197,6 +202,7 @@ def test_chat_input_field_interactions(page, navigate_to_new_chat_page):
 @pytest.mark.sanity
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_message_sending_functionality(page, navigate_to_new_chat_page):
     """
     Test message sending functionality with different message types.
@@ -221,6 +227,7 @@ def test_message_sending_functionality(page, navigate_to_new_chat_page):
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_multiple_messages_workflow(page, navigate_to_new_chat_page):
     """
     Test sending multiple messages in sequence.
@@ -257,6 +264,7 @@ def test_multiple_messages_workflow(page, navigate_to_new_chat_page):
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chat_history_action_buttons_visibility(page, navigate_to_new_chat_page):
     """Test that chat history action buttons are visible after sending a message."""
     chat_page = navigate_to_new_chat_page(page)
@@ -273,6 +281,7 @@ def test_chat_history_action_buttons_visibility(page, navigate_to_new_chat_page)
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_user_message_copy_to_clipboard(page, navigate_to_new_chat_page):
     """
     Test copying user message to clipboard.
@@ -298,6 +307,7 @@ def test_user_message_copy_to_clipboard(page, navigate_to_new_chat_page):
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_user_message_edit_and_regenerate(page, navigate_to_new_chat_page):
     """
     Test editing user message and regenerating assistant response.
@@ -347,6 +357,7 @@ def test_user_message_edit_and_regenerate(page, navigate_to_new_chat_page):
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_user_message_regenerate_assistant_response(page, navigate_to_new_chat_page):
     """
     Test regenerating assistant response from user message.
@@ -379,6 +390,7 @@ def test_user_message_regenerate_assistant_response(page, navigate_to_new_chat_p
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_user_message_delete(page, navigate_to_new_chat_page):
     """
     Test deleting user message from chat history.
@@ -408,6 +420,7 @@ def test_user_message_delete(page, navigate_to_new_chat_page):
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_message_copy_to_clipboard(page, navigate_to_new_chat_page):
     """
     Test copying assistant message to clipboard.
@@ -436,6 +449,7 @@ def test_assistant_message_copy_to_clipboard(page, navigate_to_new_chat_page):
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_message_edit(page, navigate_to_new_chat_page):
     """
     Test editing assistant message.
@@ -467,6 +481,7 @@ def test_assistant_message_edit(page, navigate_to_new_chat_page):
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_message_export_menu(page, navigate_to_new_chat_page):
     """
     Test assistant message export menu.
@@ -494,6 +509,7 @@ def test_assistant_message_export_menu(page, navigate_to_new_chat_page):
 @pytest.mark.chat
 @pytest.mark.ui
 @pytest.mark.sanity
+@pytest.mark.prod_regression
 def test_stop_generation_button_css_state_and_halt_flow(
     page, navigate_to_new_chat_page
 ):
@@ -523,6 +539,7 @@ def test_stop_generation_button_css_state_and_halt_flow(
 @pytest.mark.chat
 @pytest.mark.ui
 @pytest.mark.sanity
+@pytest.mark.prod_regression
 def test_stop_button_visible_after_resend_first_message_in_multi_message_chat(
     page, navigate_to_new_chat_page
 ):
@@ -560,6 +577,7 @@ def test_stop_button_visible_after_resend_first_message_in_multi_message_chat(
 @pytest.mark.sanity
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chat_displays_assistant_description(page, chat_with_described_assistant):
     """Assistant with a configured description shows it in the chat intro area."""
     chat_page, description_text = chat_with_described_assistant(page)

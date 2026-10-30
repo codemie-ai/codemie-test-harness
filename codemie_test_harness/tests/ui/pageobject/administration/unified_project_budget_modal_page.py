@@ -308,7 +308,24 @@ class UnifiedProjectBudgetModalPage(BasePage):
     def save_budget_config(self, budget_name: str = "Autotest Budget"):
         """Click 'Update Budget' to persist the configuration."""
         expect(self.submit_button).to_be_enabled(timeout=5000)
-        self.submit_button.click()
+        with self.page.expect_response(
+            lambda r: r.request.method == "GET"
+            and re.search(r"/v1/projects/[^/?]+(\?|$)", r.url),
+            timeout=15000,
+        ) as project_refresh_info:
+            with self.page.expect_response(
+                lambda r: r.request.method == "PUT"
+                and re.search(r"/admin/project-budget-groups/[^/]+/?$", r.url),
+                timeout=15000,
+            ) as put_info:
+                self.submit_button.click()
+            assert put_info.value.ok, (
+                f"Budget save request failed with HTTP {put_info.value.status}"
+            )
+        assert project_refresh_info.value.ok, (
+            "Project chargeback-state refresh failed with HTTP "
+            f"{project_refresh_info.value.status}"
+        )
         # Modal should close after a successful save
         expect(self.dialog).not_to_be_visible(timeout=15000)
         return self

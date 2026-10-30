@@ -55,6 +55,7 @@ from codemie_test_harness.tests.ui.test_data.assistant_test_data import (
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_assistant_page_elements_visibility(page):
     """
     Test that all main elements are visible on Create Assistant page.
@@ -88,6 +89,7 @@ def test_create_assistant_page_elements_visibility(page):
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_assistant_navigation_from_assistants_page(page):
     """
     Test navigation to Create Assistant page from main Assistants page.
@@ -114,6 +116,7 @@ def test_create_assistant_navigation_from_assistants_page(page):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_ai_generator_modal_visibility_and_handling(page, clear_asst_ai_popup):
     """
     Test AI Generator modal visibility and proper handling when navigating to Create Assistant page.
@@ -142,6 +145,7 @@ def test_ai_generator_modal_visibility_and_handling(page, clear_asst_ai_popup):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_ai_generator_modal_create_manually_workflow(page, clear_asst_ai_popup):
     """
     Test the workflow of using 'Create Manually' option from AI Generator modal.
@@ -175,6 +179,7 @@ def test_ai_generator_modal_create_manually_workflow(page, clear_asst_ai_popup):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_assistant_form_field_interactions(page, client):
     """
     Test form field interactions and input handling.
@@ -226,6 +231,7 @@ def test_create_assistant_form_field_interactions(page, client):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_assistant_default_field_values(page):
     """
     Test default field values on page load.
@@ -266,6 +272,7 @@ ensuring that the essential functionality works correctly for end users.
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_assistant_minimal_required_fields(page):
     """
     Test assistant creation with minimal required fields - Critical Happy Path.
@@ -300,6 +307,7 @@ def test_create_assistant_minimal_required_fields(page):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_assistant_button_states_and_validation(page):
     """
     Test create button states and form field interactions.
@@ -330,6 +338,7 @@ def test_create_assistant_button_states_and_validation(page):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_assistant_cancel_navigation(page):
     """
     Test cancel functionality returns user to assistants list.
@@ -363,6 +372,7 @@ def test_create_assistant_cancel_navigation(page):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_assistant_back_button_navigation(page):
     """
     Test back button functionality returns user to previous page.

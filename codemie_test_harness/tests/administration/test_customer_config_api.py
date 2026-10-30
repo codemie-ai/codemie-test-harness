@@ -20,8 +20,13 @@ Covers:
   SC-03 — Activity log records config change (AC-22)
   SC-06 — Non-admin write rejected with 403 (AC-21)
 
-All tests are marked ``not_for_parallel_run`` when they mutate shared
-deployment state (customer config overrides).
+Tests that mutate shared deployment state (customer config overrides) are
+marked ``not_for_parallel_run``, except ``test_activity_log_records_
+marketplace_thresholds_save_and_reset``, which carries
+``xdist_group(name="marketplace_thresholds")`` instead so it serializes with
+the other ``marketplaceThresholds`` tests in test_marketplace_thresholds_api.py
+without blocking the rest of the suite from running in parallel (see that
+file's docstring, and strategy.md for the required ``--dist=loadgroup`` flag).
 """
 
 from __future__ import annotations
@@ -46,6 +51,11 @@ from requests import HTTPError
 from codemie_test_harness.tests import CredentialsManager
 from codemie_test_harness.tests.test_data.customer_config_test_data import (
     get_disclaimer_settings_data,
+)
+from codemie_test_harness.tests.test_data.marketplace_thresholds_test_data import (
+    MARKETPLACE_THRESHOLDS_COMPONENT_ID,
+    MARKETPLACE_THRESHOLDS_DYNAMIC_CONFIG_KEY,
+    get_marketplace_thresholds_data,
 )
 from codemie_test_harness.tests.utils.base_utils import poll_until
 from codemie_test_harness.tests.utils.client_factory import get_client
@@ -403,6 +413,99 @@ def test_activity_log_records_config_change(client, saved_disclaimer):
         attributes,
         has_key("new_value"),
         "activity event attributes must contain 'new_value'",
+    )
+
+
+@pytest.mark.xdist_group(name="marketplace_thresholds")
+@pytest.mark.customer_configuration
+@pytest.mark.api
+def test_activity_log_records_marketplace_thresholds_save_and_reset(
+    client, customer_config_utils, clean_marketplace_thresholds
+):
+    """Saving and resetting marketplaceThresholds each emit an activity event
+    carrying the dynamic-config key plus the old and new value."""
+    settings = get_marketplace_thresholds_data().as_settings
+    customer_config_utils.save_setting(MARKETPLACE_THRESHOLDS_COMPONENT_ID, settings)
+    customer_config_utils.reset_setting(MARKETPLACE_THRESHOLDS_COMPONENT_ID)
+
+    updated_events = client.activity_events.list_events(
+        domain=[_ACTIVITY_DOMAIN],
+        entity_type=[_ACTIVITY_ENTITY_TYPE],
+        event_type=[_ACTIVITY_EVENT_UPDATED],
+        entity_id=MARKETPLACE_THRESHOLDS_COMPONENT_ID,
+        sort_dir="desc",
+        limit=1,
+    ).data
+    assert_that(
+        updated_events,
+        has_length(1),
+        "a customer_config.setting.updated event must exist for marketplaceThresholds",
+    )
+    updated = updated_events[0]
+    assert_that(updated.domain, equal_to(_ACTIVITY_DOMAIN))
+    assert_that(updated.entity_id, equal_to(MARKETPLACE_THRESHOLDS_COMPONENT_ID))
+    assert_that(
+        updated.actor_id, is_not(none()), "updated event must record the actor_id"
+    )
+    assert_that(
+        updated.created_at,
+        is_not(none()),
+        "updated event must have a created_at timestamp",
+    )
+    assert_that(
+        updated.attributes["key"],
+        equal_to(MARKETPLACE_THRESHOLDS_DYNAMIC_CONFIG_KEY),
+        "updated event must carry the dynamic-config key",
+    )
+    assert_that(
+        updated.attributes["old_value"],
+        none(),
+        "old_value must be empty when no override existed before the save",
+    )
+    assert_that(
+        updated.attributes["new_value"],
+        equal_to(settings),
+        "new_value must be the saved thresholds",
+    )
+    assert_that(
+        updated.attributes["new_value"]["coldMinUsers"],
+        equal_to(settings["coldMinUsers"]),
+        "new_value must carry the saved coldMinUsers",
+    )
+
+    reset_events = client.activity_events.list_events(
+        domain=[_ACTIVITY_DOMAIN],
+        entity_type=[_ACTIVITY_ENTITY_TYPE],
+        event_type=[_ACTIVITY_EVENT_RESET],
+        entity_id=MARKETPLACE_THRESHOLDS_COMPONENT_ID,
+        sort_dir="desc",
+        limit=1,
+    ).data
+    assert_that(
+        reset_events,
+        has_length(1),
+        "a customer_config.setting.reset event must exist for marketplaceThresholds",
+    )
+    reset = reset_events[0]
+    assert_that(
+        reset.attributes["key"],
+        equal_to(MARKETPLACE_THRESHOLDS_DYNAMIC_CONFIG_KEY),
+        "reset event must carry the dynamic-config key",
+    )
+    assert_that(
+        reset.attributes["old_value"],
+        equal_to(settings),
+        "old_value must be the override that was removed",
+    )
+    assert_that(
+        reset.attributes["old_value"]["coldMinUsers"],
+        equal_to(settings["coldMinUsers"]),
+        "old_value must carry the removed coldMinUsers",
+    )
+    assert_that(
+        reset.attributes["new_value"],
+        none(),
+        "new_value must be empty after a reset",
     )
 
 

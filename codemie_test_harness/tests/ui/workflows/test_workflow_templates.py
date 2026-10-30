@@ -46,6 +46,7 @@ def predefined_templates(workflow_utils):
 @pytest.mark.workflow
 @pytest.mark.workflow_templates
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_templates_visible(page, predefined_templates):
     """Verify that workflow templates are presented and tooltips visible for the user."""
     templates = predefined_templates
@@ -70,6 +71,7 @@ def test_templates_visible(page, predefined_templates):
 @pytest.mark.workflow
 @pytest.mark.workflow_templates
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_templates_details(page, predefined_templates):
     """Verify that workflow template leads to specific template page."""
     templates = predefined_templates
@@ -218,6 +220,7 @@ def _substitute_required_variables(
 @pytest.mark.workflow
 @pytest.mark.workflow_templates
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_templates_creation(page, predefined_templates):
     """Verify that workflow template create button leads to Create Workflow Page.
 
@@ -292,6 +295,7 @@ _PAGINATION_PAGE_SIZE = 12
 @pytest.mark.workflow_templates
 @pytest.mark.pagination
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_templates_pagination_full_flow(page, predefined_templates):
     """TC-001: Workflow Templates pagination full flow.
 
@@ -372,6 +376,7 @@ def test_workflow_templates_pagination_full_flow(page, predefined_templates):
 @pytest.mark.workflow
 @pytest.mark.workflow_templates
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_template_create(page, predefined_templates):
     """Verify that workflow template can be created."""
     templates = predefined_templates
@@ -407,6 +412,7 @@ def test_template_create(page, predefined_templates):
 @pytest.mark.workflow
 @pytest.mark.workflow_templates
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_template_search_journey(page, predefined_templates):
     """TC-01: Full search journey on the Workflow Templates page.
 

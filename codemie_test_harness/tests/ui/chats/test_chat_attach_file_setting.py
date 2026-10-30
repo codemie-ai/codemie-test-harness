@@ -29,6 +29,7 @@ import pytest
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_attach_file_button_hidden_when_setting_disabled(
     page, chat_with_attach_file_disabled
 ):
@@ -50,6 +51,7 @@ def test_attach_file_button_hidden_when_setting_disabled(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_attach_file_button_visible_when_setting_enabled_default(
     page, navigate_to_new_chat_page_with_assistant
 ):
@@ -72,6 +74,7 @@ def test_attach_file_button_visible_when_setting_enabled_default(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_no_upload_via_button_click_when_setting_disabled(
     page, chat_with_attach_file_disabled
 ):

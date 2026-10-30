@@ -40,6 +40,7 @@ from codemie_test_harness.tests.ui.test_data.datasource_test_data import (
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_delete_with_confirmation(
     page, datasource_utils, gitlab_integration, default_embedding_llm
 ):
@@ -64,6 +65,7 @@ def test_datasource_delete_with_confirmation(
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_delete_cancel(page, gitlab_datasource):
     """User clicks delete, cancels in dialog, datasource remains visible."""
     datasource_page = DataSourcePage(page)
@@ -95,6 +97,7 @@ def file_datasource_used_by_assistants(datasource_utils):
 @pytest.mark.datasource
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_delete_dialog_lists_assistants_using_datasource(
     page, file_datasource_used_by_assistants, assistant_factory, kb_context
 ):
@@ -130,6 +133,7 @@ def test_datasource_delete_dialog_lists_assistants_using_datasource(
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_trigger_manual_reindex(page, gitlab_datasource):
     """User initiates manual reindex/sync operation via UI action."""
     datasource_page = DataSourcePage(page)
@@ -153,6 +157,7 @@ def test_datasource_trigger_manual_reindex(page, gitlab_datasource):
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_sync_status_progress_to_completed(
     page, gitlab_integration, default_embedding_llm, datasource_utils
 ):
@@ -183,6 +188,7 @@ def test_datasource_sync_status_progress_to_completed(
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_force_ongoing_index_operation(page, gitlab_datasource):
     """User can force/restart an index operation and it completes successfully."""
     datasource_page = DataSourcePage(page)
@@ -211,6 +217,7 @@ def test_datasource_force_ongoing_index_operation(page, gitlab_datasource):
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_status_badge_completed_state(page, gitlab_datasource):
     """UI displays status badge for completed datasource. Completed status badge displays with green/success styling"""
     datasource_page = DataSourcePage(page)
@@ -229,6 +236,7 @@ def test_datasource_status_badge_completed_state(page, gitlab_datasource):
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_status_badge_failed_state(page, invalid_gitlab_datasource):
     """UI displays status badge for failed datasource. Failed status badge displays with red/error styling"""
     datasource_page = DataSourcePage(page)

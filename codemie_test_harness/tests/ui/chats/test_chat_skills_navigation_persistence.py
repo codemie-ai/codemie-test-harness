@@ -58,6 +58,7 @@ SECOND_MESSAGE = "Hello again, this is the second message after navigation"
 @pytest.mark.chat
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chat_skills_survive_navigation_to_assistants_and_back(
     page, navigate_to_new_chat_page, skill
 ):

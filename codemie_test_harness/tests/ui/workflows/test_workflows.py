@@ -24,6 +24,7 @@ from codemie_test_harness.tests import TEST_USER
 @pytest.mark.sanity
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflows_page_basic_functionality(page):
     """Test basic workflows page functionality."""
     workflow_page = WorkflowsPage(page)
@@ -35,6 +36,7 @@ def test_workflows_page_basic_functionality(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_card_interactions(page):
     """Test individual workflow card interactions."""
     workflow_page = WorkflowsPage(page)
@@ -50,6 +52,7 @@ def test_workflow_card_interactions(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_search_functionality(page):
     """Test workflow search functionality."""
     workflow_page = WorkflowsPage(page)
@@ -62,6 +65,7 @@ def test_workflow_search_functionality(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_card_by_name(page, workflow_with_virtual_assistant):
     """Test getting and interacting with a specific workflow card."""
     workflow = workflow_with_virtual_assistant(get_random_name())
@@ -77,6 +81,7 @@ def test_workflow_card_by_name(page, workflow_with_virtual_assistant):
 @pytest.mark.sanity
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_pagination(page, ensure_enough_workflows):
     """Test workflow pagination functionality."""
     workflow_page = WorkflowsPage(page)
@@ -91,6 +96,7 @@ def test_workflow_pagination(page, ensure_enough_workflows):
 @pytest.mark.sanity
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_filtering(page):
     """Test workflow filtering functionality."""
     workflow_page = WorkflowsPage(page)
@@ -103,6 +109,7 @@ def test_workflow_filtering(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_navigation(page):
     """Test navigation between different workflow sections."""
     workflow_page = WorkflowsPage(page)
@@ -114,6 +121,7 @@ def test_workflow_navigation(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_card_fluent_interface(page):
     """Test the fluent interface of WorkflowCard component."""
     workflow_page = WorkflowsPage(page)

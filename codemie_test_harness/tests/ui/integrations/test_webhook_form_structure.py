@@ -55,6 +55,7 @@ from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     ],
     ids=["slug-with-spaces", "slug-with-number"],
 )
+@pytest.mark.prod_regression
 def test_webhook_url_readonly_and_tracks_alias_slug(
     page: Page, alias_input: str, expected_slug: str
 ):
@@ -114,6 +115,7 @@ def test_webhook_url_readonly_and_tracks_alias_slug(
 @pytest.mark.sanity
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_manual_webhook_id_edit_disables_alias_auto_sync(page: Page):
     """TC-02 — After the user manually edits webhook_id, alias changes no longer overwrite it.
 
@@ -163,6 +165,7 @@ def test_manual_webhook_id_edit_disables_alias_auto_sync(page: Page):
 @pytest.mark.sanity
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_advanced_security_settings_accordion_collapsed_by_default_and_expands(
     page: Page,
 ):
@@ -205,6 +208,7 @@ def test_advanced_security_settings_accordion_collapsed_by_default_and_expands(
 @pytest.mark.sanity
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_github_settings_accordion_collapsed_by_default_and_expands(page: Page):
     """TC-04 — GitHub Settings accordion is collapsed by default;
     reveals SHA-256 toggle, Webhook Secret, and Event Filter on expand.

@@ -48,6 +48,9 @@ from .cli_analytics_api_utils import (
 )
 
 CLI_ANALYTICS_FEATURE_ID = "features:cliAnalytics"
+# A newly created project or membership can be visible through /v1/projects before the
+# CLI-ingest gate's project context cache catches up on every backend instance.
+CLI_PROJECT_CONTEXT_TIMEOUT = 30
 # Ingested events reach the session tables on the next rollup refresh (30 s by default).
 CLI_SESSION_ROLLUP_TIMEOUT = 180
 
@@ -59,6 +62,7 @@ class CLIAnalyticsTestSession:
     session_id: str
     repository: str
     prompt: str
+    project: str
 
 
 class AnalyticsUtils(BaseUtils):
@@ -376,6 +380,7 @@ class AnalyticsUtils(BaseUtils):
             session_id=session_id,
             repository=f"autotest/{session_id}",
             prompt=f"Autotest CLI Analytics session {session_id}",
+            project=project,
         )
         events = build_hook_events(
             session_id, project, user.name, session.repository, session.prompt
@@ -411,11 +416,18 @@ class AnalyticsUtils(BaseUtils):
         """Send CLI hook events as the client's own user.
 
         `project` is sent as X-CodeMie-Project: the BE stores the batch only for a project
-        with CLI analytics enabled that the sender may use. A discard body
-        (HTTP 200 with a reason) fails here at once, quoting reason and dropped. The whole
-        batch is one request, as in create_cli_session.
+        with CLI analytics enabled that the sender may use. A newly created project or
+        membership may briefly be missing from the ingest gate's cache even after the project
+        is readable, so only ``project_context_required`` is retried for the bounded cache
+        propagation window. Any other discard fails at once, quoting reason and dropped. The
+        whole batch is one request, as in create_cli_session.
         """
-        result = self.client.analytics.send_cli_hook_events(events, project=project)
+        result = poll_until(
+            lambda: self.client.analytics.send_cli_hook_events(events, project=project),
+            lambda reply: (reply or {}).get("reason") != "project_context_required",
+            timeout=CLI_PROJECT_CONTEXT_TIMEOUT,
+            interval=2,
+        )
         assert_not_discarded(result, f"CLI analytics batch for project {project!r}")
 
     def ingest_cli_otlp_logs(self, payload: dict, project: str | None = None) -> None:

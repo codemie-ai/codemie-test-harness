@@ -59,6 +59,7 @@ _SEARCH_QUERY_2 = "Review"
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_template_search_journey(page):
     """TC-02: Full search journey on the Assistant Templates page.
 

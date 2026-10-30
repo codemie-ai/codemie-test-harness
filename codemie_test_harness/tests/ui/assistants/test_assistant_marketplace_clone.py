@@ -58,6 +58,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_count_badge_visible_on_marketplace_card(page):
     """TC-02: Clone count badge element is visible on the first assistant card.
 
@@ -79,6 +80,7 @@ def test_clone_count_badge_visible_on_marketplace_card(page):
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_count_badge_updates_after_ui_clone(
     page, assistant, assistant_utils, cleanup_cloned_assistants
 ):
@@ -179,6 +181,7 @@ def seeded_marketplace_assistant(
     FAVORITES_METRICS_SCENARIOS,
     indirect=True,
 )
+@pytest.mark.prod_regression
 def test_favorites_card_metrics_match_marketplace_card(
     page, seeded_marketplace_assistant
 ):

@@ -231,7 +231,6 @@ def test_chargeback_settings_round_trip_cost_center_attribution(
     modal.enable_chargeback_toggle()
     modal.select_attribution("cost_center")
     modal.save_budget_config()  # modal closes after successful save
-    page.wait_for_load_state("networkidle")
 
     # Second open: verify round-trip persistence
     modal = details_page.open_budget_config_modal()
@@ -261,7 +260,6 @@ def test_chargeback_settings_round_trip_project_attribution(
     modal.enable_chargeback_toggle()
     modal.should_have_attribution_selected("project")  # default
     modal.save_budget_config()
-    page.wait_for_load_state("networkidle")
 
     # Second open: verify persisted state
     modal = details_page.open_budget_config_modal()
@@ -295,7 +293,6 @@ def test_chargeback_and_routing_impact_are_inside_financial_summary(
     modal = details_page.open_budget_config_modal()
     modal.enable_chargeback_toggle()
     modal.save_budget_config()
-    page.wait_for_load_state("networkidle")
     details_page.should_have_chargeback_value("Enabled")
     details_page.should_show_routing_impact()
 
@@ -303,6 +300,5 @@ def test_chargeback_and_routing_impact_are_inside_financial_summary(
     modal = details_page.open_budget_config_modal()
     modal.disable_chargeback_toggle()
     modal.save_budget_config()
-    page.wait_for_load_state("networkidle")
     details_page.should_have_chargeback_value("Disabled")
     details_page.should_show_routing_impact()

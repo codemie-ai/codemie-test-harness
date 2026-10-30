@@ -63,6 +63,7 @@ def ui_created_assistant_names(assistant_utils):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_hide_tool_outputs_switch_is_labelled_with_hint_and_off_by_default(page):
     """
     AC-1: the form shows a switch labelled 'Hide tool outputs from end users'.
@@ -91,6 +92,7 @@ def test_hide_tool_outputs_switch_is_labelled_with_hint_and_off_by_default(page)
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_hide_tool_outputs_flag_persists_after_save_and_reopen(
     page, ui_created_assistant_names
 ):

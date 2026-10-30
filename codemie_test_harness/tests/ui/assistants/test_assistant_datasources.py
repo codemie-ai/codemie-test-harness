@@ -40,6 +40,7 @@ from codemie_test_harness.tests.ui.test_data.assistant_test_data import (
 @pytest.mark.requires_capability("retrieval")
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_attach_code_datasource_to_assistant(page, assistant, code_datasource):
     """
     Test attaching a Code datasource to an assistant via UI.
@@ -71,6 +72,7 @@ def test_attach_code_datasource_to_assistant(page, assistant, code_datasource):
 @pytest.mark.requires_capability("retrieval")
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_attach_multiple_datasources_to_assistant(
     page, assistant, code_datasource, jira_datasource
 ):
@@ -106,6 +108,7 @@ def test_attach_multiple_datasources_to_assistant(
 @pytest.mark.requires_capability("retrieval")
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_remove_attached_datasource_from_assistant(page, assistant, code_datasource):
     """
     Test removing an attached datasource from an assistant via UI.

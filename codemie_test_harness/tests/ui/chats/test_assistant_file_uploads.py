@@ -32,6 +32,7 @@ from codemie_test_harness.tests.utils.constants import FILES_PATH
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_upload_single_file_to_assistant_chat(
     page, assistant, navigate_to_new_chat_page
 ):
@@ -60,6 +61,7 @@ def test_upload_single_file_to_assistant_chat(
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_upload_multiple_files_to_assistant_chat(
     page, assistant, navigate_to_new_chat_page
 ):
