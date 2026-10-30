@@ -30,6 +30,6 @@ jobs:
       matrix:
         language: [actions, python]
 
-    uses: codemie-ai/ci-workflows/.github/workflows/reusable-codeql.yml@main
+    uses: codemie-ai/ci-workflows/.github/workflows/reusable-codeql.yml@f1a54987d56e2ee08192eb34d2e295451f0071ac # ci-workflows main 2026-10-29 (v0.1.0 has no reusable workflows)
     with:
       language: ${{ matrix.language }}
