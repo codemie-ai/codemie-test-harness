@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "codemie-test-harness"
-version = "1.0.0"
+version = "0.1.0"
 description = "Autotest for CodeMie backend and UI"
 authors = [
     "CodeMie Test Harness Team",
@@ -13,7 +13,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.12"
-codemie-sdk-python = "0.1.705"
+codemie-sdk-python = "0.1.706"
 pytest = "^8.4.1"
 python-dotenv = "^1.1.0"
 PyHamcrest = "^2.1.0"

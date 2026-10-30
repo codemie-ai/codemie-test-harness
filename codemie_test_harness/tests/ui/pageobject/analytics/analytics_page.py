@@ -25,13 +25,31 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
-from playwright.sync_api import expect
+from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.analytics.cli_analytics_page import (
     CLIAnalyticsPage,
 )
+from codemie_test_harness.tests.ui.pageobject.analytics.usage_attribution_page import (
+    UsageAttributionPage,
+)
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.test_data.usage_attribution_test_data import (
+    FILTER_NOTE,
+    FILTER_SECTIONS_HIDDEN,
+    FILTER_SECTIONS_SHOWN,
+    TAB_NAME as USAGE_ATTRIBUTION_TAB_NAME,
+    TABS_BEFORE_USAGE_ATTRIBUTION,
+)
+
+ALWAYS_PRESENT_TABS = ("Insights", "CLI Insights")
+ALWAYS_PRESENT_TABS_PATTERN = re.compile(
+    "^(" + "|".join(re.escape(name) for name in ALWAYS_PRESENT_TABS) + ")$"
+)
+STANDARD_TABS_PATTERN = re.compile(
+    "^(" + "|".join(re.escape(name) for name in TABS_BEFORE_USAGE_ATTRIBUTION) + ")$"
+)
 
 
 class AnalyticsPage(BasePage):
@@ -72,6 +90,43 @@ class AnalyticsPage(BasePage):
     def users_filter_region(self):
         """The USERS filter region that contains the combobox."""
         return self.page.get_by_role("region", name="USERS")
+
+    @property
+    def tab_usage_attribution(self) -> Locator:
+        """'Usage Attribution' analytics tab (admins, maintainers and auditors, flag on)."""
+        return self.page.get_by_role("tab", name=USAGE_ATTRIBUTION_TAB_NAME, exact=True)
+
+    @property
+    def standard_tabs_before_usage_attribution(self) -> Locator:
+        """The standard analytics tabs that come before the Usage Attribution tab."""
+        return self.tab_usage_attribution.locator(
+            "xpath=preceding::*[@role='tab']"
+        ).filter(has_text=ALWAYS_PRESENT_TABS_PATTERN)
+
+    @property
+    def standard_tabs_after_usage_attribution(self) -> Locator:
+        """The standard analytics tabs that come after the Usage Attribution tab (there should be none)."""
+        return self.tab_usage_attribution.locator(
+            "xpath=following::*[@role='tab']"
+        ).filter(has_text=STANDARD_TABS_PATTERN)
+
+    @property
+    def filter_sidebar(self) -> Locator:
+        """The filter sidebar: the page's complementary region, titled 'Analytics'."""
+        return self.page.get_by_role("complementary").filter(
+            has=self.page.get_by_role("heading", name="Analytics", exact=True, level=2)
+        )
+
+    def filter_section(self, label: str) -> Locator:
+        """Collapsible filter section of the sidebar by its label (shown in upper case)."""
+        return self.filter_sidebar.get_by_role(
+            "button", name=re.compile(rf"^{re.escape(label)}$", re.IGNORECASE)
+        )
+
+    @property
+    def usage_attribution_filter_note(self) -> Locator:
+        """Note under the filters that tells Project and Users filters do not apply to the tab."""
+        return self.filter_sidebar.get_by_text(FILTER_NOTE)
 
     @property
     def date_range_from_url(self) -> tuple[datetime, datetime]:
@@ -130,6 +185,27 @@ class AnalyticsPage(BasePage):
         with cli_analytics.expect_section_data(CLIAnalyticsPage.DEFAULT_SECTION):
             self.click_tab(CLIAnalyticsPage.TAB_NAME)
         return cli_analytics.should_be_visible()
+
+    @step
+    def should_offer_usage_attribution_tab(self):
+        """Assert the Usage Attribution tab is offered to the current user.
+
+        The tab shows once the app configuration has loaded, for an admin, maintainer or auditor
+        when the feature is on, so callers use this where the backend already reports it on.
+        """
+        expect(
+            self.tab_usage_attribution,
+            f"The '{USAGE_ATTRIBUTION_TAB_NAME}' tab should be offered while the feature is on",
+        ).to_be_visible(timeout=30000)
+        return self
+
+    @step
+    def open_usage_attribution(self) -> UsageAttributionPage:
+        """Open the Usage Attribution tab and return its page object."""
+        self.click_tab(USAGE_ATTRIBUTION_TAB_NAME)
+        usage_attribution = UsageAttributionPage(self.page)
+        usage_attribution.should_have_sub_tabs()
+        return usage_attribution
 
     # ── Assertions ────────────────────────────────────────────────────────────
 
@@ -209,4 +285,35 @@ class AnalyticsPage(BasePage):
         self.page.wait_for_timeout(500)
         user_option = self.page.get_by_role("option", name=expected_other_user)
         expect(user_option).to_be_visible(timeout=10000)
+        return self
+
+    @step
+    def should_list_usage_attribution_tab_after_existing_tabs(self):
+        """Assert the Usage Attribution tab comes after the standard tabs the user has."""
+        expect(self.tab_usage_attribution).to_be_visible(timeout=15000)
+        expect(
+            self.standard_tabs_before_usage_attribution,
+            "Insights and CLI Insights should come before the Usage Attribution tab",
+        ).to_have_count(len(ALWAYS_PRESENT_TABS))
+        expect(
+            self.standard_tabs_after_usage_attribution,
+            "No standard tab should come after the Usage Attribution tab",
+        ).to_have_count(0)
+        return self
+
+    @step
+    def should_show_only_period_filters_with_note(self):
+        """Assert period and date filters are shown, Project and Users are hidden, and the note says so."""
+        for label in FILTER_SECTIONS_SHOWN:
+            expect(
+                self.filter_section(label), f"Filter '{label}' should be visible"
+            ).to_be_visible(timeout=15000)
+        for label in FILTER_SECTIONS_HIDDEN:
+            expect(
+                self.filter_section(label), f"Filter '{label}' should be hidden"
+            ).to_have_count(0)
+        expect(
+            self.usage_attribution_filter_note,
+            "The note about the missing project and user filter should be shown",
+        ).to_be_visible(timeout=15000)
         return self

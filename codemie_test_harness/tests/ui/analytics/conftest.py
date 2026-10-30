@@ -17,6 +17,15 @@ import pytest
 from codemie_test_harness.tests.test_data.projects_test_data import (
     get_project_create_data,
 )
+from codemie_test_harness.tests.ui.pageobject.analytics.analytics_page import (
+    AnalyticsPage,
+)
+from codemie_test_harness.tests.ui.pageobject.analytics.usage_attribution_page import (
+    UsageAttributionPage,
+)
+from codemie_test_harness.tests.ui.pageobject.analytics.usage_attribution_table import (
+    UsageAttributionTable,
+)
 from codemie_test_harness.tests.utils.analytics_utils import CLIAnalyticsTestSession
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     delete_projects_strict,
@@ -44,3 +53,41 @@ def cli_analytics_session(
         yield analytics_utils.create_cli_session(project=project)
     finally:
         delete_projects_strict(project_utils, [project])
+
+
+@pytest.fixture
+def analytics_page(page) -> AnalyticsPage:
+    """The Analytics page, open on its default tab."""
+    return AnalyticsPage(page).navigate_to()
+
+
+@pytest.fixture
+def usage_attribution(analytics_page) -> UsageAttributionPage:
+    """The Usage Attribution tab, open.
+
+    The admin must be offered the tab: a missing tab fails the test.
+    """
+    analytics_page.should_offer_usage_attribution_tab()
+    return analytics_page.open_usage_attribution()
+
+
+@pytest.fixture
+def user_enrichment_enabled(client):
+    """Require user enrichment: the country and job title breakdown widgets are hidden without it."""
+    settings = client.usage_attribution.get_settings().data
+    assert "enrichment" in settings, (
+        f"The settings payload should report user enrichment, it has {sorted(settings)}"
+    )
+    assert settings["enrichment"], (
+        "User enrichment is off on this environment: "
+        "the country and job title breakdown widgets need it"
+    )
+
+
+@pytest.fixture
+def table_with_rows(usage_attribution, popup) -> UsageAttributionTable:
+    """The table of a popup case with every row listed; fails where it has no rows to open."""
+    table = usage_attribution.open_table(popup.table)
+    table.show_all_rows()
+    table.should_have_rows()
+    return table
