@@ -39,6 +39,7 @@ from codemie_test_harness.tests.ui.test_data.integration_verification_test_data 
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_missing_integrations_dialog_displayed(page):
     """
     Test that Missing Integrations validation dialog is shown when saving an assistant

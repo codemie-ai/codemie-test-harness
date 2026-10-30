@@ -25,6 +25,7 @@ from codemie_test_harness.tests.ui.test_data.datasource_test_data import (
 @pytest.mark.datasource
 @pytest.mark.xwiki
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_xwiki_appears_as_selectable_datasource_type(page):
     """
     Validates:

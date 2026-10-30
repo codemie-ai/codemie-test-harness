@@ -27,6 +27,7 @@ from codemie_test_harness.tests.ui.pageobject.workflows.create_workflow_page imp
 
 @pytest.mark.ui
 @pytest.mark.workflow
+@pytest.mark.prod_regression
 def test_workflow_help_links_validation(page):
     """UI Test Suite for Workflow Help Links Validation"""
     create_workflow_page = CreateWorkflowPage(page)

@@ -67,3 +67,21 @@ def test_cli_analytics_session_opens_from_sessions_table(page, cli_analytics_ses
 
     session_modal.close()
     session_modal.should_be_closed()
+
+
+@pytest.mark.cli_analytics
+@pytest.mark.ui
+def test_cli_analytics_tool_success_dash_when_no_tool_calls(
+    page, cli_analytics_session
+):
+    # @case cli-analytics-tool-success-dash_TC_001
+    """Tool Success shows '—' on Overview, Users row, and Users modal when tool_calls = 0."""
+    cli_analytics = CLIAnalyticsPage(page).navigate_to()
+    cli_analytics.filter_by_project(cli_analytics_session.project)
+    cli_analytics.should_show_overview_tool_success_dash()
+
+    cli_analytics.open_section(CLIAnalyticsSection.USERS)
+    cli_analytics.should_show_first_user_row_tool_success_dash()
+
+    user_modal = cli_analytics.open_first_user_modal()
+    user_modal.should_show_tool_success_dash()

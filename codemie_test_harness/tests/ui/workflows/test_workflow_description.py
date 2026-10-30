@@ -32,6 +32,7 @@ from codemie_test_harness.tests.ui.pageobject.workflows.workflow_details_page im
 @pytest.mark.ui
 @pytest.mark.sanity
 @pytest.mark.smoke
+@pytest.mark.prod_regression
 def test_workflow_description_visible_and_read_only(
     page, test_workflow_with_description
 ):

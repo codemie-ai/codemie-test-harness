@@ -65,6 +65,7 @@ def _unique_name() -> str:
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_ui_session_no_nested_subagent_spawn(page, skill, raw_assistant, skill_utils):
     """TC-019: Run assistant with subagent-enabled skill; no second-level spawn visible.
 
@@ -126,6 +127,7 @@ def test_ui_session_no_nested_subagent_spawn(page, skill, raw_assistant, skill_u
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_ui_builtin_subagent_triggered_via_chat(
     page, skill, raw_assistant, skill_utils
 ):
@@ -190,6 +192,7 @@ def test_ui_builtin_subagent_triggered_via_chat(
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_e2e_enable_subagent_via_skill_ui(page, skill, raw_assistant, skill_utils):
     """TC-021: Enable subagent via skill UI → create assistant → verify chat session.
 
@@ -261,6 +264,7 @@ def test_e2e_enable_subagent_via_skill_ui(page, skill, raw_assistant, skill_util
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_cross_layer_ui_toggle_reflects_in_api(page, skill, skill_utils):
     """TC-022: Toggle ON via UI → API returns field=GENERAL_PURPOSE_SUBAGENT.
     Toggle OFF via UI → API returns field=[].

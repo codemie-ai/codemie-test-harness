@@ -392,6 +392,20 @@ class AssistantUtils(BaseUtils):
     def get_assistant_tools(self):
         return self.client.assistants.get_tools()
 
+    def get_tool_details(self, toolkit: str, tool_name: str):
+        """ToolDetails of ``tool_name`` inside the available ``toolkit``."""
+        toolkit_details = next(
+            (kit for kit in self.get_assistant_tools() if kit.toolkit == toolkit), None
+        )
+        assert toolkit_details is not None, f"Toolkit '{toolkit}' is not available"
+        tool_details = next(
+            (tool for tool in toolkit_details.tools if tool.name == tool_name), None
+        )
+        assert tool_details is not None, (
+            f"Tool '{tool_name}' is not in toolkit '{toolkit}'"
+        )
+        return tool_details
+
     def get_assistants(
         self,
         minimal_response=True,

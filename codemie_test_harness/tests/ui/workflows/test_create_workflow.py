@@ -32,6 +32,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 @pytest.mark.sanity
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_page_elements_visibility(page):
     """Test that all main elements are visible on Create Workflow page with Visual Editor."""
     create_page = CreateWorkflowPage(page)
@@ -57,6 +58,7 @@ def test_create_workflow_page_elements_visibility(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_form_interactions(page):
     """Test form field interactions and input validation in Visual Editor."""
     create_page = CreateWorkflowPage(page)
@@ -94,6 +96,7 @@ def test_create_workflow_form_interactions(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_dropdowns_interaction(page):
     """Test dropdown interactions for project in Visual Editor."""
     create_page = CreateWorkflowPage(page)
@@ -115,6 +118,7 @@ def test_create_workflow_dropdowns_interaction(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_yaml_editor_functionality(page):
     """Test YAML editor functionality in Visual Editor."""
     create_page = CreateWorkflowPage(page)
@@ -148,6 +152,7 @@ def test_create_workflow_yaml_editor_functionality(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_canvas_visualization(page):
     """Test workflow canvas visualization in Visual Editor."""
     create_page = CreateWorkflowPage(page)
@@ -172,6 +177,7 @@ def test_create_workflow_canvas_visualization(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_navigation_buttons(page):
     """Test navigation button interactions."""
     workflows_page = WorkflowsPage(page)
@@ -195,6 +201,7 @@ def test_create_workflow_navigation_buttons(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_sidebar_functionality(page):
     """Test sidebar functionality from Create Workflow page."""
     create_page = CreateWorkflowPage(page)
@@ -223,6 +230,7 @@ def test_create_workflow_sidebar_functionality(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_menu_navigation(page):
     """Test menu navigation from Create Workflow page."""
     create_page = CreateWorkflowPage(page)
@@ -247,6 +255,7 @@ def test_create_workflow_menu_navigation(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_default_field_values(page):
     """Test default field values on page load in Visual Editor."""
     create_page = CreateWorkflowPage(page)
@@ -269,6 +278,7 @@ def test_create_workflow_default_field_values(page):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_config_panel_basic_tab(page):
     """Test workflow config panel basic tab validations in Visual Editor."""
     create_page = CreateWorkflowPage(page)
@@ -297,6 +307,7 @@ def test_create_workflow_config_panel_basic_tab(page):
 @pytest.mark.sanity
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_workflow_complete_workflow_creation(page, ensure_workflow_exists):
     """Test complete workflow creation from Workflows page using YAML config."""
     workflows_page = WorkflowsPage(page)

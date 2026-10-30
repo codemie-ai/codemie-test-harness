@@ -46,6 +46,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_create_page_has_skills_section(page):
     """
     Test #22: Create Assistant page has Skills attachment section.
@@ -63,6 +64,7 @@ def test_assistant_create_page_has_skills_section(page):
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_attach_skill_to_assistant(page):
     """
     Test #23: Attach a skill to assistant during creation.
@@ -104,6 +106,7 @@ def test_attach_skill_to_assistant(page):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_attach_marketplace_skill_to_assistant(page):
     """
     Test #25: Attach a marketplace skill to assistant.
@@ -163,6 +166,7 @@ def test_attach_marketplace_skill_to_assistant(page):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_attach_multiple_skills_to_assistant(page):
     """
     Test #26: Attach 2+ skills to single assistant.
@@ -214,6 +218,7 @@ def test_attach_multiple_skills_to_assistant(page):
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_detach_skill_from_assistant(page):
     """
     Test #27: Remove attached skill from assistant.

@@ -27,6 +27,7 @@ from codemie_test_harness.tests.ui.test_data.links_names_test_data import (
 
 @pytest.mark.ui
 @pytest.mark.assistant
+@pytest.mark.prod_regression
 def test_assistant_help_links_validation(page):
     """UI Test Suite for Assistant Help Links Validation"""
     create_assistant_page = CreateEditAssistantPage(page)

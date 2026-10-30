@@ -27,6 +27,7 @@ from codemie_test_harness.tests.ui.test_data.links_names_test_data import (
 
 @pytest.mark.ui
 @pytest.mark.katas
+@pytest.mark.prod_regression
 def test_kata_help_links_validation(page):
     """UI Test Suite for Kata Help Links Validation"""
     create_kata_page = CreateKataPage(page)

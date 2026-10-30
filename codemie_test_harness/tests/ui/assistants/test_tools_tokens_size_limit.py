@@ -39,6 +39,7 @@ from codemie_test_harness.tests.utils.client_factory import get_client
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_tools_tokens_size_limit_field_default_state(page, assistant):
     """
     TC_001 — Verify the default state of the tools_tokens_size_limit field.
@@ -77,6 +78,7 @@ def test_tools_tokens_size_limit_field_default_state(page, assistant):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_tools_tokens_size_limit_reflected_in_api(page, assistant):
     """
     TC_010 — Verify that a value saved via UI is reflected in the API response.

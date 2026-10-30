@@ -672,7 +672,9 @@ class AssistantsMarketplacePage(BasePage):
 
         Scoped to .h-card.rounded-xl to avoid capturing unrelated status elements (loading
         indicators, notification banners). Uses re.search to extract only the first contiguous
-        digit run, handling labels such as '1,234 total uses' or '5 uses (3 unique)' correctly.
+        number, handling labels such as '1,234 total uses' or '5 uses (3 unique)' correctly.
+        Compact notation ('22k', '1.2k', '3M') is expanded to an approximate integer, which
+        preserves ordering because the UI's rounding is monotonic.
 
         Usage count now renders as an <output> element (implicit ARIA role "status", no
         explicit role attribute), so this uses get_by_role() rather than a `[role='status']`
@@ -683,10 +685,16 @@ class AssistantsMarketplacePage(BasePage):
             .get_by_role("status")
             .all_text_contents()
         )
+        multipliers = {"k": 1_000, "m": 1_000_000}
         counts = []
         for text in raw:
-            match = re.search(r"[\d,]+", text)
-            counts.append(int(match.group().replace(",", "")) if match else 0)
+            match = re.search(r"([\d,]+(?:\.\d+)?)\s*([kKmM])?(?![a-zA-Z])", text)
+            if not match:
+                counts.append(0)
+                continue
+            number = float(match.group(1).replace(",", ""))
+            multiplier = multipliers.get((match.group(2) or "").lower(), 1)
+            counts.append(round(number * multiplier))
         return counts
 
     # =============================================================================

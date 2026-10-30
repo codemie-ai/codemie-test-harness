@@ -31,6 +31,7 @@ from codemie_test_harness.tests.ui.pageobject.skills.create_edit_skill_page impo
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skill_required_fields_validation(page):
     """
     Test #30: Required fields validation
@@ -47,6 +48,7 @@ def test_skill_required_fields_validation(page):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skill_fields_format_validation(page):
     """
     Test: Fields Format validation.

@@ -108,6 +108,7 @@ def share_token_for(client):
 @pytest.mark.chat
 @pytest.mark.ui
 @pytest.mark.parametrize("scenario", tool_scenarios)
+@pytest.mark.prod_regression
 def test_flagged_assistant_shows_final_answer_without_tool_details(
     page, navigate_to_new_chat_page, flagged_assistant, scenario: ToolScenario
 ):
@@ -133,6 +134,7 @@ def test_flagged_assistant_shows_final_answer_without_tool_details(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_reopened_conversation_of_flagged_assistant_shows_no_tool_details(
     page, navigate_to_new_chat_page, flagged_assistant
 ):
@@ -161,6 +163,7 @@ def test_reopened_conversation_of_flagged_assistant_shows_no_tool_details(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chat_configuration_hides_toggle_for_flagged_assistant(
     page, navigate_to_new_chat_page, flagged_assistant
 ):
@@ -188,6 +191,7 @@ def test_chat_configuration_hides_toggle_for_flagged_assistant(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_pending_tool_approval_stays_visible_for_flagged_assistant(
     page, navigate_to_new_chat_page, flagged_assistant
 ):
@@ -229,6 +233,7 @@ def test_pending_tool_approval_stays_visible_for_flagged_assistant(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_flipping_flag_hides_and_restores_details_of_existing_conversation(
     page,
     navigate_to_new_chat_page,
@@ -272,6 +277,7 @@ def test_flipping_flag_hides_and_restores_details_of_existing_conversation(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_shared_conversation_of_flagged_assistant_shows_no_tool_details(
     page, navigate_to_new_chat_page, flagged_assistant, share_token_for
 ):

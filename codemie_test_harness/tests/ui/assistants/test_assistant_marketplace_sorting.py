@@ -49,6 +49,7 @@ from codemie_test_harness.tests.ui.test_data.assistant_test_data import (
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_marketplace_sort_controls_are_visible(page):
     """TC-01: Sort controls are visible with all expected options in Marketplace.
 
@@ -75,6 +76,7 @@ def test_marketplace_sort_controls_are_visible(page):
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_marketplace_sort_by_name_reorders_list(page):
     """TC-03: Selecting sort option in UI reorders the Marketplace assistant list.
 
@@ -130,6 +132,7 @@ def test_marketplace_sort_by_name_reorders_list(page):
 @pytest.mark.parametrize(
     "sort_order, reverse", [("Descending", True), ("Ascending", False)]
 )
+@pytest.mark.prod_regression
 def test_marketplace_sort_by_usage_correct_order(sort_order, reverse, page):
     """TC-04: Sort by Usage displays assistant cards in correct users-count order.
 
@@ -166,6 +169,7 @@ def test_marketplace_sort_by_usage_correct_order(sort_order, reverse, page):
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_marketplace_sort_with_search_preserves_results(page):
     """TC-08: Sort combined with search preserves search results and displays them in order.
 

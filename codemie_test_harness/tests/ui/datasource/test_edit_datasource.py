@@ -73,6 +73,7 @@ from codemie_test_harness.tests.utils.constants import test_project_name
         ),
     ],
 )
+@pytest.mark.prod_regression
 def test_edit_datasource(
     page,
     request,
@@ -119,6 +120,7 @@ def test_edit_datasource(
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_code_datasource_no_error_after_project_change_and_description_edit(
     page,
     datasource_utils,

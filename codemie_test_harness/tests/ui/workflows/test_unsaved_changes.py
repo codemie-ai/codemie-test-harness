@@ -51,6 +51,7 @@ DISCARD_ACTIONS = [
 @pytest.mark.workflow
 @pytest.mark.ui
 @pytest.mark.parametrize("action_name, trigger_action", TRIGGER_ACTIONS)
+@pytest.mark.prod_regression
 def test_unsaved_changes_after_adding_node(page, action_name, trigger_action):
     """
     Parametrized test that verifies unsaved changes popup appears after adding a node
@@ -87,6 +88,7 @@ def test_unsaved_changes_after_adding_node(page, action_name, trigger_action):
 @pytest.mark.workflow
 @pytest.mark.ui
 @pytest.mark.parametrize("action_name, trigger_action", TRIGGER_ACTIONS)
+@pytest.mark.prod_regression
 def test_unsaved_changes_after_adding_workflow_name(page, action_name, trigger_action):
     """
     Parametrized test that verifies unsaved changes popup appears after adding a workflow name
@@ -123,6 +125,7 @@ def test_unsaved_changes_after_adding_workflow_name(page, action_name, trigger_a
 @pytest.mark.workflow
 @pytest.mark.ui
 @pytest.mark.parametrize("action_name, trigger_action", TRIGGER_ACTIONS)
+@pytest.mark.prod_regression
 def test_unsaved_changes_after_adding_yaml_config(page, action_name, trigger_action):
     """
     Parametrized test that verifies unsaved changes popup appears after adding YAML config
@@ -167,6 +170,7 @@ states:
 @pytest.mark.workflow
 @pytest.mark.ui
 @pytest.mark.parametrize("action_name, trigger_action", TRIGGER_ACTIONS)
+@pytest.mark.prod_regression
 def test_edit_workflow_unsaved_changes_after_modifying_name(
     page, test_workflow, action_name, trigger_action
 ):
@@ -205,6 +209,7 @@ def test_edit_workflow_unsaved_changes_after_modifying_name(
 @pytest.mark.workflow
 @pytest.mark.ui
 @pytest.mark.parametrize("action_name, trigger_action, expected_url", DISCARD_ACTIONS)
+@pytest.mark.prod_regression
 def test_unsaved_changes_discard_after_adding_node(
     page, action_name, trigger_action, expected_url
 ):

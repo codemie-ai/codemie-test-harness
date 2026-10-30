@@ -28,6 +28,7 @@ from codemie_test_harness.tests.ui.pageobject.workflows import WorkflowDetailsPa
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_chat_send_message_no_assistant_endpoint_request(page, test_workflow):
     """Regression: workflow chat should not call /assistants/{workflow_id} when sending a message (running workflow).
 

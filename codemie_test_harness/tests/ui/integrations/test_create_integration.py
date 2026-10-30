@@ -36,6 +36,7 @@ from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
 
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_navigate_to_integrations_via_menu(page):
     """
     Test navigation to create integration page via menu.
@@ -59,6 +60,7 @@ def test_navigate_to_integrations_via_menu(page):
 
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_navigate_to_create_integration_via_direct_url(page):
     """
     Test direct navigation to create integration page via URL.
@@ -85,6 +87,7 @@ def test_navigate_to_create_integration_via_direct_url(page):
 
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_navigate_to_create_integration_from_integrations_page(page):
     """
     Test navigation to create integration page from integrations page ui elements.
@@ -119,6 +122,7 @@ def test_navigate_to_create_integration_from_integrations_page(page):
     "credential_type",
     [CredentialTypes.GIT, CredentialTypes.JIRA, CredentialTypes.CONFLUENCE],
 )
+@pytest.mark.prod_regression
 def test_create_integration_type_form_fields(page, credential_type):
     """
     Test that all required form fields are displayed for each credential type.
@@ -169,6 +173,7 @@ def test_create_integration_type_form_fields(page, credential_type):
 
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_git_integration_github_app_authentication(page):
     """
     Test GitHub App authentication option for Git integrations.
@@ -200,6 +205,7 @@ def test_create_git_integration_github_app_authentication(page):
 
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_git_integration_complete_workflow(page):
     """
     Test the complete Git integration creation workflow (happy path).
@@ -224,6 +230,7 @@ def test_create_git_integration_complete_workflow(page):
 
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_jira_integration_complete_workflow(page):
     """
     Test the complete Jira integration creation workflow (happy path).
@@ -252,6 +259,7 @@ def test_create_jira_integration_complete_workflow(page):
 
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_confluence_integration_complete_workflow(page):
     """
     Test the complete Confluence integration creation workflow (happy path).
@@ -281,6 +289,7 @@ def test_create_confluence_integration_complete_workflow(page):
 @pytest.mark.sanity
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_form_reset_and_cancel_functionality(page):
     """
     Test form reset and cancel functionality.
@@ -310,6 +319,7 @@ def test_form_reset_and_cancel_functionality(page):
 @pytest.mark.sanity
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_alias_field_validation_message(page):
     """
     Test validation message when alias field is empty and form is submitted.
@@ -340,6 +350,7 @@ def test_alias_field_validation_message(page):
 @pytest.mark.sanity
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_credential_type_dropdown_shows_all_available_options(page):
     """
     Test that credential type dropdown shows all available integration types.

@@ -219,6 +219,7 @@ def _assert_resource_visible_and_other_hidden(
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.datasource
+@pytest.mark.prod_regression
 def test_resource_dropdown_shows_only_project_scoped_resources(
     page: Page,
     tc06_resources,

@@ -31,6 +31,7 @@ from codemie_test_harness.tests.ui.test_data.assistant_test_data import (
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_attach_file_setting_toggle_exists_and_persists(page, assistant):
     """
     AC-1: An admin config to disable the Attach File button exists on the

@@ -41,6 +41,7 @@ _ASSISTANT_STATE_ID = "branch_creator"
 @pytest.mark.sanity
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_reset_context_keys_comma_entry_saved_to_yaml(
     page, test_workflow, workflow_utils
 ):

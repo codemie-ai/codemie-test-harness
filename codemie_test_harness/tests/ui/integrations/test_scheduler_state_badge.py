@@ -53,6 +53,7 @@ pytestmark = pytest.mark.skipif(
         (IntegrationType.PROJECT, False, "Disabled"),
     ],
 )
+@pytest.mark.prod_regression
 def test_show_scheduler_state_badge_on_row(
     page: Page,
     general_integration,
@@ -100,6 +101,7 @@ def test_show_scheduler_state_badge_on_row(
 @pytest.mark.integration
 @pytest.mark.scheduler
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_update_scheduler_state_badge_after_reload(
     page: Page, scheduler_integration, assistant, integration_utils
 ):
@@ -154,6 +156,7 @@ def test_update_scheduler_state_badge_after_reload(
 @pytest.mark.integration
 @pytest.mark.scheduler
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_hide_scheduler_state_badge_when_is_enabled_missing(
     page: Page, general_integration, assistant
 ):

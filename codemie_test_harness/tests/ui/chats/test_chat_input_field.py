@@ -58,6 +58,7 @@ def web_search_enabled(customer_config_utils):
 @pytest.mark.smoke
 @pytest.mark.sanity
 @pytest.mark.assistant
+@pytest.mark.prod_regression
 def test_chat_input_file_attachment(page, navigate_to_new_chat_page):
     """
     Test that files can be attached via chat input field and display in UI before sending.
@@ -157,6 +158,7 @@ def test_chat_input_dynamic_web_search_unavailable_when_disabled_via_customer_co
 @pytest.mark.sanity
 @pytest.mark.ui
 @pytest.mark.assistant
+@pytest.mark.prod_regression
 def test_chat_input_default_model_changing(page, navigate_to_new_chat_page):
     """
     Test that default model can be changed and subsequent messages use the selected model.
@@ -187,6 +189,7 @@ def test_chat_input_default_model_changing(page, navigate_to_new_chat_page):
 
 @pytest.mark.ui
 @pytest.mark.assistant
+@pytest.mark.prod_regression
 def test_chat_input_skills_attachment(page, navigate_to_new_chat_page, skill):
     """
     Test that skills can be attached to chat session and are accessible/functional.

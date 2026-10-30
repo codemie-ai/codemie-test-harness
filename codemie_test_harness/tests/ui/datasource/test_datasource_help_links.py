@@ -27,6 +27,7 @@ from codemie_test_harness.tests.ui.test_data.links_names_test_data import (
 
 @pytest.mark.ui
 @pytest.mark.datasource
+@pytest.mark.prod_regression
 def test_datasource_help_links_validation(page):
     """UI Test Suite for Datasource Help Links Validation"""
     create_datasource_page = CreateEditDatasourcePage(page)

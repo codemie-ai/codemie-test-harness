@@ -33,6 +33,7 @@ from codemie_test_harness.tests.ui.test_data.workflows_test_data import (
 @pytest.mark.workflow_execution
 @pytest.mark.ui
 @pytest.mark.not_for_parallel_run
+@pytest.mark.prod_regression
 def test_execution_remove_blocked_while_conversation_exists_then_removed_after_deletion(
     page, test_workflow, conversation_linked_execution, conversation_utils
 ):

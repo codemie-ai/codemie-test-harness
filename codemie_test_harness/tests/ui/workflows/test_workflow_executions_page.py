@@ -69,6 +69,7 @@ def open_execution(page, executions):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_executions_page_structure(open_execution, test_workflow):
     """Test that all main page elements are visible and properly structured."""
     executions_page, _ = open_execution()
@@ -81,6 +82,7 @@ def test_workflow_executions_page_structure(open_execution, test_workflow):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_header_elements_visibility(open_execution):
     """Test that all header elements are visible and functional."""
     executions_page, _ = open_execution()
@@ -94,6 +96,7 @@ def test_header_elements_visibility(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_execution_history_sidebar_content(open_execution):
     """Test execution history sidebar content and structure."""
     executions_page, _ = open_execution()
@@ -105,6 +108,7 @@ def test_execution_history_sidebar_content(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_execution_history_item_interactions(open_execution):
     """Test interactions with individual execution history items."""
     executions_page, _ = open_execution()
@@ -118,6 +122,7 @@ def test_execution_history_item_interactions(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_execution_history_status_display(open_execution):
     """Test execution status display and styling in sidebar."""
     executions_page, _ = open_execution(3)
@@ -131,6 +136,7 @@ def test_execution_history_status_display(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_execution_history_item_details(open_execution):
     """Test execution history item shows status, sequential ID, and timestamp labels."""
     executions_page, _ = open_execution()
@@ -147,6 +153,7 @@ def test_execution_history_item_details(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_execution_history_item_menu_options(open_execution):
     """Test that the three-dots context menu on an execution item shows Remove option."""
     executions_page, _ = open_execution()
@@ -163,6 +170,7 @@ def test_execution_history_item_menu_options(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_execution_status_and_metadata_display(open_execution):
     """Test execution status and metadata display in Info dialog."""
     executions_page, executions = open_execution()
@@ -188,6 +196,7 @@ def test_execution_status_and_metadata_display(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_info_dialog_runtime_and_id(open_execution):
     """Test that Info dialog shows runtime duration and execution ID with copy button."""
     executions_page, executions = open_execution()
@@ -205,6 +214,7 @@ def test_info_dialog_runtime_and_id(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_info_dialog_spending_metrics(open_execution):
     """Test that Info dialog shows the Spending metrics section."""
     executions_page, _ = open_execution()
@@ -216,6 +226,7 @@ def test_info_dialog_spending_metrics(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_execution_action_buttons(open_execution):
     """Test execution action buttons functionality."""
     executions_page, _ = open_execution()
@@ -229,6 +240,7 @@ def test_execution_action_buttons(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_prompt_action_buttons(open_execution):
     """Test prompt section display, content, and full-prompt dialog."""
     executions_page, executions = open_execution()
@@ -245,6 +257,7 @@ def test_prompt_action_buttons(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_full_prompt_dialog_shows_prompt_content(open_execution):
     """Test that the full-prompt dialog displays the actual prompt text."""
     executions_page, executions = open_execution()
@@ -263,6 +276,7 @@ def test_full_prompt_dialog_shows_prompt_content(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_execution_steps_display(open_execution):
     """Test execution steps section display."""
     executions_page, _ = open_execution()
@@ -273,6 +287,7 @@ def test_execution_steps_display(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_execution_step_detail_input_result(open_execution):
     """Test clicking a non-Starting-Prompt step shows both Input and Result sections."""
     executions_page, _ = open_execution()
@@ -288,6 +303,7 @@ def test_execution_step_detail_input_result(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_graph_control_panel_elements(open_execution):
     """Test that the workflow graph and all control panel buttons are visible."""
     executions_page, _ = open_execution()
@@ -301,6 +317,7 @@ def test_workflow_graph_control_panel_elements(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_configuration_sidebar(open_execution, test_workflow):
     """Test configuration sidebar functionality."""
     executions_page, executions = open_execution()
@@ -326,6 +343,7 @@ def test_configuration_sidebar(open_execution, test_workflow):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_button_navigates_to_edit_workflow(open_execution):
     """Test that the Edit button navigates to the workflow edit page."""
     executions_page, executions = open_execution()
@@ -339,6 +357,7 @@ def test_edit_button_navigates_to_edit_workflow(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_hide_sidebar_collapses_execution_history(open_execution):
     """Test that clicking Hide Sidebar collapses the execution history sidebar."""
     executions_page, _ = open_execution()
@@ -357,6 +376,7 @@ def test_hide_sidebar_collapses_execution_history(open_execution):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_bare_executions_route_renders_executions_list(page, executions, test_workflow):
     """Opening the bare executions route (no executionId) must render the
     executions page instead of 404ing."""
@@ -373,6 +393,7 @@ def test_bare_executions_route_renders_executions_list(page, executions, test_wo
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_bare_executions_route_auto_selects_execution(page, executions):
     """Opening the bare executions route auto-selects the (only) execution and
     updates the URL to the ":executionId"-suffixed route."""
@@ -395,6 +416,7 @@ def test_bare_executions_route_auto_selects_execution(page, executions):
 @pytest.mark.workflow
 @pytest.mark.workflow_execution
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_execution_history_navigation(open_execution):
     """Test navigation between different executions in history."""
     executions_page, _ = open_execution(2)

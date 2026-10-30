@@ -36,6 +36,7 @@ from codemie_test_harness.tests.ui.pageobject.workflows.workflow_version_history
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_version_history_button_accessible_from_visual_editor(page, test_workflow):
     """Version History button is present and opens the popup from the visual editor YAML panel.
 

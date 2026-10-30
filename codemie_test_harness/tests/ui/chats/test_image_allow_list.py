@@ -105,6 +105,7 @@ def chat_with_markdown_reply(assistant, conversation_utils):
 
 @pytest.mark.ui
 @pytest.mark.sanity
+@pytest.mark.prod_regression
 def test_blocked_image_shows_badge_not_img_tag(page, chat_with_markdown_reply):
     """Images from a domain outside the allow-list render as a blocked-image badge,
     not an <img> tag — so the browser never requests the untrusted host.
@@ -120,6 +121,7 @@ def test_blocked_image_shows_badge_not_img_tag(page, chat_with_markdown_reply):
 
 @pytest.mark.ui
 @pytest.mark.sanity
+@pytest.mark.prod_regression
 def test_data_url_image_renders_without_badge(page, chat_with_markdown_reply):
     """A data:image/* URL never issues a network request, so it is always allowed —
     it renders as a real <img>, with no blocked-image badge.
@@ -134,6 +136,7 @@ def test_data_url_image_renders_without_badge(page, chat_with_markdown_reply):
 
 @pytest.mark.ui
 @pytest.mark.sanity
+@pytest.mark.prod_regression
 def test_non_https_external_url_is_blocked(page, chat_with_markdown_reply):
     """A plain http:// URL to an external host is blocked (only https: is accepted
     outright; http: is only safe from a localhost page) — shown as a badge, no <img>.
@@ -148,6 +151,7 @@ def test_non_https_external_url_is_blocked(page, chat_with_markdown_reply):
 
 @pytest.mark.ui
 @pytest.mark.sanity
+@pytest.mark.prod_regression
 def test_https_backend_origin_image_renders(page, chat_with_markdown_reply):
     """An HTTPS image from the backend's own origin is allowed (same-origin/backend-origin
     policy) — it renders as a real <img>, with no blocked-image badge.
@@ -162,6 +166,7 @@ def test_https_backend_origin_image_renders(page, chat_with_markdown_reply):
 
 @pytest.mark.ui
 @pytest.mark.sanity
+@pytest.mark.prod_regression
 def test_multiple_images_mixed_allowed_and_blocked(page, chat_with_markdown_reply):
     """A reply with several images blocks only the untrusted one; the allow-listed
     ones (here, two data: URLs) still render.

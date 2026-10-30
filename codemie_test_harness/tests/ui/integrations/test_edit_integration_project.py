@@ -63,6 +63,7 @@ def project_integration_to_move(project, integration_utils):
 @pytest.mark.gitlab
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_integration_change_project_after_confirmation(
     page: Page, project_integration_to_move, integration_utils
 ):

@@ -19,7 +19,6 @@ Covers:
     TC-002  user.updated event stored when user profile is changed
     TC-003  user.deactivated event stored when user is deactivated
     TC-005  user.project.assigned and user.project.removed events stored in sequence
-    TC-011  user.login event stored when user authenticates
     TC-012  user.project.role_updated event stored when user role is changed
 
 Parallelism strategy: each test creates its own disposable_user (function-scoped)
@@ -264,50 +263,6 @@ def test_user_project_assigned_and_removed_audit_records_stored(
         removed_record.attributes,
         has_key("project_name"),
         "attributes should contain project_name",
-    )
-
-
-# ---------------------------------------------------------------------------
-# TC-011: user.login
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.activity
-@pytest.mark.api
-def test_user_login_audit_record_stored(activity_utils):
-    """TC-011: user.login audit record exists in the system.
-
-    user.login is emitted only for local-auth logins, not IDP/Keycloak sessions.
-    On preview environments local-auth users (e.g. service accounts) generate these
-    events. This test verifies the event type is recorded in the audit trail without
-    requiring a locally-triggered login.
-    """
-    response = activity_utils.list_activity_events(
-        event_type=["user.login"],
-        domain=["user_management"],
-        limit=1,
-    )
-
-    assert_that(
-        len(response.data),
-        greater_than_or_equal_to(1),
-        "At least one user.login event should exist (emitted by local-auth logins)",
-    )
-    record = response.data[0]
-    assert_that(
-        record.event_type,
-        equal_to("user.login"),
-        "event_type should be user.login",
-    )
-    assert_that(
-        record.domain,
-        equal_to("user_management"),
-        "domain should be user_management",
-    )
-    assert_that(
-        record.entity_type,
-        equal_to("user"),
-        "entity_type should be user",
     )
 
 

@@ -43,6 +43,7 @@ from codemie_test_harness.tests.ui.test_data.chat_test_data import (
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_hide_tool_outputs_toggle_visible_and_labeled(
     page, navigate_to_new_chat_page, assistant
 ):
@@ -80,6 +81,7 @@ def test_hide_tool_outputs_toggle_visible_and_labeled(
 @pytest.mark.not_for_parallel_run
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_hide_tool_outputs_toggle_hides_tool_blocks_and_persists(
     page, navigate_to_new_chat_page, assistant
 ):
@@ -127,6 +129,7 @@ def test_hide_tool_outputs_toggle_hides_tool_blocks_and_persists(
 @pytest.mark.not_for_parallel_run
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_hide_tool_outputs_toggle_restore_visibility_after_disable(
     page, navigate_to_new_chat_page, assistant
 ):

@@ -87,6 +87,7 @@ def parent_with_published_and_unpublished_sub_assistants(
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistants_marketplace_page_elements_visibility(page):
     """
     Test #1: Verify Marketplace page loads with browse UI.
@@ -121,6 +122,7 @@ def test_assistants_marketplace_page_elements_visibility(page):
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_publish_assistant_to_marketplace(page):
     """
     Test #2: Verify Marketplace publish dialog and category selection.
@@ -157,6 +159,7 @@ def test_publish_assistant_to_marketplace(page):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_marketplace_ratings_and_feedback_visibility(page):
     """
     Test #3: Verify ratings and feedback are visible on marketplace assistant cards.
@@ -176,6 +179,7 @@ def test_marketplace_ratings_and_feedback_visibility(page):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_marketplace_filter_by_category(page, assistant, assistant_utils):
     """
     Test #4: Filter marketplace assistants by category.
@@ -207,6 +211,7 @@ def test_marketplace_filter_by_category(page, assistant, assistant_utils):
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_marketplace_search_assistants_by_name(
     page,
     assistant,
@@ -239,6 +244,7 @@ def test_marketplace_search_assistants_by_name(
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.not_for_parallel_run
+@pytest.mark.prod_regression
 def test_publish_modal_lists_only_unpublished_sub_assistants(
     page, parent_with_published_and_unpublished_sub_assistants
 ):

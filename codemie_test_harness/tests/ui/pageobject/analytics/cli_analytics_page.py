@@ -37,6 +37,9 @@ from reportportal_client import step
 from codemie_test_harness.tests.ui.pageobject.analytics.cli_analytics_session_modal import (
     CLIAnalyticsSessionModal,
 )
+from codemie_test_harness.tests.ui.pageobject.analytics.cli_analytics_user_modal import (
+    CLIAnalyticsUserModal,
+)
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
     CLIAnalyticsSection,
@@ -86,6 +89,8 @@ class CLIAnalyticsPage(BasePage):
     ACTIVE_SECTION_CLASS = re.compile(r"\bbg-surface-interactive-active\b")
     SESSION_DETAIL_PATH = re.compile(re.escape(API_PATH) + r"sessions/[^/]+$")
     EMPTY_TABLE_TEXT = "No data available"
+    # Em dash (U+2014): rendered when tool_calls = 0, meaning "no data".
+    EM_DASH = "—"
 
     # ── Locators ────────────────────────────────────────────────────────────────
 
@@ -146,6 +151,44 @@ class CLIAnalyticsPage(BasePage):
     def widget_errors(self) -> Locator:
         """Error messages that AnalyticsWidget renders in place of its content."""
         return self.section_panel.locator(".widget-content p.text-failed-secondary")
+
+    @property
+    def project_filter_section(self) -> Locator:
+        """'PROJECT' expand/collapse button in the analytics sidebar."""
+        return self.page.get_by_role("button", name="PROJECT")
+
+    @property
+    def project_filter_region(self) -> Locator:
+        """'PROJECT' filter region in the analytics sidebar."""
+        return self.page.get_by_role("region", name="PROJECT")
+
+    @property
+    def overview_tool_success_desc(self) -> Locator:
+        """Tool Success description element in the Overview TOOL CALLS metric card.
+
+        The live component does not render a data-testid on the description paragraph;
+        the aria snapshot confirms exactly one paragraph with text — (U+2014) inside
+        the section tabpanel when tool_calls == 0, so we locate it by exact text.
+        """
+        return self.section_panel.get_by_text(self.EM_DASH, exact=True)
+
+    @property
+    def users_data_rows(self) -> Locator:
+        """Data rows of the Users table (empty-table message row excluded)."""
+        return (
+            self.section_panel.get_by_role("row")
+            .filter(has=self.page.get_by_role("cell"))
+            .filter(has_not=self.page.get_by_text(self.EMPTY_TABLE_TEXT, exact=True))
+        )
+
+    def _user_row_tool_success_cell(self, row: Locator) -> Locator:
+        """Tool Success cell in a Users table row (5th column, index 4).
+
+        Columns: USER(0) SESSIONS(1) TURNS(2) TOOL CALLS(3) TOOL SUCCESS(4) ...
+        The live component renders no data-testid on table cells; positional lookup
+        is used instead.
+        """
+        return row.get_by_role("cell").nth(4)
 
     # ── Actions ──────────────────────────────────────────────────────────────────
 
@@ -234,6 +277,30 @@ class CLIAnalyticsPage(BasePage):
         assert response.ok, f"Session detail request failed with HTTP {response.status}"
         return CLIAnalyticsSessionModal(self.page).should_be_visible()
 
+    @step
+    def filter_by_project(self, project_name: str):
+        """Select a project in the sidebar filter and wait for Overview data to reload."""
+        region = self.project_filter_region
+        try:
+            region.wait_for(state="visible", timeout=3000)
+        except Exception:
+            self.project_filter_section.click()
+        with self.expect_section_data(self.DEFAULT_SECTION):
+            region.locator(".p-multiselect").click()
+            self.page.get_by_role("searchbox").first.fill(project_name)
+            self.page.get_by_role("option", name=project_name, exact=True).click()
+        return self
+
+    @step
+    def open_first_user_modal(self) -> CLIAnalyticsUserModal:
+        """Click the first Users table row and return the open user detail modal."""
+        row = self.users_data_rows.first
+        expect(row, "Users table should have at least one data row").to_be_visible(
+            timeout=15000
+        )
+        row.get_by_role("cell").first.click()
+        return CLIAnalyticsUserModal(self.page).should_be_visible()
+
     # ── Assertions ────────────────────────────────────────────────────────────────
 
     @step
@@ -291,4 +358,23 @@ class CLIAnalyticsPage(BasePage):
         self.should_have_active_section(section)
         self.should_finish_loading()
         self.should_not_have_widget_errors()
+        return self
+
+    @step
+    def should_show_overview_tool_success_dash(self):
+        """Assert the Overview TOOL CALLS card shows the em dash for Tool Success."""
+        expect(
+            self.overview_tool_success_desc,
+            "metric-desc-total_tool_calls should display the em dash when tool_calls = 0",
+        ).to_have_text(self.EM_DASH, timeout=15000)
+        return self
+
+    @step
+    def should_show_first_user_row_tool_success_dash(self):
+        """Assert the first Users table row shows the em dash for Tool Success."""
+        row = self.users_data_rows.first
+        expect(
+            self._user_row_tool_success_cell(row),
+            "cell-tool-success should display the em dash when tool_calls = 0",
+        ).to_have_text(self.EM_DASH, timeout=15000)
         return self

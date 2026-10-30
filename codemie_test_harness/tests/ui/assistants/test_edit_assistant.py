@@ -32,6 +32,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_assistant_page_elements_visibility(page, assistant):
     """
     Test all main elements are visible on Edit Assistant page—fields, toolkits, checkboxes, etc.
@@ -72,6 +73,7 @@ def test_edit_assistant_page_elements_visibility(page, assistant):
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_assistant_form_field_interactions(page, assistant):
     """
     Test interacting with all editable form fields.
@@ -126,6 +128,7 @@ def test_edit_assistant_form_field_interactions(page, assistant):
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_assistant_tools_interactions(
     page, assistant, resolver_runtime_capabilities
 ):
@@ -186,6 +189,7 @@ def test_edit_assistant_tools_interactions(
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_assistant_incorrect_form(page, assistant):
     """
     Test interacting with incorrect data.

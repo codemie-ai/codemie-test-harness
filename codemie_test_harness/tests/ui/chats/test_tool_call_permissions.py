@@ -101,6 +101,7 @@ def _create_ask_for_approval_assistant(assistant_fixture_fn, *tools: ResearchToo
 @pytest.mark.chat
 @pytest.mark.ui
 @pytest.mark.parametrize("tool", approval_research_tools)
+@pytest.mark.prod_regression
 def test_tool_call_confirmation_dialog_shows_allow_and_deny_buttons(
     page,
     navigate_to_new_chat_page,
@@ -134,6 +135,7 @@ def test_tool_call_confirmation_dialog_shows_allow_and_deny_buttons(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_confirmation_dialog_shown_for_multi_tool_research_assistant(
     page,
     navigate_to_new_chat_page,
@@ -167,6 +169,7 @@ def test_confirmation_dialog_shown_for_multi_tool_research_assistant(
 @pytest.mark.chat
 @pytest.mark.ui
 @pytest.mark.parametrize("tool", approval_research_tools)
+@pytest.mark.prod_regression
 def test_chat_resumes_on_same_conversation_after_allow_then_deny(
     page,
     navigate_to_new_chat_page,
@@ -224,6 +227,7 @@ def test_chat_resumes_on_same_conversation_after_allow_then_deny(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_interrupted_thought_visible_when_hide_tool_outputs_is_active(
     page,
     navigate_to_new_chat_page,
@@ -266,6 +270,7 @@ def test_interrupted_thought_visible_when_hide_tool_outputs_is_active(
 @pytest.mark.chat
 @pytest.mark.ui
 @pytest.mark.parametrize("tool", approval_research_tools)
+@pytest.mark.prod_regression
 def test_auto_approve_assistant_shows_no_confirmation_dialog(
     page,
     navigate_to_new_chat_page,
@@ -299,6 +304,7 @@ def test_auto_approve_assistant_shows_no_confirmation_dialog(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_allow_deny_buttons_suppressed_on_shared_page(
     page,
     navigate_to_new_chat_page,
@@ -360,6 +366,7 @@ def test_allow_deny_buttons_suppressed_on_shared_page(
 
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_per_chat_policy_override_persists_after_navigation_and_reload(
     page,
     two_conversations,

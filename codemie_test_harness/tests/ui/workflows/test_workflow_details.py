@@ -34,6 +34,7 @@ from codemie_test_harness.tests.ui.pageobject.workflows import (
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_details_page_elements_visibility(page, test_workflow):
     """Test that all main elements are visible on Workflow Details page."""
     workflow_details_page = WorkflowDetailsPage(page)
@@ -52,6 +53,7 @@ def test_workflow_details_page_elements_visibility(page, test_workflow):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_details_action_buttons(page, test_workflow):
     """Test workflow action buttons functionality."""
     workflow_details_page = WorkflowDetailsPage(page)
@@ -73,6 +75,7 @@ def test_workflow_details_action_buttons(page, test_workflow):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_details_navigation_buttons(page, test_workflow):
     """Test back button navigation from Workflow Details page."""
     # Navigate to workflows list first so Back has it in history
@@ -90,6 +93,7 @@ def test_workflow_details_navigation_buttons(page, test_workflow):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_details_menu_navigation(page, test_workflow):
     """Test menu navigation from Workflow Details page."""
     workflow_details_page = WorkflowDetailsPage(page)
@@ -132,6 +136,7 @@ def test_workflow_details_menu_navigation(page, test_workflow):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_configuration_sidebar_elements(page, test_workflow):
     """Test that all configuration sidebar elements are visible and correct."""
     workflow_details_page = WorkflowDetailsPage(page)
@@ -153,6 +158,7 @@ def test_configuration_sidebar_elements(page, test_workflow):
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_configuration_copy_workflow_id(page, test_workflow):
     """Test copy functionality for workflow ID in configuration sidebar."""
     workflow_details_page = WorkflowDetailsPage(page)

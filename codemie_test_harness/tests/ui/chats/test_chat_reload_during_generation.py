@@ -32,6 +32,7 @@ from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
 @pytest.mark.chat
 @pytest.mark.conversations
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_conversation_survives_reload_during_generation(
     page, slow_response_conversation
 ):

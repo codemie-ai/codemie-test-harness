@@ -41,6 +41,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 @pytest.mark.sanity
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_integration_update_credentials(page: Page):
     """
     Test editing an existing integration by updating credentials.
@@ -103,6 +104,7 @@ def test_edit_integration_update_credentials(page: Page):
 
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_integration_update_alias(page: Page):
     """
     Test editing an integration by updating its alias/name.

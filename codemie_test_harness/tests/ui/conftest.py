@@ -28,6 +28,9 @@ from codemie_test_harness.rp_guard import get_rp_logger, log_with_attachment
 from codemie_test_harness.tests.ui import conversation_ids
 from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
 from codemie_test_harness.tests.ui.test_data.links_names_test_data import AssistantNames
+from codemie_test_harness.tests.ui.test_data.mcp_catalog_test_data import (
+    catalog_server_with_one_env_var,
+)
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
@@ -236,6 +239,31 @@ def skill_in_other_project(project, skill_utils):
         skill_utils.delete_skill_by_id(skill.id)
     except Exception as e:
         logger.warning(f"Failed to delete skill {skill.id}: {e}")
+
+
+@pytest.fixture
+def catalog_server(client):
+    """Form data of a throwaway MCP catalog server.
+
+    The test creates the server through the Administration UI; on teardown every config
+    with exactly this name is deleted through the API, each delete logged on failure.
+    """
+    server = catalog_server_with_one_env_var()
+    yield server
+    try:
+        configs = client.mcp_configs.list(search=server.name, per_page=100)
+    except Exception as e:
+        logger.warning(f"Failed to list MCP configs named {server.name}: {e}")
+        return
+    for config in configs:
+        if config.name != server.name:
+            continue
+        try:
+            client.mcp_configs.delete(config.id)
+        except Exception as e:
+            logger.warning(
+                f"Failed to delete MCP config {config.id} ({config.name}): {e}"
+            )
 
 
 def pytest_sessionfinish(session):

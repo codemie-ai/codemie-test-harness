@@ -46,6 +46,7 @@ from codemie_test_harness.tests.utils.credentials_manager import CredentialsMana
 @pytest.mark.git
 @pytest.mark.ui
 @pytest.mark.not_for_parallel_run
+@pytest.mark.prod_regression
 def test_create_public_git_datasource_ui_shows_optional_hint(
     page, cleanup_file_datasources
 ):
@@ -94,6 +95,7 @@ def test_create_public_git_datasource_ui_shows_optional_hint(
 @pytest.mark.git
 @pytest.mark.ui
 @pytest.mark.not_for_parallel_run
+@pytest.mark.prod_regression
 def test_private_git_repo_without_integration_shows_error_notification(page):
     """Submitting a private repo URL without integration shows an error notification.
 

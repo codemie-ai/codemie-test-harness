@@ -245,8 +245,8 @@ class WorkflowExecutionsPage(BasePage):
 
     @property
     def prompt_code_block(self) -> Locator:
-        """Container wrapping the Input label and code block."""
-        return self.page.locator("p:has-text('Input')").locator("..")
+        """Header of the Input code block (label plus action buttons)."""
+        return self.prompt_header
 
     @property
     def prompt_title(self) -> Locator:
@@ -254,32 +254,26 @@ class WorkflowExecutionsPage(BasePage):
         return self.page.locator("p:has-text('Input')")
 
     @property
+    def prompt_header(self) -> Locator:
+        """Code-block header holding the Input label and its action buttons."""
+        return self.page.locator("div.code-block-header").filter(
+            has=self.page.locator("p", has_text="Input")
+        )
+
+    @property
     def prompt_copy_button(self) -> Locator:
         """Copy button in the Input section."""
-        return (
-            self.page.locator("p:has-text('Input')")
-            .locator("..")
-            .get_by_role("button", name="Copy")
-        )
+        return self.prompt_header.get_by_role("button", name="Copy")
 
     @property
     def prompt_download_button(self) -> Locator:
         """Download button in the Input section."""
-        return (
-            self.page.locator("p:has-text('Input')")
-            .locator("..")
-            .get_by_role("button", name="Download")
-        )
+        return self.prompt_header.get_by_role("button", name="Download")
 
     @property
     def prompt_info_button(self) -> Locator:
         """Expand/view-full button next to the Input label (opens full prompt dialog)."""
-        return (
-            self.page.locator("p:has-text('Input')")
-            .locator("..")
-            .locator("button")
-            .last
-        )
+        return self.prompt_header.get_by_role("button", name="Expand prompt")
 
     @property
     def prompt_content(self) -> Locator:

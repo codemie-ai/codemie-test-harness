@@ -35,6 +35,7 @@ from codemie_test_harness.tests.ui.test_data.skill_test_data import (
 @pytest.mark.sanity
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skills_navigation_from_main_menu(page):
     """
     Test #34: Navigate to Skills page from main menu.
@@ -56,6 +57,7 @@ def test_skills_navigation_from_main_menu(page):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_skill_back_button_returns_to_list(page):
     """
     Test #35: Back button returns to skills list.
@@ -81,6 +83,7 @@ def test_create_skill_back_button_returns_to_list(page):
 
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_create_skill_cancel_returns_to_list(page):
     """
     Test #36: Cancel button returns to skills list.

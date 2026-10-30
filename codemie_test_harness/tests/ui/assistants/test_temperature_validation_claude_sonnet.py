@@ -42,6 +42,7 @@ from codemie_test_harness.tests.ui.test_data.assistant_test_data import (
     ],
     ids=["bedrock_claude_sonnet_4_6", "vertex_claude_sonnet_4_6"],
 )
+@pytest.mark.prod_regression
 def test_temperature_validation_blocked_above_one_for_claude_sonnet(
     page, assistant, model
 ):

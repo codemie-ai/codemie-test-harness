@@ -54,6 +54,9 @@ from codemie_test_harness.tests.test_data.customer_config_test_data import (
     get_web_search_settings_data,
 )
 from codemie_test_harness.tests.test_data.file_test_data import file_test_data
+from codemie_test_harness.tests.test_data.marketplace_thresholds_test_data import (
+    MARKETPLACE_THRESHOLDS_COMPONENT_ID,
+)
 from codemie_test_harness.tests.test_data.fixture_generator import (
     generate_large_text_file,
 )
@@ -69,6 +72,9 @@ from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
 from codemie_test_harness.tests.utils.base_utils import get_random_name, wait_for_entity
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.customer_config_utils import CustomerConfigUtils
+from codemie_test_harness.tests.utils.marketplace_management_utils import (
+    MarketplaceManagementUtils,
+)
 from codemie_test_harness.tests.utils.constants import (
     FILES_PATH,
 )
@@ -82,7 +88,16 @@ from codemie_test_harness.tests.utils.env_resolver import (
 )
 from codemie_test_harness.tests.utils import cleanup_utils
 from codemie_test_harness.tests.utils.gitbud_utils import GitBudUtils
-from codemie_test_harness.tests.utils.gitlab_seed import SeedBranches, SeedMergeRequest
+from codemie_test_harness.tests.utils.gitlab_seed import (
+    GITLAB_SEED_FAKE_PNG_UPLOAD,
+    GITLAB_SEED_IMAGE_UPLOAD,
+    SEED_FAKE_PNG_UPLOAD_NAME,
+    SEED_IMAGE_UPLOAD_NAME,
+    SeedBranches,
+    SeedImageUpload,
+    SeedMergeRequest,
+    png_bytes_from_image,
+)
 from codemie_test_harness.tests.utils.github_seed import (
     SeedFile as GitHubSeedFile,
     SeedIssue as GitHubSeedIssue,
@@ -699,6 +714,25 @@ def web_search_disabled(customer_config_utils):
         customer_config_utils.reset_setting(_WEB_SEARCH_COMPONENT_ID)
     except Exception as e:
         logger.warning(f"Failed to reset {_WEB_SEARCH_COMPONENT_ID} setting: {e}")
+
+
+@pytest.fixture(scope="function")
+def clean_marketplace_thresholds(customer_config_utils):
+    """Guarantee no marketplaceThresholds override exists before the test and
+    reset it again in teardown (the reset is idempotent)."""
+    customer_config_utils.reset_setting(MARKETPLACE_THRESHOLDS_COMPONENT_ID)
+    yield
+    try:
+        customer_config_utils.reset_setting(MARKETPLACE_THRESHOLDS_COMPONENT_ID)
+    except Exception as e:
+        logger.warning(
+            f"Failed to reset {MARKETPLACE_THRESHOLDS_COMPONENT_ID} setting: {e}"
+        )
+
+
+@pytest.fixture(scope="session")
+def marketplace_management_utils(client):
+    return MarketplaceManagementUtils(client)
 
 
 @pytest.fixture(scope="session")
@@ -1318,6 +1352,39 @@ def _gitlab_seed_branches(tmp_path_factory) -> SeedBranches:
 def gitlab_seed_branches(tmp_path_factory) -> SeedBranches:
     """Deterministically-named branches the GitLab branch-listing tests read from."""
     return _gitlab_seed_branches(tmp_path_factory)
+
+
+def _gitlab_image_upload(
+    tmp_path_factory, name: str, filename: str, build_data
+) -> SeedImageUpload:
+    data = resolve_shared(
+        _seed_lock_dir(tmp_path_factory),
+        name,
+        lambda: GitBudUtils().upload_image(filename, build_data()).to_dict(),
+    )
+    return SeedImageUpload.from_dict(data)
+
+
+@pytest.fixture(scope="session")
+def gitlab_image_upload(tmp_path_factory) -> SeedImageUpload:
+    """A genuine PNG (test.jpg re-encoded) uploaded to the GitLab project."""
+    return _gitlab_image_upload(
+        tmp_path_factory,
+        GITLAB_SEED_IMAGE_UPLOAD,
+        SEED_IMAGE_UPLOAD_NAME,
+        lambda: png_bytes_from_image((FILES_PATH / "test.jpg").read_bytes()),
+    )
+
+
+@pytest.fixture(scope="session")
+def gitlab_fake_png_upload(tmp_path_factory) -> SeedImageUpload:
+    """A plain text file served under a .png name, uploaded to the GitLab project."""
+    return _gitlab_image_upload(
+        tmp_path_factory,
+        GITLAB_SEED_FAKE_PNG_UPLOAD,
+        SEED_FAKE_PNG_UPLOAD_NAME,
+        lambda: (FILES_PATH / "invalid_image.txt").read_bytes(),
+    )
 
 
 def _azure_devops_seed(tmp_path_factory) -> SeedPullRequest:

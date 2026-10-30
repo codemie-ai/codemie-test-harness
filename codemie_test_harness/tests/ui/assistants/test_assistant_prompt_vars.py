@@ -40,6 +40,7 @@ from codemie_test_harness.tests.ui.pageobject.assistants.assistants_page import 
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.jira
+@pytest.mark.prod_regression
 def test_sensitive_prompt_variable_value_persisted_correctly(
     page,
     assistant,

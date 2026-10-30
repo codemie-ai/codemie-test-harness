@@ -79,6 +79,7 @@ def _alias_datetime_within_tolerance(
 @pytest.mark.sanity
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_alias_auto_generation_happy_path(page):
     """
     TC-001: Alias auto-generation happy path.
@@ -145,6 +146,7 @@ def test_alias_auto_generation_happy_path(page):
 @pytest.mark.sanity
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_manual_alias_override_retained(page):
     """
     TC-002 Part A: Manual alias override is retained after submission.
@@ -190,6 +192,7 @@ def test_manual_alias_override_retained(page):
 @pytest.mark.integration
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_alias_no_auto_population_and_successful_creation(page):
     """
     TC-002 Part B: Datasource alias/name is NOT auto-populated, and manual alias creation is successful.

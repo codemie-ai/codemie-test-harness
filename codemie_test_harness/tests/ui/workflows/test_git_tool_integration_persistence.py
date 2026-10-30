@@ -25,6 +25,7 @@ from codemie_test_harness.tests.ui.pageobject.workflows.tool_node_config_panel i
 @pytest.mark.gitlab
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_git_tool_integration_persists_after_toggling_second_tool(
     page, test_workflow, gitlab_integration
 ):

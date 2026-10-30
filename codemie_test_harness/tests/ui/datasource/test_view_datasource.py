@@ -85,6 +85,7 @@ from codemie_test_harness.tests.ui.test_data.datasource_test_data import (
         ),
     ],
 )
+@pytest.mark.prod_regression
 def test_view_datasource_page(
     page,
     request,
@@ -139,6 +140,7 @@ def test_view_datasource_page(
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_view_datasource_shows_edit_button_for_authorized_user(
     page,
     gitlab_datasource,
@@ -156,6 +158,7 @@ def test_view_datasource_shows_edit_button_for_authorized_user(
 @pytest.mark.gitlab
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_view_datasource_delete_button_opens_confirmation_dialog(
     page,
     gitlab_datasource,

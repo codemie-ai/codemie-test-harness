@@ -47,6 +47,7 @@ from codemie_test_harness.tests.ui.test_data.assistant_test_data import (
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_delete_assistant_with_confirmation(page):
     """
     Test deleting an assistant with confirmation dialog.
@@ -82,6 +83,7 @@ def test_delete_assistant_with_confirmation(page):
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_cancel_assistant_deletion(page, assistant):
     """
     Test canceling assistant deletion.
@@ -107,6 +109,7 @@ def test_cancel_assistant_deletion(page, assistant):
 @pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_existing_assistant(page, assistant):
     """
     Test cloning/duplicating an existing assistant.
@@ -140,6 +143,7 @@ def test_clone_existing_assistant(page, assistant):
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.jira
+@pytest.mark.prod_regression
 def test_cloned_assistant_inherits_configuration(
     page, assistant, jira_integration, code_datasource, client
 ):

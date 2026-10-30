@@ -28,6 +28,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 @pytest.mark.sanity
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_sidebar_interaction(page):
     """Test sidebar filters interactions."""
     search_input = get_random_name()
@@ -53,6 +54,7 @@ def test_datasource_sidebar_interaction(page):
 @pytest.mark.sanity
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_sidebar_hiding_elements(page):
     """Test sidebar filters hiding."""
     datasource_page = DataSourcePage(page)
@@ -68,6 +70,7 @@ def test_datasource_sidebar_hiding_elements(page):
 @pytest.mark.sanity
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_datasource_page_elements_visibility(page, enough_datasources):
     """Test DataSource index page and sidebar elements are visible."""
     datasource_page = DataSourcePage(page)

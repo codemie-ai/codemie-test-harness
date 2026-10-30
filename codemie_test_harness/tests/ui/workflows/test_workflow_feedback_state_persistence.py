@@ -29,6 +29,7 @@ from codemie_test_harness.tests.ui.test_data.chat_test_data import (
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_chat_like_dislike_feedback_state_visible_with_hydration_limitation(
     page, test_workflow
 ):
