@@ -22,6 +22,7 @@ from .workflow_execution_history_item import WorkflowExecutionHistoryItem
 from .workflow_execution_state import WorkflowExecutionState
 from .unsaved_changes_dialog import UnsavedChangesDialog
 from .missing_integrations_validation_dialog import MissingIntegrationsValidationDialog
+from .expanded_yaml_dialog import ExpandedYamlDialog
 
 __all__ = [
     "WorkflowCard",
@@ -34,4 +35,5 @@ __all__ = [
     "WorkflowExecutionState",
     "UnsavedChangesDialog",
     "MissingIntegrationsValidationDialog",
+    "ExpandedYamlDialog",
 ]
