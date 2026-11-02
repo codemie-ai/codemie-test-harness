@@ -24,6 +24,11 @@ from reportportal_client import step
 
 EXPANDED_EDITOR_NAME = "yaml_config_expanded"
 
+# Delay between keystrokes. The editor is a controlled component: every change is pushed
+# to the parent and the parent's value is written back into Ace after a re-render, so
+# keys sent faster than a re-render are overwritten by that write-back.
+TYPING_DELAY_MS = 100
+
 
 @dataclass(frozen=True)
 class ExpandedYamlSize:
@@ -97,6 +102,11 @@ class ExpandedYamlDialog:
         return self.editor.locator(".ace_text-layer")
 
     @property
+    def text_input(self) -> Locator:
+        """Hidden textarea of the Ace editor that receives the keystrokes."""
+        return self.editor.locator(".ace_text-input")
+
+    @property
     def key_tokens(self) -> Locator:
         """Ace tokens that highlight YAML keys."""
         return self.text_layer.locator(".ace_meta.ace_tag")
@@ -143,8 +153,8 @@ class ExpandedYamlDialog:
     def append_line(self, text: str):
         """Type a new line with ``text`` at the end of the document, key by key."""
         self._place_cursor("el => el.env.editor.navigateFileEnd()")
-        self.page.keyboard.press("Enter")
-        self.page.keyboard.type(text)
+        self.text_input.press("Enter")
+        self.text_input.press_sequentially(text, delay=TYPING_DELAY_MS)
 
     @step
     def append_to_line_containing(self, marker: str, text: str):
@@ -157,22 +167,28 @@ class ExpandedYamlDialog:
             }""",
             marker,
         )
-        self.page.keyboard.type(text)
+        self.text_input.press_sequentially(text, delay=TYPING_DELAY_MS)
 
     @step
     def type_into_editor(self, text: str):
         """Click into the editor and type ``text`` at the end of the document."""
         self._place_cursor("el => el.env.editor.navigateFileEnd()")
-        self.page.keyboard.type(text)
+        self.text_input.press_sequentially(text, delay=TYPING_DELAY_MS)
 
     @step
     def scroll_to_end(self) -> str:
-        """Move the cursor to the end of the document, which scrolls the editor there.
+        """Go to the last row of the document, which scrolls the editor viewport there.
+
+        ``navigateFileEnd()`` only moves the cursor; Ace scrolls as a side effect of its
+        keyboard commands, not of that call. ``gotoLine`` moves the cursor and scrolls
+        the row into view.
 
         Returns:
             The last non-empty line of the document.
         """
-        self.editor.evaluate("el => el.env.editor.navigateFileEnd()")
+        self.editor.evaluate(
+            "el => el.env.editor.gotoLine(el.env.editor.getSession().getLength(), 0, false)"
+        )
         return self.get_content().rstrip().split("\n")[-1].strip()
 
     @step
@@ -196,10 +212,7 @@ class ExpandedYamlDialog:
     @step
     def get_size(self) -> ExpandedYamlSize:
         """Layout size of the dialog and the frame once the open transition has finished."""
-        expect(self.frame).to_be_visible()
-        self.dialog.evaluate(
-            "el => Promise.all(el.getAnimations().map((animation) => animation.finished))"
-        )
+        self._wait_for_open_transition()
         dialog_size = self.dialog.evaluate(
             "el => ({width: el.offsetWidth, height: el.offsetHeight})"
         )
@@ -213,10 +226,24 @@ class ExpandedYamlDialog:
             frame_height=frame_size["height"],
         )
 
+    def _wait_for_open_transition(self):
+        """Wait until the dialog's open transition has finished and the layout is stable."""
+        expect(self.frame).to_be_visible()
+        self.dialog.evaluate(
+            "el => Promise.all(el.getAnimations().map((animation) => animation.finished))"
+        )
+
     def _place_cursor(self, script: str, arg=None):
-        """Focus the editor and run ``script`` (Ace API) to put the cursor where typing starts."""
+        """Focus the Ace input with a real click, then run ``script`` (Ace API) to place the cursor.
+
+        The dialog moves focus to its first control when it opens, so the editor is
+        clicked only after the open transition, and the keystrokes are sent to the
+        Ace input only once it is confirmed focused.
+        """
         expect(self.editor).to_be_visible()
-        self.editor.evaluate("el => el.env.editor.focus()")
+        self._wait_for_open_transition()
+        self.editor.click()
+        expect(self.text_input).to_be_focused()
         self.editor.evaluate(script, arg)
 
     def _read_clipboard(self) -> str:
@@ -318,6 +345,17 @@ class ExpandedYamlDialog:
         """Verify Ace token classes are rendered for keys and strings."""
         expect(self.key_tokens.first).to_be_visible()
         expect(self.string_tokens.first).to_be_visible()
+
+    @step
+    def should_have_content_containing(self, text: str):
+        """Verify the editor document (read through the Ace API) contains ``text``."""
+        self.page.wait_for_function(
+            """([name, text]) => {
+                const el = document.querySelector(`[data-name="${name}"]`);
+                return !!(el && el.env && el.env.editor && el.env.editor.getValue().includes(text));
+            }""",
+            arg=[EXPANDED_EDITOR_NAME, text],
+        )
 
     @step
     def should_show_text(self, text: str):

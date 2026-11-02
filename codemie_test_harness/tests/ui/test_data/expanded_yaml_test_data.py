@@ -25,7 +25,9 @@ INVALID_YAML_LINE = "invalid: yaml: line"
 # Key of the line the save/cancel tests extend with a typed suffix.
 EDITED_LINE_MARKER = "system_prompt:"
 
-LONG_YAML_NODE_COUNT = 15
+LONG_YAML_NODE_COUNT = 3
+LONG_YAML_PROMPT_LINES = 20
+LONG_YAML_FIRST_NODE = "node_1"
 
 # A single prompt line far wider than the dialog (max-w-6xl), made of short words so it can wrap.
 LONG_PROMPT_LINE = " ".join(
@@ -60,16 +62,24 @@ EXPANDED_YAML_CONTEXTS = [EDITOR_CONTEXT, EXECUTION_DETAILS_CONTEXT]
 def build_long_workflow_yaml(model: str) -> str:
     """Valid multi-node workflow YAML that does not fit in the expanded dialog.
 
-    A chain of ``LONG_YAML_NODE_COUNT`` nodes; the third assistant has a prompt
-    line wider than the dialog. Values are quoted so Ace emits string tokens.
+    A chain of ``LONG_YAML_NODE_COUNT`` nodes. Every assistant has a multi-line
+    block prompt (``LONG_YAML_PROMPT_LINES`` lines) and the second one also holds a
+    line wider than the dialog. Block scalars are highlighted as Ace string tokens.
     """
     assistants = []
     states = []
     for index in range(1, LONG_YAML_NODE_COUNT + 1):
         node_id = f"node_{index}"
-        prompt = LONG_PROMPT_LINE if index == 3 else f"You are helper number {index}"
+        prompt_lines = [
+            f"      Guideline {line} for helper {index}: keep every answer short."
+            for line in range(1, LONG_YAML_PROMPT_LINES + 1)
+        ]
+        if index == 2:
+            prompt_lines.append(f"      {LONG_PROMPT_LINE}")
         assistants.append(
-            f'  - id: {node_id}\n    model: {model}\n    system_prompt: "{prompt}"\n'
+            f"  - id: {node_id}\n"
+            f"    model: {model}\n"
+            f"    system_prompt: |\n" + "\n".join(prompt_lines) + "\n"
         )
         next_state = f"node_{index + 1}" if index < LONG_YAML_NODE_COUNT else "end"
         states.append(

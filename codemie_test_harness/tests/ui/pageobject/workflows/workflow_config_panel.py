@@ -618,8 +618,15 @@ class WorkflowConfigPanel:
 
     @step
     def should_have_yaml_editor_containing(self, text: str):
-        """Verify that the inline YAML editor shows ``text``."""
-        expect(self.yaml_editor_text_layer).to_contain_text(text)
+        """Verify that the inline YAML editor document contains ``text`` (read through the Ace API)."""
+        expect(self.yaml_editor_text_layer).to_be_visible()
+        self.page.wait_for_function(
+            """(text) => {
+                const el = document.querySelector('[data-name="yaml_config"]');
+                return !!(el && el.env && el.env.editor && el.env.editor.getValue().includes(text));
+            }""",
+            arg=text,
+        )
 
     @step
     def should_have_yaml_editor_with_content(self, expected_config):
