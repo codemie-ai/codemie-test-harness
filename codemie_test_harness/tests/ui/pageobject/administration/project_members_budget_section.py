@@ -23,7 +23,9 @@ Members without those rights get the table with User/Role columns only.
 """
 
 import re
+from urllib.parse import urlparse
 
+from hamcrest import assert_that, is_not, none
 from playwright.sync_api import expect
 from reportportal_client import step
 
@@ -33,11 +35,17 @@ from codemie_test_harness.tests.ui.pageobject.administration.member_budget_overr
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 
 
+USER_LIST_PATH = "/v1/admin/users"
+
 ALLOCATION_BUTTON_NAME = re.compile(r"^\w+ (-|\$\d[\d,.]*) [/] \$\d")
 
 
 class ProjectMembersBudgetSection(BasePage):
     """Project members table on the Project Details page, budget allocation aspect."""
+
+    def __init__(self, page):
+        super().__init__(page)
+        self._user_list_bodies: list = []
 
     # ── Locators ──────────────────────────────────────────────────────────────
 
@@ -63,6 +71,42 @@ class ProjectMembersBudgetSection(BasePage):
     def allocation_button(self, email: str):
         """Budget allocation button (override control) in the member's row."""
         return self.member_row(email).get_by_role("button", name=ALLOCATION_BUTTON_NAME)
+
+    def category_allocation(self, email: str, category_label: str):
+        """Allocation control of one budget category (e.g. 'CLI') in the member's row."""
+        return self.member_row(email).get_by_role(
+            "button", name=re.compile(rf"^{re.escape(category_label)}\b")
+        )
+
+    # ── Network capture ───────────────────────────────────────────────────────
+
+    @step
+    def capture_user_list_responses(self):
+        """Record every GET /v1/admin/users response body the page receives from now on."""
+        self.page.on("response", self._record_user_list_response)
+        return self
+
+    def _record_user_list_response(self, response):
+        if (
+            response.request.method == "GET"
+            and urlparse(response.url).path.rstrip("/").endswith(USER_LIST_PATH)
+            and response.ok
+        ):
+            self._user_list_bodies.append(response.json())
+
+    def received_personal_budget(self, email: str, category: str):
+        """Latest personal budget assignment of the category the client received for the user.
+
+        Returns the assignment dict, or None when no user list response carried one.
+        """
+        for body in reversed(self._user_list_bodies):
+            for user in body.get("data") or body.get("items") or []:
+                if user.get("email") != email:
+                    continue
+                for assignment in user.get("budget_assignments") or []:
+                    if assignment.get("category") == category:
+                        return assignment
+        return None
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
@@ -131,4 +175,20 @@ class ProjectMembersBudgetSection(BasePage):
     def should_not_show_override_controls(self):
         """Verify no member allocation / override buttons are rendered."""
         expect(self.allocation_buttons).to_have_count(0)
+        return self
+
+    @step
+    def should_not_show_category_allocation(self, email: str, category_label: str):
+        """Verify the member's row shows no allocation (and no spend) for the category."""
+        expect(self.category_allocation(email, category_label)).to_have_count(0)
+        return self
+
+    @step
+    def should_have_received_personal_budget(self, email: str, category: str):
+        """Verify the client received a personal budget of the category for the user."""
+        assert_that(
+            self.received_personal_budget(email, category),
+            is_not(none()),
+            f"No personal '{category}' budget reached the client for {email}",
+        )
         return self
