@@ -39,10 +39,18 @@ The `publish` job runs only in `codemie-ai/codemie-test-harness`, so a fork neve
 
 `check_version.py` from ci-workflows compares the version with the live PyPI registry. A timeout, network error or malformed response stops the release.
 
-Print the version a tag names (no network):
+Check a version against the live PyPI registry:
 
 ```bash
-python3 check_version.py --ecosystem pypi --name codemie-test-harness --tag v1.2.3 --base 1.2.0 --tag-prefix v
+curl -fsSL https://raw.githubusercontent.com/codemie-ai/ci-workflows/main/scripts/release/check_version.py \
+  | python3 -I - --ecosystem pypi --name codemie-test-harness --version 1.2.3
+```
+
+Print the version a tag names (no network for the tag itself):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/codemie-ai/ci-workflows/main/scripts/release/check_version.py \
+  | python3 -I - --ecosystem pypi --name codemie-test-harness --tag v1.2.3 --base 1.2.0 --tag-prefix v
 ```
 
 ## Admin prerequisites
