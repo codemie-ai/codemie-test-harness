@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Scan files for internal references that must not appear in the public repo."""
+
 from __future__ import annotations
 
 import argparse
@@ -39,7 +40,9 @@ def load_denylist(path: Path | None) -> list[re.Pattern[str]]:
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as e:
-        raise FileNotFoundError(f"deny-list not readable: {path} ({e.strerror or e})") from e
+        raise FileNotFoundError(
+            f"deny-list not readable: {path} ({e.strerror or e})"
+        ) from e
     patterns = []
     for raw in text.splitlines():
         line = raw.strip()
@@ -50,10 +53,14 @@ def load_denylist(path: Path | None) -> list[re.Pattern[str]]:
         except re.error as e:
             raise ValueError(f"deny-list {path}: invalid pattern {line!r}: {e}") from e
         if pattern.search(""):
-            raise ValueError(f"deny-list {path}: pattern {line!r} matches the empty string")
+            raise ValueError(
+                f"deny-list {path}: pattern {line!r} matches the empty string"
+            )
         patterns.append(pattern)
     if not patterns:
-        raise ValueError(f"deny-list {path} holds no patterns; refusing to scan with an empty list")
+        raise ValueError(
+            f"deny-list {path} holds no patterns; refusing to scan with an empty list"
+        )
     return patterns
 
 
@@ -72,7 +79,16 @@ def _line_rules(line: str, extra: Sequence[re.Pattern[str]] = ()) -> list[str]:
     return rules
 
 
-SKIP_DIRS = {".git", "node_modules", "dist", ".venv", ".mypy_cache", ".ruff_cache", ".pytest_cache", "__pycache__"}
+SKIP_DIRS = {
+    ".git",
+    "node_modules",
+    "dist",
+    ".venv",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pytest_cache",
+    "__pycache__",
+}
 SELF_EXCLUDED = ("scripts/scan_internal_refs.py",)
 
 _LINE_SPLIT = re.compile(r"\r\n|\r|\n")
@@ -85,7 +101,9 @@ class Finding:
     rule: str
 
 
-def scan_text(text: str, extra: Sequence[re.Pattern[str]] = ()) -> list[tuple[int, str]]:
+def scan_text(
+    text: str, extra: Sequence[re.Pattern[str]] = ()
+) -> list[tuple[int, str]]:
     """Return (1-based line, rule) pairs; one finding per line per rule."""
     found: list[tuple[int, str]] = []
     for number, line in enumerate(_LINE_SPLIT.split(text), start=1):
@@ -95,10 +113,14 @@ def scan_text(text: str, extra: Sequence[re.Pattern[str]] = ()) -> list[tuple[in
 
 
 def _is_excluded(rel: str) -> bool:
-    return any(rel == p or (p.endswith("/") and rel.startswith(p)) for p in SELF_EXCLUDED)
+    return any(
+        rel == p or (p.endswith("/") and rel.startswith(p)) for p in SELF_EXCLUDED
+    )
 
 
-def _scan_file(path: Path, rel: str, extra: Sequence[re.Pattern[str]] = ()) -> list[Finding]:
+def _scan_file(
+    path: Path, rel: str, extra: Sequence[re.Pattern[str]] = ()
+) -> list[Finding]:
     if _is_excluded(rel):
         return []
     try:
@@ -118,7 +140,9 @@ def _decode(data: bytes) -> str:
         return data.decode("latin-1")
 
 
-def scan_files(paths: list[Path], root: Path, extra: Sequence[re.Pattern[str]] = ()) -> list[Finding]:
+def scan_files(
+    paths: list[Path], root: Path, extra: Sequence[re.Pattern[str]] = ()
+) -> list[Finding]:
     root = root.resolve()
     findings: list[Finding] = []
     for p in paths:
@@ -151,7 +175,11 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--files", type=Path, nargs="+", metavar="F")
     parser.add_argument("--denylist", type=Path, default=None, metavar="PATH")
     args = parser.parse_args(argv)
-    deny = args.denylist or (Path(os.environ["CODEMIE_SCAN_DENYLIST"]) if os.environ.get("CODEMIE_SCAN_DENYLIST") else None)
+    deny = args.denylist or (
+        Path(os.environ["CODEMIE_SCAN_DENYLIST"])
+        if os.environ.get("CODEMIE_SCAN_DENYLIST")
+        else None
+    )
     try:
         extra = load_denylist(deny)
     except (FileNotFoundError, ValueError) as e:

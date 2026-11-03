@@ -14,7 +14,9 @@ EMAIL = "someone@" + "ep" + "am.com"
 
 
 def test_reports_ticket_host_email_with_file_and_line(tmp_path):
-    (tmp_path / "a.py").write_text(f"ok\n# see {TICKET}\nurl = 'https://{HOST}/x'\nmail {EMAIL}\nh {KUBE}\n")
+    (tmp_path / "a.py").write_text(
+        f"ok\n# see {TICKET}\nurl = 'https://{HOST}/x'\nmail {EMAIL}\nh {KUBE}\n"
+    )
     findings = scan.scan_tree(tmp_path)
     got = {(f.path, f.line, f.rule) for f in findings}
     assert got == {
@@ -39,7 +41,11 @@ def test_binary_non_utf8_and_utf16_are_still_scanned(tmp_path):
     (tmp_path / "c.txt").write_bytes(b"\xff\xfa " + TICKET.encode())
     (tmp_path / "d.txt").write_bytes(f"ok\n{TICKET}\n".encode("utf-16"))
     got = {(f.path, f.rule) for f in scan.scan_tree(tmp_path)}
-    assert got == {("b.bin", "ticket-key"), ("c.txt", "ticket-key"), ("d.txt", "ticket-key")}
+    assert got == {
+        ("b.bin", "ticket-key"),
+        ("c.txt", "ticket-key"),
+        ("d.txt", "ticket-key"),
+    }
 
 
 def test_unreadable_file_is_reported(tmp_path):
@@ -48,7 +54,9 @@ def test_unreadable_file_is_reported(tmp_path):
     f.chmod(0)
     try:
         if f.stat().st_mode & 0o777 == 0 and not _can_read(f):
-            assert [(x.path, x.rule) for x in scan.scan_tree(tmp_path)] == [("locked.txt", "unreadable")]
+            assert [(x.path, x.rule) for x in scan.scan_tree(tmp_path)] == [
+                ("locked.txt", "unreadable")
+            ]
     finally:
         f.chmod(0o600)
 
@@ -64,7 +72,9 @@ def _can_read(path):
 def test_scripts_tests_dir_is_scanned(tmp_path):
     (tmp_path / "scripts" / "tests").mkdir(parents=True)
     (tmp_path / "scripts" / "tests" / "t.py").write_text(f"# {TICKET}\n")
-    assert [(f.path, f.rule) for f in scan.scan_tree(tmp_path)] == [("scripts/tests/t.py", "ticket-key")]
+    assert [(f.path, f.rule) for f in scan.scan_tree(tmp_path)] == [
+        ("scripts/tests/t.py", "ticket-key")
+    ]
 
 
 def test_skips_ignored_dirs(tmp_path):
@@ -85,19 +95,32 @@ def test_only_scanner_itself_is_excluded(tmp_path):
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts" / "scan_internal_refs.py").write_text(TICKET)
     assert scan.scan_tree(tmp_path) == []
-    assert scan.scan_files([tmp_path / "scripts" / "scan_internal_refs.py"], tmp_path) == []
+    assert (
+        scan.scan_files([tmp_path / "scripts" / "scan_internal_refs.py"], tmp_path)
+        == []
+    )
 
 
 def test_cli_exit_codes_and_format(tmp_path):
     (tmp_path / "ok.txt").write_text("fine\n")
-    r = subprocess.run([sys.executable, str(SCRIPT), "--tree", str(tmp_path)], capture_output=True, text=True)
+    r = subprocess.run(
+        [sys.executable, str(SCRIPT), "--tree", str(tmp_path)],
+        capture_output=True,
+        text=True,
+    )
     assert r.returncode == 0
     (tmp_path / "bad.txt").write_text(f"\n{TICKET}\n")
-    r = subprocess.run([sys.executable, str(SCRIPT), "--tree", str(tmp_path)], capture_output=True, text=True)
+    r = subprocess.run(
+        [sys.executable, str(SCRIPT), "--tree", str(tmp_path)],
+        capture_output=True,
+        text=True,
+    )
     assert r.returncode == 1
     assert r.stdout.strip() == "bad.txt:2: ticket-key"
     r = subprocess.run(
-        [sys.executable, str(SCRIPT), "--files", str(tmp_path / "ok.txt")], capture_output=True, text=True
+        [sys.executable, str(SCRIPT), "--files", str(tmp_path / "ok.txt")],
+        capture_output=True,
+        text=True,
     )
     assert r.returncode == 0
 
@@ -109,15 +132,29 @@ def test_gitleaks_config_reports_planted_secret_with_file_and_line(tmp_path):
     gitleaks = shutil.which("gitleaks")
     if not gitleaks:
         import pytest
+
         pytest.skip("gitleaks not installed")
     config = SCRIPT.parents[1] / ".gitleaks.toml"
     secret = "gh" + "p_" + "aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dE3fG5"
     (tmp_path / "leak.py").write_text(f"x = 1\ntoken = '{secret}'\n")
     report = tmp_path.parent / "gitleaks-report.json"
     r = subprocess.run(
-        [gitleaks, "detect", "--no-git", "--source", str(tmp_path), "--config", str(config),
-         "--report-format", "json", "--report-path", str(report), "--redact"],
-        capture_output=True, text=True,
+        [
+            gitleaks,
+            "detect",
+            "--no-git",
+            "--source",
+            str(tmp_path),
+            "--config",
+            str(config),
+            "--report-format",
+            "json",
+            "--report-path",
+            str(report),
+            "--redact",
+        ],
+        capture_output=True,
+        text=True,
     )
     assert r.returncode == 1, r.stderr
     leaks = json.loads(report.read_text())
@@ -127,7 +164,12 @@ def test_gitleaks_config_reports_planted_secret_with_file_and_line(tmp_path):
 def test_long_lines_scan_in_linear_time():
     import time
 
-    for filler in ("a" * 200_000, "a." * 100_000, "a@" * 100_000, ("a" * 50 + ".ep" + "am.co") * 20_000):
+    for filler in (
+        "a" * 200_000,
+        "a." * 100_000,
+        "a@" * 100_000,
+        ("a" * 50 + ".ep" + "am.co") * 20_000,
+    ):
         start = time.monotonic()
         assert scan.scan_text(filler) == []
         assert time.monotonic() - start < 2, filler[:8]
@@ -149,7 +191,9 @@ REALM = "codemie-" + "prod"
 
 def test_realm_rule_flags_with_file_and_line(tmp_path):
     (tmp_path / "e.env").write_text(f"A=1\nCODEMIE_REALM={REALM}\n")
-    assert [(f.path, f.line, f.rule) for f in scan.scan_tree(tmp_path)] == [("e.env", 2, "realm")]
+    assert [(f.path, f.line, f.rule) for f in scan.scan_tree(tmp_path)] == [
+        ("e.env", 2, "realm")
+    ]
 
 
 def test_realm_rule_is_word_bounded():
@@ -172,8 +216,16 @@ def test_denylist_missing_path_is_clear_error(tmp_path):
     with pytest.raises(FileNotFoundError, match="deny-list"):
         scan.load_denylist(tmp_path / "nope.txt")
     r = subprocess.run(
-        [sys.executable, str(SCRIPT), "--tree", str(tmp_path), "--denylist", str(tmp_path / "nope.txt")],
-        capture_output=True, text=True,
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--tree",
+            str(tmp_path),
+            "--denylist",
+            str(tmp_path / "nope.txt"),
+        ],
+        capture_output=True,
+        text=True,
     )
     assert r.returncode == 2 and "deny-list" in r.stderr
 
@@ -187,13 +239,19 @@ def test_denylist_cli_flag_and_env(tmp_path):
     (tree / "a.txt").write_text(term + "\n")
     deny = tmp_path / "d.txt"
     deny.write_text(term + "\n")
-    r = subprocess.run([sys.executable, str(SCRIPT), "--tree", str(tree), "--denylist", str(deny)],
-                       capture_output=True, text=True)
+    r = subprocess.run(
+        [sys.executable, str(SCRIPT), "--tree", str(tree), "--denylist", str(deny)],
+        capture_output=True,
+        text=True,
+    )
     assert (r.returncode, r.stdout.strip()) == (1, "a.txt:1: denylist")
-    r = subprocess.run([sys.executable, str(SCRIPT), "--tree", str(tree)], capture_output=True, text=True,
-                       env={**os.environ, "CODEMIE_SCAN_DENYLIST": str(deny)})
+    r = subprocess.run(
+        [sys.executable, str(SCRIPT), "--tree", str(tree)],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "CODEMIE_SCAN_DENYLIST": str(deny)},
+    )
     assert r.returncode == 1
-
 
 
 def test_denylist_empty_or_comment_only_is_an_error(tmp_path):
@@ -204,8 +262,11 @@ def test_denylist_empty_or_comment_only_is_an_error(tmp_path):
         f.write_text(body)
         with pytest.raises(ValueError, match="no patterns"):
             scan.load_denylist(f)
-    r = subprocess.run([sys.executable, str(SCRIPT), "--tree", str(tmp_path), "--denylist", str(f)],
-                       capture_output=True, text=True)
+    r = subprocess.run(
+        [sys.executable, str(SCRIPT), "--tree", str(tmp_path), "--denylist", str(f)],
+        capture_output=True,
+        text=True,
+    )
     assert r.returncode == 2
 
 

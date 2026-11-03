@@ -5,6 +5,7 @@ The tag names the package and the version, for example `python-v0.1.665`. The ma
 the base line (MAJOR.MINOR), and the tag must be on that line. The registry gate then checks that
 the version is higher than everything already published.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -34,7 +35,16 @@ _PEP440 = re.compile(
     (?:\+[a-z0-9]+(?:[-_.][a-z0-9]+)*)?$""",
     re.VERBOSE | re.IGNORECASE,
 )
-_PRE_ORDER = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "c": 2, "rc": 2, "pre": 2, "preview": 2}
+_PRE_ORDER = {
+    "a": 0,
+    "alpha": 0,
+    "b": 1,
+    "beta": 1,
+    "c": 2,
+    "rc": 2,
+    "pre": 2,
+    "preview": 2,
+}
 _SEMVER = re.compile(
     r"^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
 )
@@ -140,7 +150,9 @@ def check(ecosystem: str, name: str, version: str, fetch=_fetch_json) -> str:
             _compare(ecosystem, v, v)
         except VersionError:
             # A version that cannot be ordered could hide a higher one: fail closed.
-            raise VersionError(f"unparseable published version {v!r} of {name}: cannot compare") from None
+            raise VersionError(
+                f"unparseable published version {v!r} of {name}: cannot compare"
+            ) from None
         if not best or _compare(ecosystem, v, best) > 0:
             best = v
     if best and _compare(ecosystem, version, best) <= 0:
@@ -156,7 +168,9 @@ _NUM = r"(0|[1-9]\d*)"
 _TAG_VERSION = re.compile(rf"{_NUM}\.{_NUM}\.{_NUM}(?:-rc{_NUM})?", re.ASCII)
 
 
-def version_from_tag(ecosystem: str, tag: str, base: str, prefix: str | None = None) -> str:
+def version_from_tag(
+    ecosystem: str, tag: str, base: str, prefix: str | None = None
+) -> str:
     """Return the version named by `tag` (`python-vX.Y.Z[-rcN]` or `node-vX.Y.Z[-rcN]`; `prefix` overrides the default).
 
     `base` is the manifest version and must be MAJOR.MINOR or MAJOR.MINOR.0 (no pre-release).
@@ -166,12 +180,16 @@ def version_from_tag(ecosystem: str, tag: str, base: str, prefix: str | None = N
         raise VersionError(f"unknown ecosystem: {ecosystem!r}")
     m = _BASE.fullmatch(base.strip())
     if not m:
-        raise VersionError(f"base version must be MAJOR.MINOR or MAJOR.MINOR.0, got {base!r}")
+        raise VersionError(
+            f"base version must be MAJOR.MINOR or MAJOR.MINOR.0, got {base!r}"
+        )
     prefix = prefix or _TAG_PREFIX[ecosystem]
-    version = tag[len(prefix):] if tag.startswith(prefix) else ""
+    version = tag[len(prefix) :] if tag.startswith(prefix) else ""
     r = _TAG_VERSION.fullmatch(version)
     if not r:
-        raise VersionError(f"tag must look like {prefix}MAJOR.MINOR.PATCH[-rcN], got {tag!r}")
+        raise VersionError(
+            f"tag must look like {prefix}MAJOR.MINOR.PATCH[-rcN], got {tag!r}"
+        )
     if (int(r[1]), int(r[2])) != (int(m[1]), int(m[2])):
         raise VersionError(
             f"tag {tag} is not on the manifest line {int(m[1])}.{int(m[2])}: "
@@ -185,10 +203,18 @@ def main(argv=None) -> int:
     p.add_argument("--ecosystem", required=True, choices=["pypi", "npm"])
     p.add_argument("--name", required=True)
     mode = p.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--tag", help="release tag (python-vX.Y.Z or node-vX.Y.Z); print the version it names")
+    mode.add_argument(
+        "--tag",
+        help="release tag (python-vX.Y.Z or node-vX.Y.Z); print the version it names",
+    )
     mode.add_argument("--version", help="version to check against the registry")
-    p.add_argument("--base", help="manifest version (MAJOR.MINOR[.0]); required with --tag")
-    p.add_argument("--tag-prefix", help="tag prefix instead of the ecosystem default, for example cdk-v")
+    p.add_argument(
+        "--base", help="manifest version (MAJOR.MINOR[.0]); required with --tag"
+    )
+    p.add_argument(
+        "--tag-prefix",
+        help="tag prefix instead of the ecosystem default, for example cdk-v",
+    )
     args = p.parse_args(argv)
     if args.tag and not args.base:
         p.error("--tag needs --base")
@@ -196,7 +222,9 @@ def main(argv=None) -> int:
         p.error("--base and --tag-prefix only work with --tag")
     try:
         if args.tag:
-            print(version_from_tag(args.ecosystem, args.tag, args.base, args.tag_prefix))
+            print(
+                version_from_tag(args.ecosystem, args.tag, args.base, args.tag_prefix)
+            )
             return 0
         latest = check(args.ecosystem, args.name, args.version, fetch=_fetch_json)
     except VersionError as e:

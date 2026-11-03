@@ -61,8 +61,13 @@ def test_semver_prerelease_ordering():
     assert cv.check("npm", "x", "1.0.0", fetch=npm("1.0.0-beta.1")) == "1.0.0-beta.1"
     with pytest.raises(cv.VersionError):
         cv.check("npm", "x", "1.0.0-beta.1", fetch=npm("1.0.0"))
-    assert cv.check("npm", "x", "1.0.0-beta.11", fetch=npm("1.0.0-beta.2")) == "1.0.0-beta.2"
-    assert cv.check("npm", "x", "1.0.0-rc.1", fetch=npm("1.0.0-beta.2")) == "1.0.0-beta.2"
+    assert (
+        cv.check("npm", "x", "1.0.0-beta.11", fetch=npm("1.0.0-beta.2"))
+        == "1.0.0-beta.2"
+    )
+    assert (
+        cv.check("npm", "x", "1.0.0-rc.1", fetch=npm("1.0.0-beta.2")) == "1.0.0-beta.2"
+    )
     with pytest.raises(cv.VersionError):
         cv.check("npm", "x", "1.0.0-alpha", fetch=npm("1.0.0-alpha.1"))
 
@@ -157,7 +162,20 @@ def test_tag_on_another_line_than_the_manifest_fails():
         cv.version_from_tag("npm", "node-v1.0.0", "0.1.0")
 
 
-@pytest.mark.parametrize("base", ["0", "0.1.5", "0.1.0-beta", "1.2.3.4", "v0.1", "", "x.y", "\u0660.1", "0.\u0661.0"])
+@pytest.mark.parametrize(
+    "base",
+    [
+        "0",
+        "0.1.5",
+        "0.1.0-beta",
+        "1.2.3.4",
+        "v0.1",
+        "",
+        "x.y",
+        "\u0660.1",
+        "0.\u0661.0",
+    ],
+)
 def test_tag_rejects_bad_base(base):
     with pytest.raises(cv.VersionError, match="base"):
         cv.version_from_tag("pypi", "python-v0.1.665", base)
@@ -177,7 +195,9 @@ def test_tag_version_must_still_beat_the_registry():
 
 
 def run_cli(*args):
-    return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args], capture_output=True, text=True
+    )
 
 
 def test_cli_requires_tag_or_version():
@@ -185,15 +205,34 @@ def test_cli_requires_tag_or_version():
 
 
 def test_cli_tag_needs_base():
-    assert run_cli("--ecosystem", "npm", "--name", "x", "--tag", "node-v0.1.1").returncode == 2
+    assert (
+        run_cli("--ecosystem", "npm", "--name", "x", "--tag", "node-v0.1.1").returncode
+        == 2
+    )
 
 
 def test_cli_base_alone_is_gone():
-    assert run_cli("--ecosystem", "npm", "--name", "x", "--base", "0.1.0").returncode == 2
+    assert (
+        run_cli("--ecosystem", "npm", "--name", "x", "--base", "0.1.0").returncode == 2
+    )
 
 
 def test_cli_tag_prints_only_the_version(capsys):
-    assert cv.main(["--ecosystem", "pypi", "--name", "x", "--tag", "python-v0.1.4", "--base", "0.1.0"]) == 0
+    assert (
+        cv.main(
+            [
+                "--ecosystem",
+                "pypi",
+                "--name",
+                "x",
+                "--tag",
+                "python-v0.1.4",
+                "--base",
+                "0.1.0",
+            ]
+        )
+        == 0
+    )
     assert capsys.readouterr().out == "0.1.4\n"
 
 
@@ -202,11 +241,39 @@ def test_cli_tag_does_not_touch_the_network(monkeypatch):
         raise AssertionError("network used")
 
     monkeypatch.setattr(cv, "_fetch_json", boom)
-    assert cv.main(["--ecosystem", "npm", "--name", "x", "--tag", "node-v0.1.4", "--base", "0.1.0"]) == 0
+    assert (
+        cv.main(
+            [
+                "--ecosystem",
+                "npm",
+                "--name",
+                "x",
+                "--tag",
+                "node-v0.1.4",
+                "--base",
+                "0.1.0",
+            ]
+        )
+        == 0
+    )
 
 
 def test_cli_bad_tag_exits_1(capsys):
-    assert cv.main(["--ecosystem", "pypi", "--name", "x", "--tag", "node-v0.1.4", "--base", "0.1.0"]) == 1
+    assert (
+        cv.main(
+            [
+                "--ecosystem",
+                "pypi",
+                "--name",
+                "x",
+                "--tag",
+                "node-v0.1.4",
+                "--base",
+                "0.1.0",
+            ]
+        )
+        == 1
+    )
     assert "tag" in capsys.readouterr().err
 
 
@@ -257,7 +324,11 @@ def test_real_fetch_server_error_fails_closed(monkeypatch):
 
 @pytest.mark.parametrize(
     "eco,fetch",
-    [("pypi", pypi("1.0.0", "legacy-build")), ("npm", npm("1.0.0", "1.0")), ("npm", npm("garbage"))],
+    [
+        ("pypi", pypi("1.0.0", "legacy-build")),
+        ("npm", npm("1.0.0", "1.0")),
+        ("npm", npm("garbage")),
+    ],
 )
 def test_unparseable_registry_version_fails_closed(eco, fetch):
     with pytest.raises(cv.VersionError, match="unparseable"):
@@ -268,6 +339,8 @@ def test_cli_unparseable_registry_version_exits_1(monkeypatch, capsys):
     monkeypatch.setattr(cv, "_fetch_json", pypi("1.0.0", "legacy-build"))
     assert cv.main(["--ecosystem", "pypi", "--name", "x", "--version", "2.0.0"]) == 1
     assert "legacy-build" in capsys.readouterr().err
+
+
 def test_scoped_npm_name_is_url_encoded():
     seen = []
 
@@ -281,7 +354,12 @@ def test_scoped_npm_name_is_url_encoded():
 
 def test_unscoped_name_url_unchanged():
     seen = []
-    cv.check("pypi", "codemie-sdk", "1.0.1", fetch=lambda u: seen.append(u) or {"releases": {}})
+    cv.check(
+        "pypi",
+        "codemie-sdk",
+        "1.0.1",
+        fetch=lambda u: seen.append(u) or {"releases": {}},
+    )
     assert seen == ["https://pypi.org/pypi/codemie-sdk/json"]
 
 
@@ -296,30 +374,76 @@ def test_custom_tag_prefix_for_cdk():
 
 
 def test_cli_tag_prefix(capsys):
-    rc = cv.main(["--ecosystem", "npm", "--name", "@codemieai/cdk", "--tag", "cdk-v0.2.1", "--base", "0.2.0",
-                  "--tag-prefix", "cdk-v"])
+    rc = cv.main(
+        [
+            "--ecosystem",
+            "npm",
+            "--name",
+            "@codemieai/cdk",
+            "--tag",
+            "cdk-v0.2.1",
+            "--base",
+            "0.2.0",
+            "--tag-prefix",
+            "cdk-v",
+        ]
+    )
     assert rc == 0
     assert capsys.readouterr().out == "0.2.1\n"
 
 
 def test_cli_tag_prefix_only_works_with_tag():
-    assert run_cli("--ecosystem", "npm", "--name", "x", "--version", "1.0.0", "--tag-prefix", "cdk-v").returncode == 2
+    assert (
+        run_cli(
+            "--ecosystem",
+            "npm",
+            "--name",
+            "x",
+            "--version",
+            "1.0.0",
+            "--tag-prefix",
+            "cdk-v",
+        ).returncode
+        == 2
+    )
 
 
 def test_cdk_release_candidate_tag_names_a_prerelease():
-    assert cv.version_from_tag("npm", "cdk-v0.2.1-rc1", "0.2.0", prefix="cdk-v") == "0.2.1-rc1"
-    for bad in ("cdk-v0.2.1-rc", "cdk-v0.2.1-beta1", "cdk-v0.2.1-rc01", "cdk-v0.2.1-rc1-x"):
+    assert (
+        cv.version_from_tag("npm", "cdk-v0.2.1-rc1", "0.2.0", prefix="cdk-v")
+        == "0.2.1-rc1"
+    )
+    for bad in (
+        "cdk-v0.2.1-rc",
+        "cdk-v0.2.1-beta1",
+        "cdk-v0.2.1-rc01",
+        "cdk-v0.2.1-rc1-x",
+    ):
         with pytest.raises(cv.VersionError):
             cv.version_from_tag("npm", bad, "0.2.0", prefix="cdk-v")
 
 
 def test_check_version_accepts_mcp_prefix():
-    assert cv.version_from_tag("pypi", "mcp-assistants-v0.2.1", "0.2.0", prefix="mcp-assistants-v") == "0.2.1"
-    assert cv.version_from_tag("pypi", "mcp-workflows-v0.2.1-rc1", "0.2.0", prefix="mcp-workflows-v") == "0.2.1-rc1"
+    assert (
+        cv.version_from_tag(
+            "pypi", "mcp-assistants-v0.2.1", "0.2.0", prefix="mcp-assistants-v"
+        )
+        == "0.2.1"
+    )
+    assert (
+        cv.version_from_tag(
+            "pypi", "mcp-workflows-v0.2.1-rc1", "0.2.0", prefix="mcp-workflows-v"
+        )
+        == "0.2.1-rc1"
+    )
 
 
 def test_check_version_rejects_other_package_prefix():
-    for tag in ("mcp-workflows-v0.2.1", "mcp-datasources-v0.2.1", "python-v0.2.1", "mcp-assistants-v0.3.0"):
+    for tag in (
+        "mcp-workflows-v0.2.1",
+        "mcp-datasources-v0.2.1",
+        "python-v0.2.1",
+        "mcp-assistants-v0.3.0",
+    ):
         with pytest.raises(cv.VersionError):
             cv.version_from_tag("pypi", tag, "0.2.0", prefix="mcp-assistants-v")
-
