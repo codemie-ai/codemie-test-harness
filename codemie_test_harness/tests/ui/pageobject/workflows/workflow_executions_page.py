@@ -18,6 +18,9 @@ from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.components.expanded_yaml_dialog import (
+    ExpandedYamlDialog,
+)
 from codemie_test_harness.tests.ui.pageobject.components.workflow_execution_history_item import (
     WorkflowExecutionHistoryItem,
 )
@@ -402,6 +405,11 @@ class WorkflowExecutionsPage(BasePage):
         """YAML code content."""
         return self.yaml_code_block.locator("code")
 
+    @property
+    def yaml_expand_button(self) -> Locator:
+        """'Expand' button in the header of the sidebar YAML code block."""
+        return self.yaml_code_block.get_by_role("button", name="Expand", exact=True)
+
     # ==================== NAVIGATION METHODS ====================
 
     @step
@@ -429,6 +437,12 @@ class WorkflowExecutionsPage(BasePage):
     def click_export(self):
         """Click the export button."""
         self.export_button.click()
+
+    @step
+    def expand_yaml_configuration(self) -> ExpandedYamlDialog:
+        """Press 'Expand' on the sidebar YAML code block and return the expanded dialog."""
+        self.yaml_expand_button.click()
+        return ExpandedYamlDialog(self.page).should_be_visible()
 
     @step
     def click_configuration(self):

@@ -23,6 +23,11 @@ from hamcrest import assert_that, greater_than
 from codemie_test_harness.tests.ui import conversation_ids
 from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
 from codemie_test_harness.tests.ui.pageobject.workflows import WorkflowDetailsPage
+from codemie_test_harness.tests.ui.test_data.workflow_node_state_settings_test_data import (
+    build_node_workflow_yaml,
+    build_simple_assistant_workflow_yaml,
+    NodeKind,
+)
 from codemie_test_harness.tests.ui.test_data.workflows_test_data import (
     MAX_UI_CATEGORIES,
     WorkflowCategoriesUiDataFactory,
@@ -532,3 +537,53 @@ def slow_response_workflow(workflow_utils, default_llm):
         workflow_utils.delete_workflow(workflow)
     except Exception:
         pass
+
+
+@pytest.fixture(scope="function")
+def create_node_workflow(workflow_utils, default_llm):
+    """Factory creating a workflow with one node (state ``NODE_STATE_ID``) of a chosen kind.
+
+    For ``NodeKind.SUB_WORKFLOW`` the factory first creates a minimal target workflow
+    to call. Created workflows are deleted on teardown, the calling workflow before
+    its sub-workflow target.
+
+    Usage: ``create_node_workflow(NodeKind.CUSTOM, CustomNodeType.STATE_PROCESSOR)``;
+    see ``build_node_workflow_yaml`` for the keyword options.
+    """
+    created = []
+
+    def _create_workflow(workflow_yaml):
+        created_workflow = workflow_utils.create_workflow(
+            workflow_name=get_random_name(),
+            workflow_type=WorkflowMode.SEQUENTIAL,
+            shared=True,
+            workflow_yaml=workflow_yaml,
+        )
+        workflow = workflow_utils.get_workflow(created_workflow.id)
+        created.append(workflow)
+        return workflow
+
+    def _create(node_kind, custom_node_type=None, **yaml_options):
+        sub_workflow_id = None
+        if node_kind == NodeKind.SUB_WORKFLOW:
+            target = _create_workflow(
+                build_simple_assistant_workflow_yaml(default_llm.base_name)
+            )
+            sub_workflow_id = target.id
+        return _create_workflow(
+            build_node_workflow_yaml(
+                default_llm.base_name,
+                node_kind,
+                custom_node_type=custom_node_type,
+                sub_workflow_id=sub_workflow_id,
+                **yaml_options,
+            )
+        )
+
+    yield _create
+
+    for workflow in reversed(created):
+        try:
+            workflow_utils.delete_workflow(workflow)
+        except Exception as e:
+            logger.warning(f"Failed to delete workflow {workflow.id}: {e}")

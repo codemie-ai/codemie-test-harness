@@ -74,6 +74,7 @@ class StateModel(BaseModel):
     assistant_id: Optional[str] = None
     custom_node_id: Optional[str] = None
     tool_id: Optional[str] = None
+    workflow_id: Optional[str] = None
     task: Optional[str] = None
     next: Optional[dict] = {"state_id": "end"}
     output_schema: Optional[str] = None

@@ -1,0 +1,177 @@
+{
+  "schema": 1,
+  "generated": "2026-10-23T13:10:53Z",
+  "test_repo": {
+    "separate": false,
+    "root": "."
+  },
+  "publication": {
+    "visibility": "private",
+    "ticket_refs": "none",
+    "repo_urls": "derive",
+    "environment_urls": "env_var",
+    "ticket_data": "derive",
+    "run_artifacts": "local",
+    "leak_gate": {
+      "enabled": true,
+      "builtin": true
+    }
+  },
+  "disciplines": {
+    "unit": {
+      "practiced": false,
+      "desired": false
+    },
+    "api": {
+      "practiced": true,
+      "owner": "qa",
+      "framework": "pytest + codemie-python SDK"
+    },
+    "e2e_ui": {
+      "practiced": true,
+      "owner": "qa",
+      "framework": "pytest-playwright, page-object model"
+    },
+    "accessibility": {
+      "practiced": false,
+      "desired": false
+    },
+    "performance": {
+      "practiced": false,
+      "desired": false
+    },
+    "security": {
+      "practiced": false,
+      "desired": false
+    },
+    "contract": {
+      "practiced": false,
+      "desired": false
+    }
+  },
+  "adapters": {
+    "ticket": {
+      "name": "jira",
+      "status": "configured",
+      "method": "skill:codemie-jira-assistant"
+    },
+    "test_management": {
+      "name": "markdown",
+      "status": "configured",
+      "method": null,
+      "schema": {}
+    },
+    "vcs": {
+      "name": "github",
+      "status": "configured",
+      "method": "cli:gh",
+      "schema": {}
+    },
+    "runtime": {
+      "status": "not configured"
+    }
+  },
+  "git_conventions": {
+    "status": "partial",
+    "branch": {
+      "status": "user_provided",
+      "pattern": "<type>/<slug>",
+      "example": "test/cost-center-rollup"
+    },
+    "commit": {
+      "status": "user_provided",
+      "pattern": "<type>(test-harness): <subject>",
+      "types_observed": ["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"],
+      "example": "test(test-harness): add cost center rollup tests"
+    },
+    "mr_title": {
+      "status": "user_provided",
+      "pattern": "<type>(test-harness): <subject>",
+      "example": "test(test-harness): add cost center rollup tests"
+    }
+  },
+  "test_command_templates": {
+    "one_test_api": "poetry run pytest -v <test-file>",
+    "one_test_ui": "poetry run pytest -v <test-file> --ui-headless",
+    "suite_api": "poetry run pytest -n 10 -m api --reruns 2 --dist=loadgroup",
+    "suite_api_silent": "poetry run pytest -q -n 10 -m api --reruns 2 --tb=short --dist=loadgroup",
+    "suite_ui": "poetry run pytest -n 4 -m ui --reruns 2 --ui-headless --dist=loadgroup",
+    "lint": "poetry run ruff check",
+    "lint_fix": "poetry run ruff check --fix",
+    "format": "poetry run ruff format",
+    "format_check": "poetry run ruff format --check"
+  },
+  "code_repos": [
+    {
+      "label": "backend",
+      "local_path": "../codemie",
+      "vcs": {
+        "name": "gitlab",
+        "method": "cli:glab"
+      }
+    },
+    {
+      "label": "frontend",
+      "local_path": "../codemie-ui",
+      "vcs": {
+        "name": "gitlab",
+        "method": "cli:glab"
+      }
+    },
+    {
+      "label": "sdk",
+      "role": "test-dependency",
+      "change_policy": "extend",
+      "local_path": "../codemie-sdk",
+      "package_path": "sdk/codemie-python",
+      "scope": "API client methods and response models the tests need",
+      "guide_path": "CONTRIBUTING.md",
+      "visibility": "public",
+      "publication": {
+        "visibility": "public",
+        "ticket_refs": "none",
+        "leak_gate": {
+          "enabled": true,
+          "builtin": true
+        }
+      },
+      "setup": "poetry -C sdk/codemie-python install",
+      "verify": [
+        "poetry -C sdk/codemie-python run ruff check .",
+        "poetry -C sdk/codemie-python run ruff format --check .",
+        "poetry -C sdk/codemie-python run pytest tests/",
+        "python scripts/scan_internal_refs.py --tree .",
+        "poetry -C sdk/codemie-python run python -m pytest ../../scripts/tests -q -p no:cacheprovider"
+      ],
+      "consume": {
+        "local": "poetry run pip install -e ../codemie-sdk/sdk/codemie-python",
+        "check": "poetry run python -c \"import codemie_sdk,os,sys; sys.exit(0 if os.path.normcase(os.path.realpath('../codemie-sdk/sdk/codemie-python')) in os.path.normcase(os.path.realpath(codemie_sdk.__file__)) else 1)\"",
+        "restore": "poetry run pip uninstall -y codemie-sdk-python && poetry install",
+        "after_merge": "release the SDK change (tag python-vX.Y.Z on the public SDK repository), then bump the codemie-sdk-python pin in pyproject.toml and relock"
+      },
+      "vcs": {
+        "name": "github",
+        "method": "cli:gh"
+      },
+      "git_conventions": {
+        "status": "detected",
+        "branch": {
+          "status": "detected",
+          "pattern": "<type>/<slug>",
+          "example": "fix/budget-rollup-method"
+        },
+        "commit": {
+          "status": "detected",
+          "pattern": "<type>(python): <subject>",
+          "types_observed": ["feat", "fix", "chore", "ci"],
+          "example": "feat(python): add budget archive method"
+        },
+        "mr_title": {
+          "status": "detected",
+          "pattern": "<type>(python): <subject>",
+          "example": "feat(python): add budget archive method"
+        }
+      }
+    }
+  ]
+}
