@@ -54,9 +54,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          # A PR created with the default GITHUB_TOKEN does not trigger CI.
-          # Set a PAT in the GH_TOKEN secret so the PR gets its checks.
-          token: ${{ secrets.GH_TOKEN || github.token }}
+          # PAT, not GITHUB_TOKEN: a PR created with GITHUB_TOKEN does not trigger CI.
+          # The push below reuses this token, so the bot PR gets its checks.
+          token: ${{ secrets.GH_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -112,7 +112,7 @@ jobs:
       - name: Create or update pull request
         if: steps.changes.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           LATEST: ${{ steps.latest.outputs.latest }}
         run: |
           title="chore(deps): bump ${PACKAGE} to ${LATEST}"
@@ -129,5 +129,5 @@ jobs:
       - name: Close stale pull request
         if: steps.changes.outputs.changed == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: gh pr list --head "$BRANCH" --json number --jq '.[].number' | xargs -rn1 gh pr close --delete-branch
