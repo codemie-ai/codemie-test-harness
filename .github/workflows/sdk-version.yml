@@ -29,7 +29,7 @@ jobs:
     # Never on a fork: it has no secrets, so the job could only fail.
     # On issue_comment, run only for a "/rerun" comment on the bot's PR.
     if: >-
-      github.repository_owner == 'codemie-ai' && (github.event_name != 'issue_comment' || (github.event.issue.pull_request && startsWith(github.event.issue.title, 'chore(deps): bump codemie-sdk-python') && contains(github.event.comment.body, '/rerun') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)))
+      github.repository_owner == 'codemie-ai' && (github.event_name != 'issue_comment' || (github.event.issue.pull_request && startsWith(github.event.issue.title, 'chore(deps): automated update of codemie-sdk-python') && contains(github.event.comment.body, '/rerun') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)))
 
     steps:
       # author_association above is only a cheap pre-filter: MEMBER and
@@ -106,7 +106,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
           git add pyproject.toml poetry.lock
-          git commit -m "chore(deps): bump ${PACKAGE} to ${LATEST}"
+          git commit -m "chore(deps): automated update of ${PACKAGE} (${LATEST})"
           git push origin "$BRANCH" --force
 
       - name: Create or update pull request
@@ -115,7 +115,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           LATEST: ${{ steps.latest.outputs.latest }}
         run: |
-          title="chore(deps): bump ${PACKAGE} to ${LATEST}"
+          title="chore(deps): automated update of ${PACKAGE} (${LATEST})"
           if [[ $(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null || true) != "OPEN" ]]; then
             gh pr create \
               --head "$BRANCH" \
