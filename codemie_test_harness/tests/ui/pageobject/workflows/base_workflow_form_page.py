@@ -17,6 +17,9 @@ from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.pageobject.components import Menu, WorkflowSidebar
+from codemie_test_harness.tests.ui.pageobject.workflows.node_state_settings_panel import (
+    NodeStateSettingsPanel,
+)
 from codemie_test_harness.tests.ui.pageobject.workflows.workflow_config_panel import (
     WorkflowConfigPanel,
 )
@@ -276,6 +279,11 @@ class BaseWorkflowFormPage(BasePage):
         self.tool_node_button.click()
 
     @step
+    def add_custom_node(self):
+        """Add custom node to canvas by clicking it in palette (no custom node type is chosen yet)."""
+        self.custom_node_button.click()
+
+    @step
     def add_conditional_node(self):
         """Add conditional node to canvas by clicking it in palette."""
         self.conditional_node_button.click()
@@ -308,6 +316,21 @@ class BaseWorkflowFormPage(BasePage):
 
         self.non_default_canvas_nodes.first.click()
         panel = AssistantNodeConfigPanel(self.page)
+        expect(panel.config_panel).to_be_visible()
+        return panel
+
+    def get_node_config_panel(self) -> NodeStateSettingsPanel:
+        """Return the node configuration panel that opens when a node is added or clicked."""
+        return NodeStateSettingsPanel(self.page)
+
+    @step
+    def open_node_config_panel(self, state_id: str) -> NodeStateSettingsPanel:
+        """Click the canvas node of the given state ID and return its configuration panel.
+
+        The node is located by its React Flow ``data-testid="rf__node-<state_id>"``.
+        """
+        self.canvas.get_by_test_id(f"rf__node-{state_id}").click()
+        panel = NodeStateSettingsPanel(self.page)
         expect(panel.config_panel).to_be_visible()
         return panel
 
