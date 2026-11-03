@@ -120,11 +120,19 @@ jobs:
         run: |
           title="chore(deps): automated update of ${PACKAGE} (${LATEST})"
           if [[ $(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null || true) != "OPEN" ]]; then
+            # Request review from everyone with write access, except the PAT
+            # owner (the PR author), the repository owner account and bots.
+            author=$(gh api user --jq .login)
+            reviewers=$(gh api "repos/${GITHUB_REPOSITORY}/collaborators?permission=push" --paginate \
+              --jq '.[] | select(.type == "User") | .login' \
+              | grep -vxF -e "$author" -e "$GITHUB_REPOSITORY_OWNER" | paste -sd, - || true)
+            echo "Reviewers: ${reviewers:-none}"
             gh pr create \
               --head "$BRANCH" \
               --base "${{ github.event.repository.default_branch }}" \
               --title "$title" \
-              --body-file .github/pr_body.log
+              --body-file .github/pr_body.log \
+              ${reviewers:+--reviewer "$reviewers"}
           else
             gh pr edit "$BRANCH" --title "$title" --body-file .github/pr_body.log
           fi
