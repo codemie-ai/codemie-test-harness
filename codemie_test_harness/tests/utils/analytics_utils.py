@@ -45,6 +45,7 @@ from .cli_analytics_api_utils import (
     IngestClient,
     assert_accepted,
     assert_not_discarded,
+    assert_nothing_discarded,
     parse_discard_response,
 )
 
@@ -440,21 +441,27 @@ class AnalyticsUtils(BaseUtils):
         """
         body = json.dumps(payload).encode()
 
-        def _waiting_for_project_context(response) -> bool:
-            if response.status_code != 200:
-                return False
-            discard = parse_discard_response(response, "logs", CT_JSON)
-            return discard.reason == "project_context_required"
-
-        response = poll_until(
-            lambda: IngestClient(self.client).post_signal(
+        def _send():
+            """The reply and its parsed discard; no discard for a non-200 reply,
+            which assert_accepted then fails on its status."""
+            response = IngestClient(self.client).post_signal(
                 "logs", body, CT_JSON, project=project
-            ),
-            lambda reply: not _waiting_for_project_context(reply),
+            )
+            if response.status_code != 200:
+                return response, None
+            return response, parse_discard_response(response, "logs", CT_JSON)
+
+        response, discard = poll_until(
+            _send,
+            lambda reply: reply[1] is None
+            or reply[1].reason != "project_context_required",
             timeout=CLI_PROJECT_CONTEXT_TIMEOUT,
             interval=2,
         )
-        assert_accepted(response, "logs", CT_JSON)
+        if discard is None:
+            assert_accepted(response, "logs", CT_JSON)
+        else:
+            assert_nothing_discarded(response, "logs", discard)
 
     def get_cli_analytics_cost(self, **filters) -> CliAnalyticsCostResponse:
         """Totals. filters: start_date, end_date, time_period, users, projects."""
