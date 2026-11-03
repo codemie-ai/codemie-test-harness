@@ -18,6 +18,9 @@ from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.components.call_history_popup import (
+    CallHistoryPopup,
+)
 from codemie_test_harness.tests.ui.pageobject.components.expanded_yaml_dialog import (
     ExpandedYamlDialog,
 )
@@ -332,6 +335,11 @@ class WorkflowExecutionsPage(BasePage):
             .locator("button")
         )
 
+    @property
+    def call_history_button(self) -> Locator:
+        """'Call history' button in the drawer header of a selected node step."""
+        return self.page.get_by_role("button", name="Call history", exact=True)
+
     # ==================== RIGHT SIDEBAR (CONFIGURATION) ====================
 
     @property
@@ -532,6 +540,14 @@ class WorkflowExecutionsPage(BasePage):
         """Click an execution step button by 0-based index."""
         self.execution_steps.nth(index).click()
         return self
+
+    @step
+    def open_call_history(self, step_index: int = 1) -> CallHistoryPopup:
+        """Select a node step (index 0 is 'Starting Prompt') and open its Calls history popup."""
+        self.should_have_execution_steps()
+        self.click_execution_step_by_index(step_index)
+        self.call_history_button.click()
+        return CallHistoryPopup(self.page).should_be_visible()
 
     # ==================== VERIFICATION METHODS ====================
 
