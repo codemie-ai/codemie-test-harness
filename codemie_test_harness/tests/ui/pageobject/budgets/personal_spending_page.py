@@ -33,6 +33,7 @@ from playwright.sync_api import expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.utils.base_utils import poll_until
 
 logger = logging.getLogger(__name__)
 
@@ -141,9 +142,13 @@ class PersonalSpendingPage(BasePage):
 
     @staticmethod
     def format_percentage(value: float) -> str:
-        """Total cell text: the value clamped to 0..100 with 1 decimal, rounded half up like JS toFixed."""
+        """Total cell text: the value clamped to 0..100 with 1 decimal, rounded like JS toFixed.
+
+        ``toFixed`` rounds half up on the exact binary value of the number, not on its shortest
+        decimal form, so the number goes into ``Decimal`` as it is: 16.95 is shown as 16.9.
+        """
         clamped = min(max(value, 0), 100)
-        return f"{Decimal(str(clamped)).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)}%"
+        return f"{Decimal(clamped).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)}%"
 
     # ── Assertions ────────────────────────────────────────────────────────────
 
@@ -201,12 +206,22 @@ class PersonalSpendingPage(BasePage):
         The label cell may carry the DEFAULT badge after the name.
         """
         expect(self.rows).to_have_count(len(api_rows))
-        for index, api_row in enumerate(api_rows):
-            label = re.escape(api_row["project_name"])
-            expect(self.row_cells(index).nth(LABEL_CELL)).to_have_text(
-                re.compile(rf"^{label}(\s*DEFAULT)?$", re.IGNORECASE)
-            )
+        expected = [api_row["project_name"] for api_row in api_rows]
+        shown = poll_until(
+            lambda: self._shown_labels(expected), lambda labels: labels == expected
+        )
+        assert_that(shown, equal_to(expected), "Row labels shown by the table")
         return self
+
+    def _shown_labels(self, expected: list[str]) -> list[str]:
+        """Text of each label cell, without the DEFAULT badge when it follows the expected name."""
+        labels = []
+        for index, name in enumerate(expected[: self.rows.count()]):
+            text = self.row_cells(index).nth(LABEL_CELL).inner_text().strip()
+            name_part = text[: -len("DEFAULT")].rstrip()
+            is_badged_name = text.upper().endswith("DEFAULT") and name_part == name
+            labels.append(name_part if is_badged_name else text)
+        return labels
 
     @step
     def should_show_row_values(self, api_rows: list[dict]):

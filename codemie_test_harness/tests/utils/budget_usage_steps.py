@@ -20,6 +20,7 @@ their failure messages. The building blocks they use (``BudgetUsageUtils``, spen
 waits, formulas) live in ``budget_usage_utils``.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from hamcrest import (
@@ -55,6 +56,8 @@ from codemie_test_harness.tests.test_data.budget_usage_project_rows_test_data im
     PERCENT_TOLERANCE,
     PREMIUM_ROW_SUFFIX,
     ROUNDING_TOLERANCE,
+    ROW_WAIT_INTERVAL,
+    ROW_WAIT_TIMEOUT,
     SCALED_OVERRIDE_EQUAL_TO_LIMIT_SOFT,
     SCALED_OVERRIDE_MAX,
     SCALED_OVERRIDE_SOFT,
@@ -402,8 +405,8 @@ def wait_for_member_project_row_with_spend(
 def assert_personal_page_spend_and_total_equal_admin_table(
     member_row: dict, admin_usage: BudgetUsageUtils, project: MemberProject
 ):
-    admin_row = admin_usage.get_user_project_spending_row(
-        project.member_email, project.name
+    admin_row = admin_usage.wait_for_user_project_spend_equal_to(
+        project.member_email, project.name, member_row["current_spending"]
     )
     assert_that(admin_row["platform_limit"], greater_than(0))
     expected_total_value = round(
@@ -838,8 +841,8 @@ def _wait_for_allocation_holders(admin_project_budget_utils, project, holders: s
             admin_project_budget_utils, project.platform_budget_id
         ),
         lambda found: set(found) == holders,
-        timeout=90.0,
-        interval=3.0,
+        timeout=ROW_WAIT_TIMEOUT,
+        interval=ROW_WAIT_INTERVAL,
     )
 
 
@@ -996,6 +999,13 @@ def override_member_with_the_whole_project_limit(scenario: SpendScenario):
     _override_customer_exists(scenario, scenario.project.member_id)
 
 
+def _in_parallel(*calls):
+    """Run independent calls at the same time; results come back in call order."""
+    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+        futures = [pool.submit(call) for call in calls]
+        return [future.result() for future in futures]
+
+
 def _spend_as(scenario, proxy_utils, default_llm, user_id, target_spend=None):
     kwargs = {} if target_spend is None else {"target_spend": target_spend}
     return generate_member_spend(
@@ -1034,12 +1044,15 @@ def generate_distinct_spend_for_owner_and_member(
 def generate_spend_for_owner_and_member(
     scenario: SpendScenario, user1_proxy_utils, user2_proxy_utils, default_llm
 ):
-    """Both spend; the third member never does. Settled before any page read."""
-    scenario.owner_spend = _spend_as(
-        scenario, user1_proxy_utils, default_llm, scenario.owner_id
-    )
-    scenario.member_spend = _spend_as(
-        scenario, user2_proxy_utils, default_llm, scenario.project.member_id
+    """Both spend at the same time, neither depends on the other; the third member never does.
+
+    Settled before any page read.
+    """
+    scenario.owner_spend, scenario.member_spend = _in_parallel(
+        lambda: _spend_as(scenario, user1_proxy_utils, default_llm, scenario.owner_id),
+        lambda: _spend_as(
+            scenario, user2_proxy_utils, default_llm, scenario.project.member_id
+        ),
     )
     _settle_project_total(scenario)
 
@@ -1168,6 +1181,25 @@ def _read_row_matching_spend(scenario, usage, expected, who):
     return row, measured
 
 
+def _read_rows_matching_spend(scenario, *requests):
+    """Wait for several members' rows at the same time, then assert each of them.
+
+    Each request is ``(usage, expected, who)`` as for ``_read_row_matching_spend``. Returns
+    the ``(row, measurement)`` pairs in request order.
+    """
+    results = _in_parallel(
+        *[
+            lambda usage=usage, expected=expected: wait_for_row_matching(
+                usage, scenario.project.name, lambda: _measure(scenario), expected
+            )
+            for usage, expected, _ in requests
+        ]
+    )
+    for (row, measured), (_, expected, who) in zip(results, requests):
+        _assert_row_values(row, *expected(measured), who)
+    return results
+
+
 def _own_spend_against(user_id: str, limit: float):
     return lambda m: (m[user_id], limit, expected_total(m[user_id], limit))
 
@@ -1183,19 +1215,20 @@ def _own_spend_against_combined_total(user_id: str, hard_limit: float):
 def assert_enforcement_off_rows_show_own_spend_hard_limit_and_same_combined_total(
     scenario: SpendScenario,
 ):
-    owner_off, _ = _read_row_matching_spend(
+    (owner_off, _), (member_off, _) = _read_rows_matching_spend(
         scenario,
-        scenario.owner_usage,
-        _own_spend_against_combined_total(scenario.owner_id, scenario.hard_limit),
-        "owner, off",
-    )
-    member_off, _ = _read_row_matching_spend(
-        scenario,
-        scenario.member_usage,
-        _own_spend_against_combined_total(
-            scenario.project.member_id, scenario.hard_limit
+        (
+            scenario.owner_usage,
+            _own_spend_against_combined_total(scenario.owner_id, scenario.hard_limit),
+            "owner, off",
         ),
-        "member, off",
+        (
+            scenario.member_usage,
+            _own_spend_against_combined_total(
+                scenario.project.member_id, scenario.hard_limit
+            ),
+            "member, off",
+        ),
     )
     assert_that(
         member_off["total"],
@@ -1207,17 +1240,18 @@ def assert_enforcement_off_rows_show_own_spend_hard_limit_and_same_combined_tota
 def assert_enforcement_on_rows_show_own_spend_against_equal_share(
     scenario: SpendScenario,
 ):
-    owner_on, _ = _read_row_matching_spend(
+    (owner_on, _), (member_on, _) = _read_rows_matching_spend(
         scenario,
-        scenario.owner_usage,
-        _own_spend_against(scenario.owner_id, SCALED_SHARE_OF_TWO),
-        "owner, on",
-    )
-    member_on, _ = _read_row_matching_spend(
-        scenario,
-        scenario.member_usage,
-        _own_spend_against(scenario.project.member_id, SCALED_SHARE_OF_TWO),
-        "member, on",
+        (
+            scenario.owner_usage,
+            _own_spend_against(scenario.owner_id, SCALED_SHARE_OF_TWO),
+            "owner, on",
+        ),
+        (
+            scenario.member_usage,
+            _own_spend_against(scenario.project.member_id, SCALED_SHARE_OF_TWO),
+            "member, on",
+        ),
     )
     assert_that(
         abs(member_on["total"] - owner_on["total"]),
@@ -1229,17 +1263,18 @@ def assert_enforcement_on_rows_show_own_spend_against_equal_share(
 def assert_enforcement_on_rows_show_own_spend_against_override_and_share(
     scenario: SpendScenario,
 ):
-    _read_row_matching_spend(
+    _read_rows_matching_spend(
         scenario,
-        scenario.owner_usage,
-        _own_spend_against(scenario.owner_id, SCALED_OVERRIDE_MAX),
-        "owner with override, on",
-    )
-    _read_row_matching_spend(
-        scenario,
-        scenario.member_usage,
-        _own_spend_against(scenario.project.member_id, SCALED_SHARE_OF_REST),
-        "member without override, on",
+        (
+            scenario.owner_usage,
+            _own_spend_against(scenario.owner_id, SCALED_OVERRIDE_MAX),
+            "owner with override, on",
+        ),
+        (
+            scenario.member_usage,
+            _own_spend_against(scenario.project.member_id, SCALED_SHARE_OF_REST),
+            "member without override, on",
+        ),
     )
 
 

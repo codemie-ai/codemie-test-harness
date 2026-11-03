@@ -174,12 +174,16 @@ def member_project_factory(
 
     for project in reversed(created):
         if project.budget is not None:
+            member_objects_deleted = False
             try:
                 project_budget_groups.delete(project.budget, project.member_id)
+                member_objects_deleted = True
             except Exception as e:
                 logger.warning(f"Failed to delete budget of {project.name}: {e}")
             for budget_id in project.budget.budget_ids.values():
                 for user_id in project.user_ids:
+                    if member_objects_deleted and user_id == project.member_id:
+                        continue
                     try:
                         lite_llm_budget_utils.delete_project_budget_objects(
                             budget_id, user_id

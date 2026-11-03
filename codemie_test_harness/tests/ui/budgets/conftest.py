@@ -57,9 +57,6 @@ from codemie_test_harness.tests.utils.admin_project_budget_group_utils import (
 from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
-from codemie_test_harness.tests.utils.admin_spend_tracking_utils import (
-    AdminSpendTrackingUtils,
-)
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
 
@@ -302,12 +299,6 @@ def member_override_ui_ready(
         "Project admin was not permitted to override a member allocation",
     )
     return member_override_ui_setup
-
-
-@pytest.fixture(scope="session")
-def admin_spend_tracking_utils(client):
-    """Session-scoped spend tracking helper (admin), to collect spend on request."""
-    return AdminSpendTrackingUtils(client)
 
 
 @pytest.fixture(scope="function")

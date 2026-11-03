@@ -32,6 +32,7 @@ from codemie_test_harness.tests.test_data.budget_usage_project_rows_test_data im
     ROW_WAIT_INTERVAL,
     ROW_WAIT_TIMEOUT,
     SPEND_MAX_BATCHES,
+    SPEND_PARITY_TOLERANCE,
     SPEND_POLL_INTERVAL,
     SPEND_POLL_TIMEOUT,
     SPEND_REQUEST_MAX_TOKENS,
@@ -157,10 +158,12 @@ class BudgetUsageUtils(BaseUtils):
         budget_limit: float,
         timeout: float = ROW_WAIT_TIMEOUT,
     ):
-        """Poll until the row shows ``budget_limit``; returns the last read row."""
+        """Poll until the row shows ``budget_limit`` within the money tolerance; returns the last read row."""
         return poll_until(
             lambda: self.get_row(row_name),
-            lambda row: row is not None and row["budget_limit"] == budget_limit,
+            lambda row: row is not None
+            and row["budget_limit"] is not None
+            and abs(row["budget_limit"] - budget_limit) <= MONEY_TOLERANCE,
             timeout=timeout,
             interval=ROW_WAIT_INTERVAL,
         )
@@ -194,6 +197,23 @@ class BudgetUsageUtils(BaseUtils):
         return poll_until(
             lambda: self.get_user_project_spending_row(email, project_name),
             lambda row: row is not None and row["platform"] >= VISIBLE_AT_TWO_DECIMALS,
+            timeout=timeout,
+            interval=ROW_WAIT_INTERVAL,
+        )
+
+    def wait_for_user_project_spend_equal_to(
+        self,
+        email: str,
+        project_name: str,
+        spend: float,
+        timeout: float = ROW_WAIT_TIMEOUT,
+    ):
+        """Poll until the admin row's platform spend equals ``spend`` at 2 decimals; returns the last read row."""
+        return poll_until(
+            lambda: self.get_user_project_spending_row(email, project_name),
+            lambda row: row is not None
+            and row["platform"] is not None
+            and abs(round(row["platform"], 2) - spend) <= SPEND_PARITY_TOLERANCE,
             timeout=timeout,
             interval=ROW_WAIT_INTERVAL,
         )
@@ -269,12 +289,14 @@ def generate_member_spend(
         )
         if spend >= target_spend:
             break
+    unchanged_reads = 0
     for _ in range(SPEND_SETTLE_CHECKS):
         time.sleep(SPEND_POLL_INTERVAL)
         current = _member_customer_spend(lite_llm_budget_utils, customer_id)
-        if current == spend:
-            break
+        unchanged_reads = unchanged_reads + 1 if current == spend else 0
         spend = current
+        if unchanged_reads >= SPEND_STABLE_READS - 1:
+            break
     return spend
 
 
