@@ -156,4 +156,3 @@ jobs:
         uses: codemie-ai/ci-workflows/.github/actions/publish-pypi@main
         with:
           artifact-name: test-harness-dist
-          packages-dir: dist/
