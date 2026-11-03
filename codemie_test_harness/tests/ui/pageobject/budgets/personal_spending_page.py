@@ -143,7 +143,7 @@ class PersonalSpendingPage(BasePage):
     def format_percentage(value: float) -> str:
         """Total cell text: the value clamped to 0..100 with 1 decimal, rounded half up like JS toFixed."""
         clamped = min(max(value, 0), 100)
-        return f"{Decimal(clamped).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)}%"
+        return f"{Decimal(str(clamped)).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)}%"
 
     # ── Assertions ────────────────────────────────────────────────────────────
 

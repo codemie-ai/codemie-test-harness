@@ -75,6 +75,10 @@ class MemberProject:
         return [*owner, self.member_id, *self.extra_member_ids]
 
 
+def row_names(rows: list[dict]) -> list[str]:
+    return [row["project_name"] for row in rows]
+
+
 class BudgetUsageUtils(BaseUtils):
     """Reads of the calling client's budget usage and of the admin user-project-spending table."""
 
@@ -88,7 +92,7 @@ class BudgetUsageUtils(BaseUtils):
         ]
 
     def get_row_names(self) -> list[str]:
-        return [row["project_name"] for row in self.get_rows()]
+        return row_names(self.get_rows())
 
     def get_row_names_among(self, labels: list[str]) -> list[str]:
         """Names of the rows whose name is one of ``labels``, in response order."""

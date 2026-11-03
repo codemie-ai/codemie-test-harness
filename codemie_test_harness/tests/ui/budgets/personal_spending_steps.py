@@ -49,6 +49,7 @@ from codemie_test_harness.tests.utils.budget_usage_utils import (
     BudgetUsageUtils,
     expected_total,
     generate_member_spend,
+    row_names,
     wait_for_settled_key_spend,
 )
 from codemie_test_harness.tests.utils.client_factory import get_client
@@ -62,10 +63,6 @@ def _project_name(budget) -> str:
 
 def _cli_label(budget) -> str:
     return f"{_project_name(budget)}{CLI_ROW_SUFFIX}"
-
-
-def _names(rows: list[dict]) -> list[str]:
-    return [row["project_name"] for row in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +84,7 @@ def read_budget_usage(client) -> BudgetUsageResponse:
     response = client.analytics.get_budget_usage()
     return BudgetUsageResponse(
         rows=response.data.rows,
-        names=_names(response.data.rows),
+        names=row_names(response.data.rows),
         shown_labels=[
             column.label
             for column in response.data.columns
@@ -160,7 +157,7 @@ def assert_default_project_rows_come_first_and_only_they_are_flagged(
 ):
     expected_names = [_project_name(budget), _cli_label(budget)]
     assert_that(
-        _names(rows[:2]),
+        row_names(rows[:2]),
         equal_to(expected_names),
         "The default project's rows must come first in the API response",
     )

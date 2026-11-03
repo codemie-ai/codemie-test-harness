@@ -77,6 +77,7 @@ from codemie_test_harness.tests.utils.budget_usage_utils import (
     generate_member_spend,
     get_member_allocations,
     member_customer_spend,
+    row_names,
     wait_for_member_allocation,
     wait_for_row_matching,
     wait_for_settled_key_spend,
@@ -96,10 +97,6 @@ def _email(credentials) -> str:
 def _personal_labels(credentials) -> list[str]:
     email = _email(credentials)
     return [email, f"{email}{CLI_ROW_SUFFIX}", f"{email}{PREMIUM_ROW_SUFFIX}"]
-
-
-def _names(rows: list[dict]) -> list[str]:
-    return [row["project_name"] for row in rows]
 
 
 def _names_with_prefix(names: list[str], prefix: str) -> list[str]:
@@ -192,7 +189,7 @@ def assert_personal_row_first_and_flagged_while_personal_is_default(
 ):
     """With no stored default the personal row comes first and is the one flagged is_default."""
     email = _email(user_credentials)
-    names = _names(rows)
+    names = row_names(rows)
     flags = {row["project_name"]: row["is_default"] for row in rows}
     assert_that(names, has_items(email, project.name))
     assert_that(
@@ -222,7 +219,7 @@ def assert_default_project_row_first_and_personal_row_unflagged(
 ):
     """Once the project is the stored default its row is first and flagged, the personal one is not."""
     email = _email(user_credentials)
-    names = _names(rows)
+    names = row_names(rows)
     flags = {row["project_name"]: row["is_default"] for row in rows}
     assert_that(
         names[0],
@@ -284,7 +281,7 @@ def assert_personal_rows_are_the_first_three_rows_while_personal_is_default(
 ):
     """The personal rows lead the whole response in category order, flagged, then the project row."""
     personal_labels = _personal_labels(user_credentials)
-    names = _names(rows)
+    names = row_names(rows)
     assert_that(
         names[:3],
         equal_to(personal_labels),
@@ -311,7 +308,7 @@ def assert_default_project_row_leads_and_personal_rows_follow_unflagged(
 ):
     """The default project's row leads; the personal rows follow in category order, unflagged."""
     personal_labels = _personal_labels(user_credentials)
-    names = _names(rows)
+    names = row_names(rows)
     assert_that(
         names[0],
         equal_to(project.name),
@@ -459,7 +456,7 @@ def assert_admin_user_project_spending_keeps_response_shape(
         [column.id for column in response.data.columns],
         equal_to(USER_PROJECT_SPENDING_COLUMN_IDS),
     )
-    names = _names(response.data.rows)
+    names = row_names(response.data.rows)
     assert_that(names, has_item(project.name))
     assert_that(
         len(set(names)),
@@ -549,12 +546,20 @@ class ListedRows:
 def read_rows_once_budgeted_projects_are_listed(
     member_usage: BudgetUsageUtils, projects: ThreeProjects, admin_project_budget_utils
 ) -> ListedRows:
-    enforced_row = member_usage.wait_for_row(projects.enforced.name)
-    not_enforced_row = member_usage.wait_for_row(projects.not_enforced.name)
+    rows = member_usage.wait_for_rows_where(
+        lambda current: {projects.enforced.name, projects.not_enforced.name}
+        <= set(row_names(current))
+    )
     return ListedRows(
-        names=member_usage.get_row_names(),
-        enforced_row=enforced_row,
-        not_enforced_row=not_enforced_row,
+        names=row_names(rows),
+        enforced_row=next(
+            (row for row in rows if row["project_name"] == projects.enforced.name),
+            None,
+        ),
+        not_enforced_row=next(
+            (row for row in rows if row["project_name"] == projects.not_enforced.name),
+            None,
+        ),
         hard_limit=read_project_hard_limit(
             admin_project_budget_utils, projects.not_enforced
         ),
@@ -617,7 +622,7 @@ def assert_unenforced_row_at_rest_shows_hard_limit_without_spend(listed: ListedR
 def assert_admin_list_still_contains_all_three_projects(
     admin_usage: BudgetUsageUtils, member_credentials, projects: ThreeProjects
 ):
-    admin_names = _names(
+    admin_names = row_names(
         admin_usage.get_user_project_spending_rows(_email(member_credentials))
     )
     assert_that(
@@ -945,11 +950,18 @@ def override_owner_with_forty_percent_of_the_limit(scenario: SpendScenario):
         SCALED_OVERRIDE_MAX,
         SCALED_OVERRIDE_SOFT,
     )
+    for member_id in (scenario.project.member_id, scenario.third_member_id):
+        wait_for_member_allocation(
+            scenario.admin_project_budget_utils,
+            scenario.budget_id,
+            member_id,
+            SCALED_SHARE_OF_REST,
+        )
     allocations = wait_for_member_allocation(
         scenario.admin_project_budget_utils,
         scenario.budget_id,
-        scenario.project.member_id,
-        SCALED_SHARE_OF_REST,
+        scenario.owner_id,
+        SCALED_OVERRIDE_MAX,
     )
     assert_that(
         {
@@ -1320,7 +1332,7 @@ def assert_owner_without_override_sees_hard_limit_and_combined_total(
         scenario,
         scenario.owner_usage,
         _own_spend_against_combined_total(scenario.owner_id, scenario.hard_limit),
-        "member without override",
+        "owner without override",
     )
     assert_that(
         uncapped_row["total"],
