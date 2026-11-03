@@ -158,7 +158,7 @@ jobs:
 
       # A composite action runs inside this job, so Trusted Publishing sees this workflow in the OIDC token.
       - name: Publish to PyPI
-        uses: codemie-ai/ci-workflows/.github/actions/publish-pypi@fcb1c68d71f22bb1d0b52b514a97d2e242b28864 # ci-workflows main 2026-11-03
+        uses: codemie-ai/ci-workflows/.github/actions/publish-pypi@main
         with:
           artifact-name: test-harness-dist
           packages-dir: dist/
