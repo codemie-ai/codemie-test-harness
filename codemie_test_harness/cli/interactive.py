@@ -1716,7 +1716,7 @@ workflows, tools, and integrations with this user-friendly CLI.
 
 **First time?** Select **Configuration → Setup** and follow the prompts.
 
-**Running tests?** Choose **Run Tests → Run Test Suite → smoke** for a quick 5-10 minute validation.
+**Running tests?** Choose **Run Tests → Run Test Suite → sanity-api** for a quick validation without integration credentials.
 
 ## Configuration Overview
 
