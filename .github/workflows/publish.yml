@@ -21,6 +21,9 @@ on:
 permissions:
   contents: read
 
+env:
+  CI_WORKFLOWS_REF: main
+
 # One run per tag. A fixed group would keep only the newest pending run and cancel the ones in between.
 concurrency:
   group: publish-test-harness-${{ github.event.release.tag_name || inputs.tag }}
@@ -49,18 +52,10 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-
-      - name: Setup Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
-
-      - name: Install Poetry
-        run: pipx install poetry
 
       - name: Require the tag on the released commit
         id: tagcommit
@@ -92,6 +87,19 @@ jobs:
             echo "A real publish must run from main, not $GITHUB_REF"; exit 1
           fi
 
+      - name: Download version check script
+        run: |
+          mkdir -p "$RUNNER_TEMP/scripts/release"
+          curl -fsSL "https://raw.githubusercontent.com/codemie-ai/ci-workflows/${{ env.CI_WORKFLOWS_REF }}/scripts/release/check_version.py" -o "$RUNNER_TEMP/scripts/release/check_version.py"
+
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: pipx install poetry
+
       # The tag names the version. pyproject.toml holds only the base line (MAJOR.MINOR) and the tag must be on it.
       - name: Read the version from the tag
         id: version
@@ -99,7 +107,7 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           BASE=$(poetry version --short)
-          VERSION=$(python3 scripts/release/check_version.py --ecosystem pypi --name codemie-test-harness --tag "$RELEASE_TAG" --base "$BASE" --tag-prefix v)
+          VERSION=$(python3 "$RUNNER_TEMP/scripts/release/check_version.py" --ecosystem pypi --name codemie-test-harness --tag "$RELEASE_TAG" --base "$BASE" --tag-prefix v)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing codemie-test-harness $VERSION" >> "$GITHUB_STEP_SUMMARY"
 
@@ -117,13 +125,13 @@ jobs:
       - name: Check version against PyPI
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: python3 scripts/release/check_version.py --ecosystem pypi --name codemie-test-harness --version "$VERSION"
+        run: python3 "$RUNNER_TEMP/scripts/release/check_version.py" --ecosystem pypi --name codemie-test-harness --version "$VERSION"
 
       - name: Build package
         run: poetry build
 
       - name: Upload distributions
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-harness-dist
           path: dist/
@@ -143,26 +151,8 @@ jobs:
       contents: read
       id-token: write
     steps:
-      # Only the version script is needed. The registry is checked again here because this job can wait for
-      # approval and another release may have landed since `verify`. Checkout comes first: it clears the workspace.
-      - name: Check out the version script
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          sparse-checkout: scripts/release
-
-      - name: Download distributions
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: test-harness-dist
-          path: dist/
-
-      - name: Check the version against the registry again
-        env:
-          VERSION: ${{ needs.verify.outputs.version }}
-        run: python3 scripts/release/check_version.py --ecosystem pypi --name codemie-test-harness --version "$VERSION"
-
+      # A composite action runs inside this job, so Trusted Publishing sees this workflow in the OIDC token.
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        uses: codemie-ai/ci-workflows/.github/actions/publish-pypi@main
         with:
-          packages-dir: dist/
+          artifact-name: test-harness-dist
