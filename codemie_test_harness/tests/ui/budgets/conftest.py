@@ -293,6 +293,14 @@ def member_override_ui_ready(
     return member_override_ui_setup
 
 
+@pytest.fixture(scope="function")
+def platform_budget_id(project_admin_setup, project_admin_setup_client):
+    """ID of the 'platform' budget of the project's budget group."""
+    _, group_id, _, _ = project_admin_setup
+    group = AdminProjectBudgetGroupUtils(project_admin_setup_client).get_group(group_id)
+    return AdminProjectBudgetUtils.budget_ids_by_category(group)["platform"]
+
+
 @pytest.fixture(autouse=True)
 def login(page, project_admin_setup):
     """Override tests/ui/conftest.py login — authenticate as the project-admin user.

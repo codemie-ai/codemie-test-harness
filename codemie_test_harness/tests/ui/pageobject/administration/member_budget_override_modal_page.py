@@ -17,6 +17,8 @@
 Opened by clicking a member's budget allocation button in the Project members table.
 """
 
+import re
+
 from playwright.sync_api import expect
 from reportportal_client import step
 
@@ -48,7 +50,44 @@ class MemberBudgetOverrideModalPage(BasePage):
         """'Save Override' button."""
         return self.dialog.get_by_role("button", name="Save Override")
 
+    @property
+    def cancel_button(self):
+        """'Cancel' button (dismiss action) of the modal footer."""
+        return self.dialog.get_by_role("button", name="Cancel", exact=True)
+
+    @property
+    def override_reason_input(self):
+        """'Override reason' textarea."""
+        return self.dialog.get_by_label("Override reason")
+
+    @property
+    def reset_budget_usage_button(self):
+        """Any 'Reset budget usage' button inside the modal (removed from the Members page)."""
+        return self.dialog.get_by_role("button", name=re.compile(r"Reset budget usage"))
+
+    @property
+    def use_project_allocation_button(self):
+        """Per-category 'Use project allocation' action of a fixed override."""
+        return self.dialog.get_by_role("button", name="Use project allocation")
+
+    @property
+    def undo_button(self):
+        """Per-category 'Undo' action shown once 'Use project allocation' is pending."""
+        return self.dialog.get_by_role("button", name="Undo")
+
     # ── Actions ───────────────────────────────────────────────────────────────
+
+    @step
+    def cancel(self):
+        """Click 'Cancel' to dismiss the modal without saving."""
+        self.cancel_button.click()
+        return self
+
+    @step
+    def use_project_allocation(self):
+        """Click 'Use project allocation' to drop the member's fixed override on save."""
+        self.use_project_allocation_button.click()
+        return self
 
     @step
     def set_hard_limit(self, value: float):
@@ -83,4 +122,25 @@ class MemberBudgetOverrideModalPage(BasePage):
     def should_be_closed(self):
         """Verify the override modal is closed."""
         expect(self.dialog).not_to_be_visible()
+        return self
+
+    @step
+    def should_not_offer_reset_budget_usage(self):
+        """Verify the modal has no 'Reset budget usage' button."""
+        expect(self.reset_budget_usage_button).to_have_count(0)
+        return self
+
+    @step
+    def should_offer_cancel_save_and_reason(self):
+        """Verify the footer keeps 'Cancel' and 'Save Override' and the reason field remains."""
+        expect(self.cancel_button).to_be_visible()
+        expect(self.save_override_button).to_be_visible()
+        expect(self.override_reason_input).to_be_visible()
+        return self
+
+    @step
+    def should_mark_category_as_using_project_allocation(self):
+        """Verify the category is pending 'use project allocation' (action toggled to 'Undo')."""
+        expect(self.undo_button).to_be_visible()
+        expect(self.use_project_allocation_button).to_have_count(0)
         return self
