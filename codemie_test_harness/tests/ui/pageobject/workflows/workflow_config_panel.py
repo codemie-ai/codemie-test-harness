@@ -20,6 +20,9 @@ import yaml
 from playwright.sync_api import Locator, Page, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.expanded_yaml_dialog import (
+    ExpandedYamlDialog,
+)
 from codemie_test_harness.tests.ui.pageobject.workflows.workflow_version_history_popup import (
     WorkflowVersionHistoryPopup,
 )
@@ -196,6 +199,14 @@ class WorkflowConfigPanel:
             "button", name="Version History (visual editor)", exact=True
         )
 
+    @property
+    def expand_yaml_button(self) -> Locator:
+        """'Expand' button in the YAML editor header actions.
+
+        aria-label = 'Expand YAML editor' (WorkflowYamlHeaderActions.tsx).
+        """
+        return self.page.get_by_role("button", name="Expand YAML editor")
+
     # ------ YAML Editor Tabs ------
     @property
     def edit_current_version_tab(self) -> Locator:
@@ -336,6 +347,12 @@ class WorkflowConfigPanel:
         self.categories_listbox.wait_for(state="hidden")
 
     # ------ YAML Configuration Actions ------
+    @step
+    def expand_yaml_editor(self) -> ExpandedYamlDialog:
+        """Press 'Expand' in the YAML editor header and return the expanded dialog."""
+        self.expand_yaml_button.click()
+        return ExpandedYamlDialog(self.page).should_be_visible()
+
     @step
     def fill_yaml_config(self, yaml_content: str):
         """
@@ -598,6 +615,18 @@ class WorkflowConfigPanel:
         """Verify that the YAML editor is visible."""
         expect(self.yaml_config_header).to_be_visible()
         expect(self.yaml_editor_text_layer).to_be_visible()
+
+    @step
+    def should_have_yaml_editor_containing(self, text: str):
+        """Verify that the inline YAML editor document contains ``text`` (read through the Ace API)."""
+        expect(self.yaml_editor_text_layer).to_be_visible()
+        self.page.wait_for_function(
+            """(text) => {
+                const el = document.querySelector('[data-name="yaml_config"]');
+                return !!(el && el.env && el.env.editor && el.env.editor.getValue().includes(text));
+            }""",
+            arg=text,
+        )
 
     @step
     def should_have_yaml_editor_with_content(self, expected_config):

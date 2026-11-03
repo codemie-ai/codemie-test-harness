@@ -42,6 +42,7 @@ from codemie_test_harness.tests.test_data.budget_usage_project_rows_test_data im
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.test_data.budget_test_data import (
     DEFAULT_CLI_BUDGET_ID,
+    DEFAULT_PLATFORM_BUDGET_ID,
     DEFAULT_PREMIUM_BUDGET_ID,
     project_key_alias,
 )
@@ -215,6 +216,66 @@ def member_override_ui_setup(
         admin_project_utils.remove_user_from_project(project_name, user_id)
     except Exception:
         pass
+
+
+@pytest.fixture(scope="function")
+def member_with_personal_budgets(member_override_ui_setup, admin_budget_utils):
+    """``member_override_ui_setup`` whose member also holds a personal budget in every category.
+
+    Yields:
+        tuple: (email, password, user_id) of the non-admin project member.
+    """
+    _, _, user_id = member_override_ui_setup
+    personal_budgets = {
+        "platform": DEFAULT_PLATFORM_BUDGET_ID,
+        "cli": DEFAULT_CLI_BUDGET_ID,
+        "premium_models": DEFAULT_PREMIUM_BUDGET_ID,
+    }
+    for category, budget_id in personal_budgets.items():
+        admin_budget_utils.assign_user_budget(user_id, category, budget_id)
+    yield member_override_ui_setup
+    for category in personal_budgets:
+        try:
+            admin_budget_utils.unassign_user_budget(user_id, category)
+        except Exception:
+            pass
+
+
+@pytest.fixture(scope="function")
+def unassigned_member_with_personal_budgets(
+    project_admin_setup,
+    admin_project_utils,
+    admin_budget_utils,
+    keycloak_regular_user,
+):
+    """A developer user outside the project, with enforcement on and a personal budget in every category.
+
+    The project admin's Members page has to add this user itself.
+
+    Yields:
+        tuple: (email, password, user_id) of the not yet assigned user.
+    """
+    project_name = project_admin_setup[0]
+    email, password = keycloak_regular_user
+    user_id = get_client(username=email, password=password).users.about_me().user_id
+    admin_project_utils.enable_member_budget_tracking(project_name)
+    personal_budgets = {
+        "platform": DEFAULT_PLATFORM_BUDGET_ID,
+        "cli": DEFAULT_CLI_BUDGET_ID,
+        "premium_models": DEFAULT_PREMIUM_BUDGET_ID,
+    }
+    for category, budget_id in personal_budgets.items():
+        admin_budget_utils.assign_user_budget(user_id, category, budget_id)
+    yield email, password, user_id
+    try:
+        admin_project_utils.remove_user_from_project(project_name, user_id)
+    except Exception:
+        pass
+    for category in personal_budgets:
+        try:
+            admin_budget_utils.unassign_user_budget(user_id, category)
+        except Exception:
+            pass
 
 
 @pytest.fixture(scope="function")
