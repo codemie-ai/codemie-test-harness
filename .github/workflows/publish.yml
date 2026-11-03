@@ -151,18 +151,14 @@ jobs:
           persist-credentials: false
           sparse-checkout: scripts/release
 
-      - name: Download distributions
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: test-harness-dist
-          path: dist/
-
       - name: Check the version against the registry again
         env:
           VERSION: ${{ needs.verify.outputs.version }}
         run: python3 scripts/release/check_version.py --ecosystem pypi --name codemie-test-harness --version "$VERSION"
 
+      # A composite action runs inside this job, so Trusted Publishing sees this workflow in the OIDC token.
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        uses: codemie-ai/ci-workflows/.github/actions/publish-pypi@fcb1c68d71f22bb1d0b52b514a97d2e242b28864 # ci-workflows main 2026-11-03
         with:
+          artifact-name: test-harness-dist
           packages-dir: dist/
