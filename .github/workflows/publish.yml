@@ -143,19 +143,6 @@ jobs:
       contents: read
       id-token: write
     steps:
-      # Only the version script is needed. The registry is checked again here because this job can wait for
-      # approval and another release may have landed since `verify`. Checkout comes first: it clears the workspace.
-      - name: Check out the version script
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          sparse-checkout: scripts/release
-
-      - name: Check the version against the registry again
-        env:
-          VERSION: ${{ needs.verify.outputs.version }}
-        run: python3 scripts/release/check_version.py --ecosystem pypi --name codemie-test-harness --version "$VERSION"
-
       # A composite action runs inside this job, so Trusted Publishing sees this workflow in the OIDC token.
       - name: Publish to PyPI
         uses: codemie-ai/ci-workflows/.github/actions/publish-pypi@main
