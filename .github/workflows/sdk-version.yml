@@ -24,19 +24,16 @@ jobs:
   sdk-version:
     name: codemie-sdk version
     runs-on: ubuntu-latest
-    # GH_TOKEN is an environment secret: only jobs that name this environment
-    # can read it, and the environment only accepts runs from main.
+    # Holds the GH_TOKEN secret; deployments allowed from main only.
     environment: automated
     timeout-minutes: 15
 
-    # Never on a fork: it has no secrets, so the job could only fail.
-    # On issue_comment, run only for a "/rerun" comment on the bot's PR.
+    # Never on a fork: it has no GH_TOKEN secret, so the job could only fail.
     if: >-
       github.repository_owner == 'codemie-ai' && (github.event_name != 'issue_comment' || (github.event.issue.pull_request && startsWith(github.event.issue.title, 'chore(deps): automated update of codemie-sdk-python') && contains(github.event.comment.body, '/rerun') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)))
 
     steps:
-      # author_association above is only a cheap pre-filter: MEMBER and
-      # COLLABORATOR do not imply write access. A failed lookup fails the job.
+      # author_association does not imply write access: https://docs.github.com/en/graphql/reference/enums#commentauthorassociation
       - name: Require write access
         if: github.event_name == 'issue_comment'
         env:
@@ -118,8 +115,7 @@ jobs:
         run: |
           title="chore(deps): automated update of ${PACKAGE} (${LATEST})"
           if [[ $(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null || true) != "OPEN" ]]; then
-            # Request review from everyone with write access, except the PAT
-            # owner (the PR author), the repository owner account and bots.
+            # Everyone with write access, except the PR author (PAT owner) and the repo owner account.
             author=$(gh api user --jq .login)
             reviewers=$(gh api "repos/${GITHUB_REPOSITORY}/collaborators?permission=push" --paginate \
               --jq '.[] | select(.type == "User") | .login' \
