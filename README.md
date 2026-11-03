@@ -53,19 +53,21 @@ Each setting is read from the first source that has it:
 
 On `localhost`, `127.0.0.1`, `0.0.0.0` and `192.168.*` addresses Keycloak is not used: with `AUTH_USERNAME` and `AUTH_PASSWORD` the harness logs in through the backend local login, without them it sends no token. Any other address always logs in through Keycloak.
 
-Integration tests read their own settings (for example `JIRA_URL`, `JIRA_TOKEN`). Leave them unset to skip those tests.
+Integration tests read their own settings (for example `JIRA_URL`, `JIRA_TOKEN`). The `sanity-*` suites do not need them. The `smoke`, `api`, `ui` and other full suites contain integration tests and fail without these settings.
 
 ## Run on your machine
 
 Against a local CodeMie stack on the default ports no settings are needed:
 
 ```bash
-codemie-test-harness run smoke-api
+codemie-test-harness run sanity-api
 ```
+
+`sanity-api` and `sanity-ui` contain only tests that do not need credentials for external services. Use them as a contributor.
 
 On other ports or with another user, set them first, for example `codemie-test-harness config set CODEMIE_API_DOMAIN http://localhost:9090`.
 
-`codemie-test-harness run --list-suites` lists the suites (`sanity-api`, `smoke`, `api`, `ui`, ...). `codemie-test-harness` without arguments opens an interactive menu.
+`codemie-test-harness run --list-suites` lists the suites (`sanity-api`, `sanity-ui`, `smoke`, `api`, `ui`, ...). `codemie-test-harness` without arguments opens an interactive menu.
 
 ## Run in CI against a deployed system
 
