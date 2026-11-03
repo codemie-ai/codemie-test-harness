@@ -63,6 +63,7 @@ MODEL_RESPONSES = [
     LlmResponseData(ModelTypes.GPT_6_LUNA, AZURE_ENVS),
     LlmResponseData(ModelTypes.GPT_6_SOL, AZURE_ENVS),
     LlmResponseData(ModelTypes.GPT_6_1_SOL, AZURE_ENVS),
+    LlmResponseData(ModelTypes.GPT_6_1_TERRA, AZURE_ENVS),
     # GCP LLMs test data
     LlmResponseData(ModelTypes.CLAUDE_SONNET_4_5_VERTEX, GCP_ENVS),
     LlmResponseData(ModelTypes.GEMINI_3_FLASH, GCP_ENVS),
