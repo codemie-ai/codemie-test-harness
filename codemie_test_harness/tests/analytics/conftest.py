@@ -399,14 +399,27 @@ def seed_cli_sessions(analytics_utils, ingest_cli_sessions):
     """Factory that ingests session seeds and waits until all of them are rolled up.
 
     Returns the seeds keyed by ``CliSessionSeed.key``.
+
+    Safe to call again with the same keys. pytest-rerunfailures reruns a module fixture
+    whose setup failed, and that fixture builds new seeds with new session ids; sending
+    them would add a second copy of every session that was already stored. So a key sent
+    to a project before keeps its first seed: one already rolled up is not sent again,
+    and one whose send failed part-way is sent again unchanged (the BE drops replayed
+    events).
     """
+    sent: dict[tuple[str | None, str], CliSessionSeed] = {}
+    rolled_up: set[tuple[str | None, str]] = set()
 
     def _seed(
         seeds: list[CliSessionSeed], project_name: str | None = None
     ) -> dict[str, CliSessionSeed]:
-        ingest_cli_sessions(seeds, project_name)
-        for seed in seeds:
+        seeds = [sent.setdefault((project_name, seed.key), seed) for seed in seeds]
+        pending = [seed for seed in seeds if (project_name, seed.key) not in rolled_up]
+        if pending:
+            ingest_cli_sessions(pending, project_name)
+        for seed in pending:
             analytics_utils.wait_for_cli_session(seed.session_id)
+            rolled_up.add((project_name, seed.key))
         return {seed.key: seed for seed in seeds}
 
     return _seed

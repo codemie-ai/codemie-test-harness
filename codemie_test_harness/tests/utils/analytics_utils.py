@@ -45,6 +45,7 @@ from .cli_analytics_api_utils import (
     IngestClient,
     assert_accepted,
     assert_not_discarded,
+    parse_discard_response,
 )
 
 CLI_ANALYTICS_FEATURE_ID = "features:cliAnalytics"
@@ -433,11 +434,25 @@ class AnalyticsUtils(BaseUtils):
     def ingest_cli_otlp_logs(self, payload: dict, project: str | None = None) -> None:
         """Send OTLP logs (JSON form) as the client's own user (see ingest_cli_event_hooks).
 
-        Posted raw, because the SDK method returns nothing that could show a discard; an
-        OTLP discard body fails here at once, quoting reason and partial_success.
+        Posted raw, because the SDK method returns nothing that could show a discard. Like
+        the hook events, ``project_context_required`` is retried for the cache propagation
+        window; any other discard fails at once, quoting reason and partial_success.
         """
-        response = IngestClient(self.client).post_signal(
-            "logs", json.dumps(payload).encode(), CT_JSON, project=project
+        body = json.dumps(payload).encode()
+
+        def _waiting_for_project_context(response) -> bool:
+            if response.status_code != 200:
+                return False
+            discard = parse_discard_response(response, "logs", CT_JSON)
+            return discard.reason == "project_context_required"
+
+        response = poll_until(
+            lambda: IngestClient(self.client).post_signal(
+                "logs", body, CT_JSON, project=project
+            ),
+            lambda reply: not _waiting_for_project_context(reply),
+            timeout=CLI_PROJECT_CONTEXT_TIMEOUT,
+            interval=2,
         )
         assert_accepted(response, "logs", CT_JSON)
 

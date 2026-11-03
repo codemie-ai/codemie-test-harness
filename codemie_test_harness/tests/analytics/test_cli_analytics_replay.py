@@ -35,8 +35,7 @@ def replayed_sessions(analytics_utils, seed_cli_sessions, ingest_cli_sessions):
     all of its stored events, so a rollup that shows the end has also counted
     whatever else that request stored.
     """
-    seeds = get_replay_session_seeds()
-    seed_cli_sessions(seeds)
+    seeds = list(seed_cli_sessions(get_replay_session_seeds()).values())
     ingest_cli_sessions([with_session_end(seed) for seed in seeds])
     for seed in seeds:
         analytics_utils.wait_for_cli_session_end(seed.session_id)
