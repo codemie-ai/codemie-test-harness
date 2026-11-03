@@ -24,6 +24,9 @@ jobs:
   sdk-version:
     name: codemie-sdk version
     runs-on: ubuntu-latest
+    # GH_TOKEN is an environment secret: only jobs that name this environment
+    # can read it, and the environment only accepts runs from main.
+    environment: automated
     timeout-minutes: 15
 
     # Never on a fork: it has no secrets, so the job could only fail.
