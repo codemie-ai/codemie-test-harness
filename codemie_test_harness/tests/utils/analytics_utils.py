@@ -36,12 +36,13 @@ from codemie_sdk.models.analytics import (
 
 from requests import HTTPError
 
-from codemie_test_harness.otlp_builder import build_hook_events
+from codemie_test_harness.otlp_builder import OtlpPayload, build_hook_events
 from codemie_test_harness.tests import PROJECT
 
 from .base_utils import BaseUtils, poll_until
 from .cli_analytics_api_utils import (
     CT_JSON,
+    CT_PROTOBUF,
     IngestClient,
     assert_accepted,
     assert_not_discarded,
@@ -59,12 +60,23 @@ CLI_SESSION_ROLLUP_TIMEOUT = 180
 
 @dataclass(frozen=True)
 class CLIAnalyticsTestSession:
-    """A CLI Analytics session seeded by the test harness."""
+    """A CLI Analytics session seeded by the test harness.
+
+    `developer_name` is the value the CLI Analytics API resolves as the session's user: the
+    authenticated sender's email (hook_events.user_email / session_dims.jwt_email), which the
+    backend prefers over any developer_name carried in the event payload itself (see
+    get_session_detail_meta / get_sessions in reader.py).
+    `model` / `branch` are the constants otlp_builder.build_hook_events hardcodes on every
+    usage/hook event it builds (model_raw/model and git_branch).
+    """
 
     session_id: str
     repository: str
     prompt: str
     project: str
+    developer_name: str
+    model: str = "claude-sonnet-5-5"
+    branch: str = "autotest"
 
 
 class AnalyticsUtils(BaseUtils):
@@ -378,11 +390,14 @@ class AnalyticsUtils(BaseUtils):
         """
         user = self.client.users.about_me()
         session_id = f"autotest-cli-{uuid.uuid4().hex[:12]}"
+        repository = f"autotest/repository-{uuid.uuid4().hex[:12]}"
+        prompt = f"Autotest CLI Analytics prompt {uuid.uuid4().hex[:12]}"
         session = CLIAnalyticsTestSession(
             session_id=session_id,
-            repository=f"autotest/{session_id}",
-            prompt=f"Autotest CLI Analytics session {session_id}",
+            repository=repository,
+            prompt=prompt,
             project=project,
+            developer_name=user.email,
         )
         events = build_hook_events(
             session_id, project, user.name, session.repository, session.prompt
@@ -462,6 +477,20 @@ class AnalyticsUtils(BaseUtils):
             assert_accepted(response, "logs", CT_JSON)
         else:
             assert_nothing_discarded(response, "logs", discard)
+
+    def ingest_cli_otlp_traces(
+        self, payload: OtlpPayload, project: str | None = None
+    ) -> None:
+        """Send OTLP traces (protobuf form, see otlp_builder.build_tool_spans) as the
+        client's own user (see ingest_cli_event_hooks).
+
+        Posted raw like ingest_cli_otlp_logs: the SDK has no traces-ingest method, and an
+        OTLP discard body fails here at once, quoting reason and partial_success.
+        """
+        response = IngestClient(self.client).post_signal(
+            "traces", payload.protobuf, CT_PROTOBUF, project=project
+        )
+        assert_accepted(response, "traces", CT_PROTOBUF)
 
     def get_cli_analytics_cost(self, **filters) -> CliAnalyticsCostResponse:
         """Totals. filters: start_date, end_date, time_period, users, projects."""

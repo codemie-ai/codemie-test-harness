@@ -97,6 +97,16 @@ class CliAnalyticsApi(BaseUtils):
             timeout=REQUEST_TIMEOUT,
         )
 
+    def get_data(self, endpoint: str, **params) -> dict:
+        """GET a read-only CLI Analytics endpoint and return its `data`; fails on a non-200."""
+        response = self.request("GET", f"{INGEST_PREFIX}/{endpoint}", params=params)
+        assert_that(
+            response.status_code,
+            equal_to(200),
+            f"GET {endpoint} {params} answered {response.status_code}: {response.text[:300]}",
+        )
+        return response.json()["data"]
+
 
 class IngestClient(CliAnalyticsApi):
     """POSTs to the four CLI Analytics ingest endpoints (logs, metrics, traces, event-hooks)."""

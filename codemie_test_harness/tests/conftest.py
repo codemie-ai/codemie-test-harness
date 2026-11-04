@@ -86,7 +86,7 @@ from codemie_test_harness.tests.utils.datasource_utils import DataSourceUtils
 from codemie_test_harness.tests.utils.env_resolver import (
     EnvironmentResolver,
 )
-from codemie_test_harness.tests.utils import cleanup_utils
+from codemie_test_harness.tests.utils import cleanup_utils, production_safety
 from codemie_test_harness.tests.utils.gitbud_utils import GitBudUtils
 from codemie_test_harness.tests.utils.gitlab_seed import (
     GITLAB_SEED_FAKE_PNG_UPLOAD,
@@ -312,7 +312,23 @@ def pytest_collection_modifyitems(config, items):
     1. Parallel runs (-n X) exclude sequential-only tests automatically
     2. Sequential runs include all tests
     3. Users don't need to manually add marker filters
+
+    CLI Analytics tests that are not marked 'prod_regression' create projects and users or
+    ingest telemetry that cannot be deleted. They are skipped unless the stand is known not to
+    be Production or Preview (see production_safety.state_change_refusal).
     """
+    refusal = production_safety.state_change_refusal()
+    if refusal:
+        not_authorized = pytest.mark.skip(
+            reason="state-changing CLI Analytics test (creates projects/users or ingests "
+            f"undeletable telemetry) not authorized: {refusal}"
+        )
+        for item in items:
+            if item.get_closest_marker(
+                "cli_analytics"
+            ) and not production_safety.is_read_only_item(item):
+                item.add_marker(not_authorized)
+
     # Check if pytest-xdist is active (parallel execution)
     is_xdist_worker = hasattr(config, "workerinput")  # Running as xdist worker
     is_xdist_controller = config.getoption("numprocesses", default=None)  # -n flag used
@@ -342,6 +358,29 @@ def pytest_collection_modifyitems(config, items):
                 )
 
 
+def pytest_collection_finish(session):
+    """Decide, from the final selection, whether the whole run is read-only."""
+    if any(item.get_closest_marker("cli_analytics") for item in session.items):
+        production_safety.install_transport_guard()
+    if production_safety.configure_run(session.items):
+        logger.info(
+            "Read-only run: state-changing calls to the stand are refused and the session "
+            "hooks neither create nor delete anything."
+        )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_setup(item):
+    with production_safety.read_only_test(item):
+        yield
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    with production_safety.read_only_test(item):
+        yield
+
+
 @pytest.fixture(scope="session")
 def large_file_fixture(tmp_path_factory):
     """Path to a generated >100MB text file (never committed).
@@ -359,6 +398,24 @@ def large_file_fixture(tmp_path_factory):
 @pytest.fixture(scope="session")
 def client():
     return get_client()
+
+
+@pytest.fixture(scope="session")
+def cli_analytics_state_changes_allowed():
+    """Skip before a CLI Analytics fixture creates data on a shared/read-only stand."""
+    refusal = production_safety.state_change_refusal()
+    if refusal:
+        pytest.skip(f"State-changing CLI Analytics fixture refused: {refusal}")
+
+
+@pytest.fixture(scope="session")
+def cli_analytics_isolated_environment(cli_analytics_state_changes_allowed):
+    """Require a stand declared disposable before synthetic telemetry changes its totals."""
+    if not production_safety.disposable_environment_declared():
+        pytest.skip(
+            "needs an isolated stand declared with "
+            f"{production_safety.DISPOSABLE_ENVIRONMENT}=true: the test changes its totals"
+        )
 
 
 @pytest.fixture(scope="session")
@@ -742,7 +799,10 @@ def categories_utils(client):
 
 @pytest.fixture(scope="session", autouse=True)
 def ensure_test_project(admin_utils):
-    """Ensure the test project exists before running tests"""
+    """Ensure the test project exists before running tests; a read-only run creates nothing."""
+    if production_safety.is_read_only_run():
+        logger.info(f"Read-only run: test project '{PROJECT}' is not created.")
+        return
     logger.info(f"Ensuring test project '{PROJECT}' exists...")
     filtered_projects = admin_utils.list_projects(PROJECT)
     if PROJECT not in filtered_projects:
@@ -2578,6 +2638,12 @@ def pytest_sessionfinish(session):
     for that.
     """
     if CredentialsManager.get_parameter("CLEANUP_DATA", "true").lower() != "true":
+        return
+    if session.config.option.collectonly or getattr(session, "testscollected", 0) == 0:
+        logger.info("Session cleanup skipped: no test body executed.")
+        return
+    if production_safety.is_read_only_run():
+        logger.info("Read-only run: session cleanup skipped, nothing was created.")
         return
 
     logger.info("Starting session cleanup...")
