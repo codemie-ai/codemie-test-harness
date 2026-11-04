@@ -226,12 +226,13 @@ HOOK_SENDERS = [
 ]
 
 # What each role reads from the CLI analytics GET endpoints, before and after a project is
-# disabled. The contract is the existing one, which this change must not widen: every GET sits
-# behind the router's `_admin_gate` (user.is_admin or user.is_applications_admin; the same guard
-# exists at the pre-change baseline 1d7e4d3d). A maintainer is resolved to is_admin by
-# User.resolve_is_admin, so it reads like a global admin; a project admin passes the gate and
-# sees only its own admin projects; a plain member, an auditor (whose unrestricted scope applies
-# only after the gate) and an unrelated user are refused with 403 before and after.
+# disabled; disabling must not widen or narrow it. The aggregate reads (overview, repositories)
+# sit behind the router's `_admin_gate` (user.is_admin or user.is_applications_admin). The
+# session list does not: any signed-in user may call it, and a non-admin is scoped to their own
+# Personal sessions only. A maintainer is resolved to is_admin by User.resolve_is_admin, so it
+# reads like a global admin; a project admin passes the gate and sees only its own admin
+# projects. A plain member, an auditor and an unrelated user get 200 from the session list
+# without the seeded project session in it, and 403 from the aggregate reads.
 # The fields of a session row (LocalAnalyticsSessionRow) fixed once the seeded session is listed:
 # identity, owner, repository, start and the token counts. Excluded as genuinely volatile
 # because the backend derives them in the periodic rollup or from pricing: duration_ms, turns,
@@ -256,8 +257,10 @@ HISTORY_READ_ALLOWED = {
     "repositories": 200,
     "listed": True,
 }
-HISTORY_READ_DENIED = {
-    "sessions": 403,
+# The session list answers 200 but holds only the caller's own Personal sessions, so the
+# project session stays hidden; the aggregate reads stay refused.
+HISTORY_READ_OWN_PERSONAL_ONLY = {
+    "sessions": 200,
     "overview": 403,
     "repositories": 403,
     "listed": False,
@@ -270,9 +273,17 @@ HISTORY_ROLES = [
     pytest.param(
         "project_admin", HISTORY_READ_ALLOWED, id="project-admin-of-the-project"
     ),
-    pytest.param("member", HISTORY_READ_DENIED, id="plain-member-refused"),
-    pytest.param("auditor", HISTORY_READ_DENIED, id="auditor-refused"),
-    pytest.param("unrelated", HISTORY_READ_DENIED, id="unrelated-user-refused"),
+    pytest.param(
+        "member", HISTORY_READ_OWN_PERSONAL_ONLY, id="plain-member-own-personal-only"
+    ),
+    pytest.param(
+        "auditor", HISTORY_READ_OWN_PERSONAL_ONLY, id="auditor-own-personal-only"
+    ),
+    pytest.param(
+        "unrelated",
+        HISTORY_READ_OWN_PERSONAL_ONLY,
+        id="unrelated-user-own-personal-only",
+    ),
 ]
 
 OWNER = "owner"
