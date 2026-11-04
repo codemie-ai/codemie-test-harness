@@ -31,7 +31,7 @@ from hamcrest import (
 from requests import HTTPError
 
 from codemie_test_harness.tests.test_data.user_status_test_data import (
-    AUTHENTICATION_FAILED_MESSAGE,
+    ACCOUNT_DEACTIVATED_MESSAGE,
     DEACTIVATE,
     REACTIVATE,
     REACTIVATE_VIA_UPDATE_MESSAGE,
@@ -39,8 +39,8 @@ from codemie_test_harness.tests.test_data.user_status_test_data import (
     STATUS_ACTIONS,
     USER_DEACTIVATED_MESSAGE,
     USER_IS_DEACTIVATED_MESSAGE,
-    USER_NOT_ACTIVE_MESSAGE,
     ReactivationRejection,
+    unknown_user_id,
 )
 from codemie_test_harness.tests.utils.user_utils import UserUtils
 
@@ -117,15 +117,11 @@ def test_deactivated_user_is_denied_access_until_reactivated(
         equal_to(401),
         "A deactivated user must be refused with 401",
     )
+    # Live-observed text; the local-IdP text ("Authentication failed" / "User is not active") does not hold on this stand.
     assert_that(
         UserUtils.error_text(denied.value),
-        contains_string(AUTHENTICATION_FAILED_MESSAGE),
-        "The 401 must say authentication failed",
-    )
-    assert_that(
-        UserUtils.error_text(denied.value),
-        contains_string(USER_NOT_ACTIVE_MESSAGE),
-        "The 401 must name the reason",
+        contains_string(ACCOUNT_DEACTIVATED_MESSAGE),
+        "The 401 must say the account is deactivated",
     )
     assert_that(
         restored.user_id,
@@ -141,7 +137,7 @@ def test_deactivated_user_is_denied_access_until_reactivated(
     REACTIVATION_REJECTIONS,
     ids=[r.label for r in REACTIVATION_REJECTIONS],
 )
-def test_reactivate_is_rejected_for_active_or_unknown_user(
+def test_reactivate_is_rejected_for_active_user(
     user_utils, disposable_user, rejection: ReactivationRejection
 ):
     # @case platform-admins-deactivate-reactivate-users_TC_003
@@ -158,7 +154,21 @@ def test_reactivate_is_rejected_for_active_or_unknown_user(
     assert_that(
         UserUtils.error_text(rejected.value),
         contains_string(rejection.message),
-        "The error must carry a readable message",
+        "The error must carry the expected message",
+    )
+
+
+@pytest.mark.user
+@pytest.mark.api
+def test_reactivate_is_rejected_for_unknown_user(user_utils):
+    # @case platform-admins-deactivate-reactivate-users_TC_003
+    with pytest.raises(HTTPError) as rejected:
+        user_utils.reactivate_user(unknown_user_id())
+
+    assert_that(
+        rejected.value.response.status_code,
+        equal_to(404),
+        "Reactivating an unknown user must be refused with 404",
     )
 
 

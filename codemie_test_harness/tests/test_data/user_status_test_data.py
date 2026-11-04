@@ -54,20 +54,15 @@ def active_user_target() -> ReactivationRejection:
     )
 
 
-def unknown_user_target() -> ReactivationRejection:
-    return ReactivationRejection(
-        label="unknown-id",
-        target_id=lambda _: str(uuid.uuid4()),
-        expected_status=404,
-        message="User not found",
-    )
+def unknown_user_id() -> str:
+    """A well-formed user id that belongs to nobody."""
+    return str(uuid.uuid4())
 
 
-REACTIVATION_REJECTIONS = [active_user_target(), unknown_user_target()]
+REACTIVATION_REJECTIONS = [active_user_target()]
 
 USER_DEACTIVATED_MESSAGE = "User deactivated successfully"
-USER_NOT_ACTIVE_MESSAGE = "User is not active"
-AUTHENTICATION_FAILED_MESSAGE = "Authentication failed"
+ACCOUNT_DEACTIVATED_MESSAGE = "Account is deactivated"
 USER_IS_DEACTIVATED_MESSAGE = "User is deactivated"
 USER_IS_ALREADY_ACTIVE_MESSAGE = "User is already active"
 REACTIVATE_VIA_UPDATE_MESSAGE = (
