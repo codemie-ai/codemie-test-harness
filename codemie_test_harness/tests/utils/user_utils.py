@@ -15,6 +15,7 @@
 import time
 from typing import List, Optional
 
+import requests
 from requests import HTTPError
 
 from codemie_sdk.models.user import (
@@ -24,6 +25,7 @@ from codemie_sdk.models.user import (
     PaginatedUserListResponse,
 )
 from codemie_test_harness.tests.utils.base_utils import BaseUtils
+from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 
 
 class UserUtils(BaseUtils):
@@ -162,8 +164,60 @@ class UserUtils(BaseUtils):
     def deactivate_user(self, user_id: str) -> None:
         self.client.users.deactivate_user(user_id=user_id)
 
+    def _admin_user_request(self, method: str, path: str) -> requests.Response:
+        """Call a user-management route the SDK does not wrap correctly yet.
+
+        The SDK's `reactivate_user` still sends PUT is_active=true, which the backend now refuses,
+        and its `deactivate_user` drops the response body. The request is made with the client's
+        own token; a 4xx/5xx raises HTTPError like an SDK call does.
+        """
+        api_domain = CredentialsManager.get_parameter("CODEMIE_API_DOMAIN").rstrip("/")
+        verify_ssl = (
+            CredentialsManager.get_parameter("VERIFY_SSL", "false").lower() == "true"
+        )
+        response = requests.request(
+            method,
+            f"{api_domain}{path}",
+            headers={"Authorization": f"Bearer {self.client.token}"},
+            verify=verify_ssl,
+        )
+        response.raise_for_status()
+        return response
+
     def reactivate_user(self, user_id: str) -> CodeMieUserDetail:
-        return self.client.users.reactivate_user(user_id=user_id)
+        """POST /v1/admin/users/{user_id}/reactivate."""
+        response = self._admin_user_request(
+            "POST", f"/v1/admin/users/{user_id}/reactivate"
+        )
+        return CodeMieUserDetail.model_validate(response.json())
+
+    def deactivate_user_message(self, user_id: str) -> str:
+        """DELETE /v1/admin/users/{user_id}; returns the `message` of the response body."""
+        response = self._admin_user_request("DELETE", f"/v1/admin/users/{user_id}")
+        return response.json()["message"]
+
+    def reactivate_user_status_code(self, user_id: str) -> int:
+        try:
+            self.reactivate_user(user_id)
+            return 200
+        except HTTPError as e:
+            return e.response.status_code
+
+    def get_display_name(self, user_id: str) -> str:
+        """Name the Users management page shows for the user (name, else username, else email)."""
+        detail = self.get_admin_user(user_id)
+        return detail.name or detail.username or detail.email
+
+    @staticmethod
+    def error_text(error: HTTPError) -> str:
+        """Message and details of a backend error body, joined; the raw body when it is not JSON."""
+        try:
+            body = error.response.json()
+        except ValueError:
+            return error.response.text
+        detail = body.get("error", body) if isinstance(body, dict) else {}
+        parts = [detail.get("message"), detail.get("details")]
+        return " ".join(str(part) for part in parts if part) or error.response.text
 
     def get_admin_user_status_code(self, user_id: str) -> int:
         try:
