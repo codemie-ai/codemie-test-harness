@@ -47,9 +47,12 @@ def project_sessions(isolated_projects, seed_cli_sessions, catalog_priced_model)
     catalog-priced model when there is one, so only the money checks need it."""
     model = catalog_priced_model.base_name if catalog_priced_model else SEED_MODEL
     seeds = get_project_isolation_session_seeds(model)
-    for project, project_seeds in seeds.items():
-        seed_cli_sessions(project_seeds, isolated_projects[project])
-    return seeds
+    return {
+        project: list(
+            seed_cli_sessions(project_seeds, isolated_projects[project]).values()
+        )
+        for project, project_seeds in seeds.items()
+    }
 
 
 @pytest.fixture(scope="module")

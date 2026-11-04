@@ -399,12 +399,29 @@ def seed_cli_sessions(analytics_utils, ingest_cli_sessions):
     """Factory that ingests session seeds and waits until all of them are rolled up.
 
     Returns the seeds keyed by ``CliSessionSeed.key``.
+
+    Safe to call again with the same keys. pytest-rerunfailures reruns a module fixture
+    whose setup failed, and that fixture builds new seeds with new session ids; sending
+    them would add a second copy of every session that was already stored. So a key sent
+    to a project before keeps its first seed. Seeds are sent one at a time: a seed whose
+    send was accepted is not sent again, and only the seed whose send failed part-way is
+    sent again, unchanged (the BE drops replayed events).
+
+    A key therefore names one session per project and module: calling again with a key
+    already used for that project returns the first seed, whatever the new seed holds.
+    Give a deliberately different session its own key.
     """
+    known: dict[tuple[str | None, str], CliSessionSeed] = {}
+    accepted: set[tuple[str | None, str]] = set()
 
     def _seed(
         seeds: list[CliSessionSeed], project_name: str | None = None
     ) -> dict[str, CliSessionSeed]:
-        ingest_cli_sessions(seeds, project_name)
+        seeds = [known.setdefault((project_name, seed.key), seed) for seed in seeds]
+        for seed in seeds:
+            if (project_name, seed.key) not in accepted:
+                ingest_cli_sessions([seed], project_name)
+                accepted.add((project_name, seed.key))
         for seed in seeds:
             analytics_utils.wait_for_cli_session(seed.session_id)
         return {seed.key: seed for seed in seeds}
