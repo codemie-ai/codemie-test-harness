@@ -143,6 +143,20 @@ class ProjectMembersBudgetSection(BasePage):
         return modal
 
     @step
+    def open_override_modal_from_category(
+        self, email: str, category_label: str
+    ) -> MemberBudgetOverrideModalPage:
+        """Open the override modal from one category's control in the member's row.
+
+        Needed when the row shows several categories, where ``open_override_modal``
+        would match more than one button.
+        """
+        self.category_allocation(email, category_label).click()
+        modal = MemberBudgetOverrideModalPage(self.page)
+        modal.should_be_visible()
+        return modal
+
+    @step
     def select_members(self, *emails: str):
         """Tick the selection checkbox of every given member and wait for the selection bar."""
         for email in emails:
@@ -160,8 +174,13 @@ class ProjectMembersBudgetSection(BasePage):
         return modal
 
     def allocation_text(self, email: str) -> str:
-        """Text currently shown on the member's allocation button."""
-        return self.allocation_button(email).inner_text()
+        """Text currently shown on the member's allocation button.
+
+        Read as ``text_content`` — the same source ``to_have_text`` compares against.
+        ``inner_text`` would add line breaks between the block-level spans
+        ('Platform\n$0.00\n/\n$33.33') that the DOM text ('Platform$0.00/$33.33') lacks.
+        """
+        return self.allocation_button(email).text_content()
 
     # ── Assertions ────────────────────────────────────────────────────────────
 
@@ -202,6 +221,14 @@ class ProjectMembersBudgetSection(BasePage):
     def should_show_fixed_allocation_marker(self, email: str):
         """Verify the member's allocation carries the 'Overridden' badge."""
         expect(self.allocation_button(email)).to_contain_text("Overridden")
+        return self
+
+    @step
+    def should_show_fixed_allocation_marker_for(self, email: str, category_label: str):
+        """Verify one category's allocation control of the member carries the 'Overridden' badge."""
+        expect(self.category_allocation(email, category_label)).to_contain_text(
+            "Overridden"
+        )
         return self
 
     @step

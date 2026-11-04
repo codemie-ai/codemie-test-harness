@@ -75,6 +75,14 @@ class MemberBudgetOverrideModalPage(BasePage):
         """Per-category 'Undo' action shown once 'Use project allocation' is pending."""
         return self.dialog.get_by_role("button", name="Undo")
 
+    def category_card(self, label: str):
+        """One category's card (e.g. 'Platform', 'CLI'), resolved from its heading.
+
+        The card is the nearest grid ancestor of the category heading.
+        """
+        heading = self.dialog.get_by_role("heading", name=label, exact=True)
+        return heading.locator("xpath=ancestor::div[contains(@class, 'grid')][1]")
+
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @step
@@ -87,6 +95,14 @@ class MemberBudgetOverrideModalPage(BasePage):
     def use_project_allocation(self):
         """Click 'Use project allocation' to drop the member's fixed override on save."""
         self.use_project_allocation_button.click()
+        return self
+
+    @step
+    def use_project_allocation_for(self, label: str):
+        """Click 'Use project allocation' on one category's card only."""
+        self.category_card(label).get_by_role(
+            "button", name="Use project allocation"
+        ).click()
         return self
 
     @step
@@ -111,10 +127,14 @@ class MemberBudgetOverrideModalPage(BasePage):
 
     @step
     def should_be_visible(self):
-        """Verify the override modal is open with both limit inputs and a save action."""
+        """Verify the override modal is open with limit inputs and a save action.
+
+        With several budget categories the modal holds one input pair per category;
+        the first pair stands for them.
+        """
         expect(self.dialog).to_be_visible()
-        expect(self.hard_limit_input).to_be_enabled()
-        expect(self.soft_limit_input).to_be_enabled()
+        expect(self.hard_limit_input.first).to_be_enabled()
+        expect(self.soft_limit_input.first).to_be_enabled()
         expect(self.save_override_button).to_be_visible()
         return self
 
@@ -143,4 +163,24 @@ class MemberBudgetOverrideModalPage(BasePage):
         """Verify the category is pending 'use project allocation' (action toggled to 'Undo')."""
         expect(self.undo_button).to_be_visible()
         expect(self.use_project_allocation_button).to_have_count(0)
+        return self
+
+    @step
+    def should_show_undo_for(self, label: str):
+        """Verify one category's card is pending 'use project allocation' ('Undo' offered)."""
+        card = self.category_card(label)
+        expect(card.get_by_role("button", name="Undo")).to_be_visible()
+        expect(card.get_by_role("button", name="Use project allocation")).to_have_count(
+            0
+        )
+        return self
+
+    @step
+    def should_still_offer_use_project_allocation_for(self, label: str):
+        """Verify one category's card still holds its override (no 'Undo' pending)."""
+        card = self.category_card(label)
+        expect(
+            card.get_by_role("button", name="Use project allocation")
+        ).to_be_visible()
+        expect(card.get_by_role("button", name="Undo")).to_have_count(0)
         return self
