@@ -99,6 +99,14 @@ class AdminProjectBudgetUtils(BaseUtils):
         resp.raise_for_status()
         return resp.json()
 
+    def get_member_allocation(self, budget_id: str, user_id: str) -> dict:
+        """Return the budget's member allocation entry of the user."""
+        allocations = {
+            allocation["user_id"]: allocation
+            for allocation in self.get_budget(budget_id)["member_allocations"]
+        }
+        return allocations[user_id]
+
     def rebalance_budget(self, budget_id: str) -> dict:
         resp = requests.post(
             f"{API_DOMAIN}/v1/admin/project-budgets/{budget_id}/rebalance",

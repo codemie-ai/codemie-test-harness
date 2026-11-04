@@ -677,14 +677,14 @@ rich = "14.0.0"
 
 [[package]]
 name = "codemie-sdk-python"
-version = "0.1.707"
+version = "0.1.708"
 description = "CodeMie SDK for Python"
 optional = false
 python-versions = "<4.0,>=3.12"
 groups = ["main"]
 files = [
-    {file = "codemie_sdk_python-0.1.707-py3-none-any.whl", hash = "sha256:1da333760c7600439d00e219f891737d909402f95b418f3cd4d33181b0933487"},
-    {file = "codemie_sdk_python-0.1.707.tar.gz", hash = "sha256:b47c39726ee77f74bbdb9ba0dedd1056274bb1d15de4fc95e082c904a5d78172"},
+    {file = "codemie_sdk_python-0.1.708-py3-none-any.whl", hash = "sha256:31e676c8cfb24ed1537d6079ddbcaa0f3159a284a9bfee398000fa58fbba5101"},
+    {file = "codemie_sdk_python-0.1.708.tar.gz", hash = "sha256:8f05de6b3f5cae28dda3899684e07377a9ea4e6bd78215506eab265566272a82"},
 ]
 
 [package.dependencies]
@@ -5177,4 +5177,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "85599372d5ac89ae92e7d4dd2778183e673f44673cf4d722fd0ceb2b9b126ff2"
+content-hash = "312bb071321c9c42e56d75efa89db99b7c03bb9b3dc4f73f1934a212beb0a314"
