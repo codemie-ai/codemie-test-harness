@@ -27,7 +27,17 @@ from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
 
 
 @pytest.fixture(scope="module")
-def replayed_sessions(analytics_utils, seed_cli_sessions, ingest_cli_sessions):
+def replayed_keys():
+    """Keys of the seeds whose replay was accepted. Lives apart from
+    ``replayed_sessions`` so a rerun of a failed setup of it does not replay them
+    a second time."""
+    return set()
+
+
+@pytest.fixture(scope="module")
+def replayed_sessions(
+    analytics_utils, seed_cli_sessions, ingest_cli_sessions, replayed_keys
+):
     """Sessions whose events were ingested, rolled up and then sent again unchanged.
 
     Each replay request also carries the session's end, the one event that is new.
@@ -35,9 +45,11 @@ def replayed_sessions(analytics_utils, seed_cli_sessions, ingest_cli_sessions):
     all of its stored events, so a rollup that shows the end has also counted
     whatever else that request stored.
     """
-    seeds = get_replay_session_seeds()
-    seed_cli_sessions(seeds)
-    ingest_cli_sessions([with_session_end(seed) for seed in seeds])
+    seeds = list(seed_cli_sessions(get_replay_session_seeds()).values())
+    for seed in seeds:
+        if seed.key not in replayed_keys:
+            ingest_cli_sessions([with_session_end(seed)])
+            replayed_keys.add(seed.key)
     for seed in seeds:
         analytics_utils.wait_for_cli_session_end(seed.session_id)
     return seeds

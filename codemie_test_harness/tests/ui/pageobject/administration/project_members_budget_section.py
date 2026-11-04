@@ -29,6 +29,9 @@ from hamcrest import assert_that, is_not, none
 from playwright.sync_api import expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.administration.bulk_budget_override_modal_page import (
+    BulkBudgetOverrideModalPage,
+)
 from codemie_test_harness.tests.ui.pageobject.administration.member_budget_override_modal_page import (
     MemberBudgetOverrideModalPage,
 )
@@ -78,6 +81,27 @@ class ProjectMembersBudgetSection(BasePage):
             "button", name=re.compile(rf"^{re.escape(category_label)}\b")
         )
 
+    def selection_checkbox(self, email: str):
+        """Selection checkbox cell of the member's row (bulk actions)."""
+        return self.member_row(email).locator("[data-selection-checkbox]")
+
+    @property
+    def bulk_actions_bar(self):
+        """The 'N selected' bar, located as the parent of its 'Clear selection' button."""
+        return self.page.get_by_role("button", name="Clear selection").locator(
+            "xpath=.."
+        )
+
+    @property
+    def bulk_actions_menu_button(self):
+        """'Bulk Actions' menu trigger inside the selection bar."""
+        return self.bulk_actions_bar.get_by_role("button", name="More options")
+
+    @property
+    def bulk_override_budgets_item(self):
+        """'Override budgets' item of the bulk actions menu."""
+        return self.page.get_by_role("menuitem", name="Override budgets")
+
     # ── Network capture ───────────────────────────────────────────────────────
 
     @step
@@ -118,6 +142,46 @@ class ProjectMembersBudgetSection(BasePage):
         modal.should_be_visible()
         return modal
 
+    @step
+    def open_override_modal_from_category(
+        self, email: str, category_label: str
+    ) -> MemberBudgetOverrideModalPage:
+        """Open the override modal from one category's control in the member's row.
+
+        Needed when the row shows several categories, where ``open_override_modal``
+        would match more than one button.
+        """
+        self.category_allocation(email, category_label).click()
+        modal = MemberBudgetOverrideModalPage(self.page)
+        modal.should_be_visible()
+        return modal
+
+    @step
+    def select_members(self, *emails: str):
+        """Tick the selection checkbox of every given member and wait for the selection bar."""
+        for email in emails:
+            self.selection_checkbox(email).click()
+        expect(self.bulk_actions_bar).to_contain_text(f"{len(emails)} selected")
+        return self
+
+    @step
+    def open_bulk_override_modal(self, user_count: int) -> BulkBudgetOverrideModalPage:
+        """Open 'Bulk Actions' > 'Override budgets' for the selected members."""
+        self.bulk_actions_menu_button.click()
+        self.bulk_override_budgets_item.click()
+        modal = BulkBudgetOverrideModalPage(self.page)
+        modal.should_be_visible(user_count)
+        return modal
+
+    def allocation_text(self, email: str) -> str:
+        """Text currently shown on the member's allocation button.
+
+        Read as ``text_content`` — the same source ``to_have_text`` compares against.
+        ``inner_text`` would add line breaks between the block-level spans
+        ('Platform\n$0.00\n/\n$33.33') that the DOM text ('Platform$0.00/$33.33') lacks.
+        """
+        return self.allocation_button(email).text_content()
+
     # ── Assertions ────────────────────────────────────────────────────────────
 
     @step
@@ -157,6 +221,26 @@ class ProjectMembersBudgetSection(BasePage):
     def should_show_fixed_allocation_marker(self, email: str):
         """Verify the member's allocation carries the 'Overridden' badge."""
         expect(self.allocation_button(email)).to_contain_text("Overridden")
+        return self
+
+    @step
+    def should_show_fixed_allocation_marker_for(self, email: str, category_label: str):
+        """Verify one category's allocation control of the member carries the 'Overridden' badge."""
+        expect(self.category_allocation(email, category_label)).to_contain_text(
+            "Overridden"
+        )
+        return self
+
+    @step
+    def should_not_show_fixed_allocation_marker(self, email: str):
+        """Verify the member's allocation does not carry the 'Overridden' badge."""
+        expect(self.allocation_button(email)).not_to_contain_text("Overridden")
+        return self
+
+    @step
+    def should_show_allocation_text(self, email: str, text: str):
+        """Verify the member's allocation button shows exactly the given text."""
+        expect(self.allocation_button(email)).to_have_text(text)
         return self
 
     @step
