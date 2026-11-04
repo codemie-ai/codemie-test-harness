@@ -18,6 +18,7 @@ Covers:
     TC-001  user.created event stored when user is added
     TC-002  user.updated event stored when user profile is changed
     TC-003  user.deactivated event stored when user is deactivated
+    TC-003b user.reactivated event stored when user is reactivated
     TC-005  user.project.assigned and user.project.removed events stored in sequence
     TC-012  user.project.role_updated event stored when user role is changed
 
@@ -177,6 +178,61 @@ def test_user_deactivated_audit_record_stored(
         record.entity_type,
         equal_to("user"),
         "entity_type should be user",
+    )
+
+
+# ---------------------------------------------------------------------------
+# TC-003b: user.reactivated
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.activity
+@pytest.mark.api
+def test_user_reactivated_audit_record_stored(
+    activity_utils, user_utils, disposable_user
+):
+    """TC-003b: user.reactivated audit record is stored when a deactivated user is reactivated."""
+    # @case platform-admins-deactivate-reactivate-users_TC_011
+    _, user_id, _ = disposable_user
+    actor_id = user_utils.get_about_me().user_id
+    user_utils.deactivate_user(user_id)
+
+    user_utils.reactivate_user(user_id)
+
+    response = activity_utils.list_activity_events(
+        entity_id=user_id,
+        event_type=["user.reactivated"],
+    )
+    assert_that(
+        len(response.data),
+        equal_to(1),
+        "Exactly one user.reactivated event should exist for the user",
+    )
+    record = response.data[0]
+    assert_that(
+        record.event_type,
+        equal_to("user.reactivated"),
+        "event_type should be user.reactivated",
+    )
+    assert_that(
+        record.domain,
+        equal_to("user_management"),
+        "domain should be user_management",
+    )
+    assert_that(
+        record.entity_type,
+        equal_to("user"),
+        "entity_type should be user",
+    )
+    assert_that(
+        record.entity_id,
+        equal_to(user_id),
+        "entity_id should match the reactivated user's ID",
+    )
+    assert_that(
+        record.actor_id,
+        equal_to(actor_id),
+        "actor_id should be the admin who reactivated the user",
     )
 
 

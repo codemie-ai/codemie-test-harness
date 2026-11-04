@@ -165,6 +165,33 @@ class UserUtils(BaseUtils):
     def reactivate_user(self, user_id: str) -> CodeMieUserDetail:
         return self.client.users.reactivate_user(user_id=user_id)
 
+    def deactivate_user_message(self, user_id: str) -> str:
+        """Deactivate the user; returns the `message` of the response body."""
+        return self.client.users.deactivate_user(user_id=user_id)["message"]
+
+    def reactivate_user_status_code(self, user_id: str) -> int:
+        try:
+            self.reactivate_user(user_id)
+            return 200
+        except HTTPError as e:
+            return e.response.status_code
+
+    def get_display_name(self, user_id: str) -> str:
+        """Name the Users management page shows for the user (name, else username, else email)."""
+        detail = self.get_admin_user(user_id)
+        return detail.name or detail.username or detail.email
+
+    @staticmethod
+    def error_text(error: HTTPError) -> str:
+        """Message and details of a backend error body, joined; the raw body when it is not JSON."""
+        try:
+            body = error.response.json()
+        except ValueError:
+            return error.response.text
+        detail = body.get("error", body) if isinstance(body, dict) else {}
+        parts = [detail.get("message"), detail.get("details")]
+        return " ".join(str(part) for part in parts if part) or error.response.text
+
     def get_admin_user_status_code(self, user_id: str) -> int:
         try:
             self.client.users.get_admin_user(user_id)

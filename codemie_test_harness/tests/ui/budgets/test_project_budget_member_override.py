@@ -65,6 +65,9 @@ def test_project_admin_overrides_member_allocation_via_ui(
     members.should_show_override_control(member_email)
 
     modal = members.open_override_modal(member_email)
+    # @case remove-reset-budget-usage_TC_004
+    modal.should_not_offer_reset_budget_usage()
+    modal.should_offer_cancel_save_and_reason()
     modal.set_hard_limit(override.hard_limit)
     modal.set_soft_limit(override.soft_limit)
     modal.save_override()
