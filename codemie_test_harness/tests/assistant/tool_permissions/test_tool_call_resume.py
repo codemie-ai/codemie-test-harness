@@ -33,9 +33,11 @@ from __future__ import annotations
 
 
 import pytest
+import requests
 from hamcrest import assert_that, equal_to, contains_string, greater_than
 
 from codemie_sdk.models.assistant import ToolCallAction, ToolCallResumeRequest
+from codemie_test_harness.tests import API_DOMAIN, VERIFY_SSL
 from codemie_test_harness.tests.enums.tools import ResearchToolName
 from codemie_test_harness.tests.test_data.tool_call_permissions_test_data import (
     approval_research_tools,
@@ -58,6 +60,37 @@ def _consume_resume_stream(response) -> list[dict]:
     )
 
     return list(_iter_stream_chunks(response))
+
+
+def _thought(chunk: dict) -> dict:
+    """The chunk's thought; the final chunk carries ``"thought": null``."""
+    return chunk.get("thought") or {}
+
+
+def _saved_thoughts(conversation_id: str) -> list[dict]:
+    """Every thought saved in the conversation history, children included.
+
+    Read from the raw conversation JSON: the SDK ``Thought`` model has no
+    ``aborted`` field.
+    """
+    response = requests.get(
+        f"{API_DOMAIN}/v1/conversations/{conversation_id}",
+        headers={"Authorization": f"Bearer {get_client().token}"},
+        verify=VERIFY_SSL,
+    )
+    response.raise_for_status()
+
+    found: list[dict] = []
+
+    def walk(thoughts) -> None:
+        for thought in thoughts or []:
+            if isinstance(thought, dict):
+                found.append(thought)
+                walk(thought.get("children"))
+
+    for item in response.json().get("history") or []:
+        walk(item.get("thoughts"))
+    return found
 
 
 # ---------------------------------------------------------------------------
@@ -119,13 +152,13 @@ def test_resume_allow_returns_ndjson_stream(pending_tool_call):
     # "Codemie Thoughts" that is not interrupted.
     non_final = chunks[:-1]
     tool_executed = any(
-        chunk.get("thought", {}).get("metadata", {}).get("replay_type") == "tool"
-        and not chunk.get("thought", {}).get("in_progress")
+        (_thought(chunk).get("metadata") or {}).get("replay_type") == "tool"
+        and not _thought(chunk).get("in_progress")
         for chunk in non_final
     )
     llm_continued = any(
-        chunk.get("thought", {}).get("author_name") == "Codemie Thoughts"
-        and not chunk.get("thought", {}).get("interrupted")
+        _thought(chunk).get("author_name") == "Codemie Thoughts"
+        and not _thought(chunk).get("interrupted")
         for chunk in non_final
     )
     assert_that(
@@ -149,9 +182,10 @@ def test_resume_allow_returns_ndjson_stream(pending_tool_call):
 @pytest.mark.assistant
 def test_resume_deny_returns_ndjson_stream_with_aborted_thought(pending_tool_call):
     """
-    POST /resume with action=deny returns HTTP 200 NDJSON stream.  The stream
-    must contain an aborted thought with message 'Tool call was denied by the user.'
-    and the tool must NOT have been executed.
+    POST /resume with action=deny returns HTTP 200 NDJSON stream in which the
+    tool is NOT executed. The denied step is saved in the conversation history
+    as an aborted thought with message 'Tool call was denied by the user.'; the
+    stream itself does not repeat it.
 
     AC-4: Clicking Deny injects denial ToolMessages for all tool_call_ids without
     executing the tool; the LLM streams a continuation acknowledging the denial.
@@ -182,7 +216,7 @@ def test_resume_deny_returns_ndjson_stream_with_aborted_thought(pending_tool_cal
         "POST /resume with action=deny must return application/x-ndjson content-type",
     )
 
-    # Step 2: Consume stream — must contain the denial aborted thought
+    # Step 2: Consume stream — the tool must not run
     chunks = _consume_resume_stream(response)
     assert_that(
         len(chunks),
@@ -190,27 +224,39 @@ def test_resume_deny_returns_ndjson_stream_with_aborted_thought(pending_tool_cal
         "Deny resume stream must produce at least one NDJSON chunk",
     )
 
-    # AC-4 observable: denied thought must carry both the denial message AND
-    # aborted=True (backend:tool_call_confirmation_mixin.py:~154).
-    # Checking only the message text would pass a non-aborted thought that
-    # happens to include the denial string — check both fields together.
-    denied_message_found = any(
-        chunk.get("thought", {}).get("message") == _TOOL_CALL_DENIED
-        and chunk.get("thought", {}).get("aborted") is True
-        for chunk in chunks
-    )
-    assert_that(
-        denied_message_found,
-        equal_to(True),
-        f"Resume stream for deny must contain a thought with message "
-        f"'{_TOOL_CALL_DENIED}' AND aborted=True. Chunks received: {chunks[:3]}",
-    )
-
     last_chunk = chunks[-1]
     assert_that(
         last_chunk.get("last"),
         equal_to(True),
         f"Deny resume stream must close with a chunk where last=True; got last chunk: {last_chunk}",
+    )
+
+    tool_executed = any(
+        (_thought(chunk).get("metadata") or {}).get("replay_type") == "tool"
+        and not _thought(chunk).get("in_progress")
+        and not _thought(chunk).get("aborted")
+        for chunk in chunks
+    )
+    assert_that(
+        tool_executed,
+        equal_to(False),
+        f"Denied tool call must not be executed. Chunks: {chunks[:5]}",
+    )
+
+    # Step 3: The saved history holds the denied step. Both the message AND
+    # aborted=True are checked: the message alone would also match a
+    # non-aborted thought that happens to include the denial text.
+    saved = _saved_thoughts(conversation_id)
+    denied_step_saved = any(
+        thought.get("message") == _TOOL_CALL_DENIED and thought.get("aborted") is True
+        for thought in saved
+    )
+    assert_that(
+        denied_step_saved,
+        equal_to(True),
+        f"Conversation history must hold a thought with message "
+        f"'{_TOOL_CALL_DENIED}' AND aborted=True. Saved thoughts: "
+        f"{[(t.get('message'), t.get('aborted')) for t in saved]}",
     )
 
 
