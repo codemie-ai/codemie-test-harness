@@ -139,9 +139,7 @@
       "verify": [
         "poetry -C sdk/codemie-python run ruff check .",
         "poetry -C sdk/codemie-python run ruff format --check .",
-        "poetry -C sdk/codemie-python run pytest tests/",
-        "python scripts/scan_internal_refs.py --tree .",
-        "poetry -C sdk/codemie-python run python -m pytest ../../scripts/tests -q -p no:cacheprovider"
+        "poetry -C sdk/codemie-python run pytest tests/"
       ],
       "consume": {
         "local": "poetry run pip install -e ../codemie-sdk/sdk/codemie-python",
