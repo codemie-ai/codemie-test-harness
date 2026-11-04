@@ -31,7 +31,10 @@ from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
 from codemie_test_harness.tests.test_data.projects_test_data import (
     get_project_create_data,
 )
-from codemie_test_harness.tests.utils.analytics_utils import AnalyticsUtils
+from codemie_test_harness.tests.utils.analytics_utils import (
+    CLI_ANALYTICS_FEATURE_ID,
+    AnalyticsUtils,
+)
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     CliAnalyticsApi,
     assert_project_deleted,
@@ -43,6 +46,15 @@ from codemie_test_harness.tests.utils.cli_gate_utils import (
     assert_sent_accepted,
     send_tracked,
     wait_until_listed,
+)
+from codemie_test_harness.tests.utils.cli_classification_utils import (
+    ClassifiedSender,
+    CorporateList,
+    OrganizationPlan,
+    Provisioner,
+    new_remote,
+    unique_organization,
+    wait_for_policy,
 )
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
@@ -410,3 +422,115 @@ def seed_cli_sessions(analytics_utils, ingest_cli_sessions):
         return {seed.key: seed for seed in seeds}
 
     return _seed
+
+
+# ── Session classification and routing ──────────────────────────────────────────
+
+
+@pytest.fixture
+def provisioner(
+    cli_analytics_enabled,
+    keycloak_utils,
+    admin_utils,
+    user_utils,
+    project_utils,
+    gate_admin_client,
+):
+    """Users, shared projects and repository registrations made by one test, all removed after it."""
+    created = Provisioner(
+        keycloak_utils, admin_utils, user_utils, project_utils, gate_admin_client
+    )
+    yield created
+    created.cleanup()
+
+
+@pytest.fixture(scope="module")
+def module_provisioner(
+    cli_analytics_enabled,
+    keycloak_utils,
+    admin_utils,
+    user_utils,
+    project_utils,
+    gate_admin_client,
+):
+    """Like `provisioner`, for worlds shared by the tests of one module."""
+    created = Provisioner(
+        keycloak_utils, admin_utils, user_utils, project_utils, gate_admin_client
+    )
+    yield created
+    created.cleanup()
+
+
+@dataclass
+class ClassificationWorld:
+    sender: ClassifiedSender  # an ordinary user, a member of `project`
+    project: str  # shared, CLI analytics enabled
+    admin_api: CliAnalyticsApi  # a global admin: lists the shared sessions
+
+
+@pytest.fixture(scope="module")
+def classification_world(module_provisioner, gate_admin_client):
+    sender = module_provisioner.sender()
+    project = module_provisioner.project(sender)
+    return ClassificationWorld(sender, project, CliAnalyticsApi(gate_admin_client))
+
+
+@dataclass
+class RoutingWorld:
+    """Projects A, B and D are the sender's (D is the default); N is enabled but the sender is
+    no member. The remotes of B and N are registered to them."""
+
+    sender: ClassifiedSender
+    admin_api: CliAnalyticsApi
+    projects: dict
+    remotes: dict
+
+    def project(self, key: str | None) -> str | None:
+        return self.projects.get(key)
+
+    def remote(self, key: str | None) -> str | None:
+        return self.remotes.get(key)
+
+
+@pytest.fixture(scope="module")
+def routing_world(module_provisioner, gate_admin_client):
+    sender = module_provisioner.sender()
+    projects = {key: module_provisioner.project(sender) for key in ("A", "B", "D")}
+    projects["N"] = module_provisioner.project()
+    module_provisioner.set_default(sender, projects["D"])
+    remotes = {"B": new_remote(), "N": new_remote()}
+    module_provisioner.register(projects["B"], remotes["B"])
+    module_provisioner.register(projects["N"], remotes["N"])
+    return RoutingWorld(sender, CliAnalyticsApi(gate_admin_client), projects, remotes)
+
+
+@pytest.fixture
+def corporate_list(cli_analytics_enabled, customer_config_utils, gate_admin_client):
+    """The installation's corporate organization list: `.set(organizations)` writes it through
+    the customer config and waits until the classification policy shows it; the setting is put
+    back (an own override kept, a default restored) when the test ends."""
+    declaration = customer_config_utils.get_declaration(CLI_ANALYTICS_FEATURE_ID)
+    original = declaration["value"]
+    api = CliAnalyticsApi(gate_admin_client)
+    handle = CorporateList(customer_config_utils, CLI_ANALYTICS_FEATURE_ID, original)
+    yield lambda organizations: handle.set(api, organizations)
+    if declaration["overridden"]:
+        customer_config_utils.save_setting(CLI_ANALYTICS_FEATURE_ID, original)
+    else:
+        customer_config_utils.reset_setting(CLI_ANALYTICS_FEATURE_ID)
+    wait_for_policy(
+        api,
+        [
+            line.strip()
+            for line in str(original.get("corporateOrganizations") or "").splitlines()
+            if line.strip()
+        ],
+    )
+
+
+@pytest.fixture
+def organizations(corporate_list):
+    """Two fresh organization names; the corporate list is set to the first one only."""
+    plan = OrganizationPlan(unique_organization(), unique_organization())
+    corporate_list([plan.corporate])
+    return plan
