@@ -94,6 +94,12 @@ def new_remote() -> str:
     return f"https://example.com/autotest/{uuid.uuid4().hex}.git"
 
 
+def cli_repo_key(remote: str) -> str:
+    """The repository as the CLI sends it: the credential-free `host[:port]/path` form, with no
+    scheme, no `.git` and no trailing slash (the CLI's `repoKeyFromRemote`)."""
+    return remote.split("://", 1)[-1].rstrip("/").removesuffix(".git")
+
+
 def encode_organization(organization: str) -> str:
     """The value of X-CodeMie-Organization-Encoded: utf8-b64u.v1:<unpadded base64url>."""
     payload = base64.urlsafe_b64encode(organization.encode("utf-8")).decode()

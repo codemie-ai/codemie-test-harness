@@ -35,6 +35,7 @@ from codemie_test_harness.tests.test_data.cli_classification_test_data import (
     PERSONAL,
     PLACEMENT_ROWS,
     PROFILE_ROWS,
+    REGISTERED_REPOSITORY,
     SESSION_ID_REQUIRED,
     SESSION_OWNER_CONFLICT,
     SESSION_PROJECT_UNAVAILABLE,
@@ -49,6 +50,7 @@ from codemie_test_harness.tests.utils.cli_classification_utils import (
     ClassifiedSender,
     assert_rejected,
     assert_session_discarded,
+    cli_repo_key,
     evidence_headers,
     further_event,
     listed_session_ids_with,
@@ -127,6 +129,55 @@ def test_destination_follows_link_then_registration_then_default(
         routing_of(stored),
         equal_to(_routing(row.subscription, row.origin, row.note)),
         f"the session must be stored in project {row.project} with this classification and note",
+    )
+
+
+# @case classify-cli-sessions-by-subscription_TC_005
+# @case classify-cli-sessions-by-subscription_TC_009
+@pytest.mark.cli_analytics
+@pytest.mark.not_for_parallel_run
+@pytest.mark.parametrize(
+    "subscription",
+    [
+        pytest.param(UNKNOWN, id="native-unknown"),
+        pytest.param(CORPORATE, id="managed-corporate"),
+    ],
+)
+@pytest.mark.api
+def test_repository_as_the_cli_sends_it_routes_to_the_registered_project(
+    routing_world, organizations, subscription
+):
+    """The CLI names the repository as `host/path` (no scheme, no `.git`), not as the URL that was
+    registered. A session with no project header and that repository must still be stored in the
+    registered project (origin registered_repository, no route note), not in the default project."""
+    world = routing_world
+    batch = new_session()
+
+    response = send_evidence(
+        world.sender.client,
+        batch,
+        repo_remote=cli_repo_key(world.remote("B")),
+        **_classification(subscription, organizations),
+    )
+
+    assert_accepted(response, "event-hooks", CT_NDJSON)
+    stored = wait_for_session_row(world.admin_api, batch.session_id, batch.repo)
+    assert_that(
+        routing_of(stored),
+        equal_to(_routing(subscription, REGISTERED_REPOSITORY)),
+        "the session must be routed by the registered repository, not left to the default project",
+    )
+    assert_that(
+        len(
+            session_rows(
+                world.admin_api,
+                batch.session_id,
+                batch.repo,
+                projects=world.project("B"),
+            )
+        ),
+        equal_to(1),
+        "the session must be listed in the project the repository is registered to",
     )
 
 
