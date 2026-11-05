@@ -21,7 +21,7 @@ from uuid import uuid4
 PROJECT_NOT_FOUND_MESSAGE = "Project not found"
 
 # Error body returned when the target user id does not belong to any user
-# (ProjectService.update_project_ownership -> require_active_user, EPMCDME-13928).
+# (ProjectService.update_project_ownership -> require_active_user).
 USER_NOT_FOUND_MESSAGE = "User not found"
 
 # Error body returned when the project is personal (ProjectService.ERRORS.PERSONAL_UPDATE).
