@@ -69,6 +69,7 @@ from codemie_test_harness.tests.utils.cli_gate_utils import (
 )
 
 LINKED = {"project_source": "linked_folder"}
+EXTERNAL_USER_TYPE = "external"
 
 
 def _routing(subscription_type, project_origin, route_note=None):
@@ -245,14 +246,27 @@ def test_personal_session_of_an_ordinary_user_ignores_the_profile_project(
 
 @pytest.fixture
 def stranded_sender(provisioner, user_utils):
-    """An ordinary user with no project membership at all, so no default project exists."""
+    """A user whose only project is the personal project it can no longer receive sessions in.
+
+    An administrator cannot detach a user from its personal project (the membership endpoint
+    answers 403 for it), so the user is changed to the external user type instead: such a user
+    never receives a new session in a personal project, and has no other project, so neither a
+    link, a registration nor a default project is usable.
+    """
     sender = provisioner.sender()
     for project_name in user_utils.get_user_project_names(sender.user_id):
-        user_utils.remove_user_from_project(sender.user_id, project_name)
+        if project_name.lower() != sender.email.lower():
+            user_utils.remove_user_from_project(sender.user_id, project_name)
+    user_utils.update_admin_user(sender.user_id, user_type=EXTERNAL_USER_TYPE)
     assert_that(
-        user_utils.get_user_project_names(sender.user_id),
-        empty(),
-        "setup: the user still has a project membership, so it still has a default project",
+        [name.lower() for name in user_utils.get_user_project_names(sender.user_id)],
+        equal_to([sender.email.lower()]),
+        "setup: the user must keep only its personal project, so it has no other default project",
+    )
+    assert_that(
+        user_utils.get_admin_user(sender.user_id).user_type,
+        equal_to(EXTERNAL_USER_TYPE),
+        "setup: the user must be of the external type, which has no usable personal project",
     )
     return sender
 
@@ -263,9 +277,10 @@ def stranded_sender(provisioner, user_utils):
 def test_session_without_any_usable_destination_is_a_retryable_503_and_stored_nowhere(
     provisioner, stranded_sender, gate_admin_client
 ):
-    """A session with no link, no registration and no usable default project gets a retryable
-    503 default_project_unavailable, and no other project receives it: a control session of
-    another user is listed, this one is never listed within the window."""
+    """A session of an external user (no personal project to receive it) with no link, no
+    registration and no other project gets a retryable 503 default_project_unavailable, and no
+    other project receives it: a control session of another user is listed, this one is never
+    listed within the window."""
     admin_api = CliAnalyticsApi(gate_admin_client)
     member = provisioner.sender()
     reachable = provisioner.project(member)

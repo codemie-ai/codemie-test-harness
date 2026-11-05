@@ -73,8 +73,14 @@ ROUTED_CASES = [
 ORGANIZATION_SPELLINGS = [
     pytest.param(lambda organization: {"organization": organization}, id="plain"),
     pytest.param(
-        lambda organization: {"organization": f"  {organization.upper()}  "},
-        id="case-and-whitespace-varied",
+        lambda organization: {"organization": organization.upper()},
+        id="upper-case",
+    ),
+    pytest.param(
+        lambda organization: {
+            "organization_encoded": encode_organization(f"  {organization.upper()}  ")
+        },
+        id="utf8-b64u-v1-encoded-padded-and-upper-case",
     ),
     pytest.param(
         lambda organization: {
@@ -87,11 +93,43 @@ ORGANIZATION_SPELLINGS = [
 
 # ── Classification header validation ────────────────────────────────────────────
 
+# Limits of the encoded organization: payload at most 1366 characters, decoded at most 1024 bytes
+# and 256 code points. A code point is at most 4 bytes, so 256 code points never exceed 1024 bytes,
+# and 1024 bytes are exactly 1366 unpadded base64url characters: only the code-point limit can be
+# broken alone (257 one-byte characters); the byte and payload limits can only be broken together
+# with it. Every value is printable text, so a refusal can only come from a size limit.
+MAX_ORGANIZATION_CODE_POINTS = 256
+MAX_ORGANIZATION_BYTES = 1024
+FOUR_BYTE_CODE_POINT = "\U0001f600"
+
 INVALID_ORGANIZATION_ENVELOPES = [
     pytest.param(f"{ORGANIZATION_ENCODING}:!!not-base64url!!", id="malformed-payload"),
-    pytest.param(f"{ORGANIZATION_ENCODING}:" + "A" * 1400, id="over-the-size-limit"),
+    pytest.param(
+        encode_organization("a" * (MAX_ORGANIZATION_CODE_POINTS + 1)),
+        id="over-256-code-points-under-1024-bytes",
+    ),
+    pytest.param(
+        encode_organization("a" * (MAX_ORGANIZATION_BYTES + 1)),
+        id="over-1024-bytes-1366-payload-characters-and-256-code-points",
+    ),
+    pytest.param(
+        encode_organization(FOUR_BYTE_CODE_POINT * (MAX_ORGANIZATION_CODE_POINTS + 1)),
+        id="over-1024-bytes-with-four-byte-code-points",
+    ),
     pytest.param(encode_organization("org\x07name"), id="control-character"),
     pytest.param("utf8-b64u.v0:YWJj", id="unsupported-version"),
+]
+
+# Printable values exactly at the limits: accepted and classified from the decoded name.
+ORGANIZATION_ENVELOPES_AT_THE_LIMIT = [
+    pytest.param(
+        encode_organization("a" * MAX_ORGANIZATION_CODE_POINTS),
+        id="256-code-points-256-bytes",
+    ),
+    pytest.param(
+        encode_organization(FOUR_BYTE_CODE_POINT * MAX_ORGANIZATION_CODE_POINTS),
+        id="256-code-points-1024-bytes-1366-payload-characters",
+    ),
 ]
 
 CLAIMED_TYPES_NEEDING_ORGANIZATION = ["personal", "corporate"]
