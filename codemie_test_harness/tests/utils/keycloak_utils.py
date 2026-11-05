@@ -90,7 +90,26 @@ class KeycloakUtils:
         """Create a user with developer role only (no platform admin)."""
         return self._create_user(email, email, role_names=("developer",))
 
-    def _create_user(self, email: str, project_name: str, role_names: tuple) -> str:
+    def create_platform_user_of_type(self, email: str, user_type: str) -> str:
+        """Create a developer-role user whose first login already reports `user_type`.
+
+        The user carries the `user_type` attribute and no `applications` attribute, so no
+        project, and no personal project, exists for it before a test adds one.
+        """
+        return self._create_user(
+            email,
+            None,
+            role_names=("developer",),
+            extra_attributes={"user_type": [user_type]},
+        )
+
+    def _create_user(
+        self,
+        email: str,
+        project_name: str | None,
+        role_names: tuple,
+        extra_attributes: dict | None = None,
+    ) -> str:
         password = self._generate_password()
         headers = self._get_headers()
 
@@ -137,9 +156,11 @@ class KeycloakUtils:
         user_data = get_user_response.json()
 
         attributes = user_data.get("attributes", {})
-        attributes["applications"] = (
-            [email, project_name] if project_name != email else [email]
-        )
+        if project_name is not None:
+            attributes["applications"] = (
+                [email, project_name] if project_name != email else [email]
+            )
+        attributes.update(extra_attributes or {})
         user_data["attributes"] = attributes
 
         put_user_response = self._session.put(

@@ -34,6 +34,11 @@ import requests
 from codemie_sdk import CodeMieClient
 from hamcrest import assert_that, contains_string, empty, equal_to, has_length
 
+from codemie_test_harness.tests.test_data.cli_account_test_data import (
+    PROJECT_ADMIN,
+    REGULAR,
+    AccountSpec,
+)
 from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     E7,
     PRESENCE_POLL_S,
@@ -73,6 +78,7 @@ HEADER_REPO_REMOTE = "X-CodeMie-Repo-Remote"
 ORGANIZATION_ENCODING = "utf8-b64u.v1"
 ROUTING_FIELDS = ("subscription_type", "project_origin", "route_note")
 _POLICY_STREAK = 3
+_PROFILE_STREAK = 4
 
 
 # ── Names, remotes, organizations ───────────────────────────────────────────────
@@ -278,6 +284,18 @@ def listed_session_ids_with(api: CliAnalyticsApi, **filters) -> set:
     return {row["trace_id"] for row in listed_rows(api, **filters)}
 
 
+LINKED = {"project_source": "linked_folder"}
+
+
+def expected_routing(subscription_type, project_origin, route_note=None) -> dict:
+    """The routing fields a session row must carry, as `routing_of` returns them."""
+    return {
+        "subscription_type": subscription_type,
+        "project_origin": project_origin,
+        "route_note": route_note,
+    }
+
+
 def routing_of(row: dict) -> dict:
     """subscription_type, project_origin and route_note of a session row."""
     return {field: row.get(field) for field in ROUTING_FIELDS}
@@ -370,6 +388,34 @@ class CorporateList:
         return wait_for_policy(api, organizations)
 
 
+# ── Waiting for an account change to be active ──────────────────────────────────
+
+
+def wait_until_profile(client: CodeMieClient, matches, what: str) -> None:
+    """Wait until several consecutive profile reads (GET /v1/user, each possibly served by another
+    replica) satisfy `matches(profile)`; fails naming `what` otherwise."""
+    api = CliAnalyticsApi(client)
+    streak = [0]
+
+    def _read() -> dict:
+        response = api.request("GET", "/v1/user")
+        assert_that(
+            response.status_code,
+            equal_to(200),
+            f"profile: {response.status_code} {response.text[:200]}",
+        )
+        profile = response.json()
+        streak[0] = streak[0] + 1 if matches(profile) else 0
+        return profile
+
+    poll_until(_read, lambda _: streak[0] >= _PROFILE_STREAK, 120, 2)
+    assert_that(
+        streak[0] >= _PROFILE_STREAK,
+        equal_to(True),
+        f"{what} did not become effective on every replica",
+    )
+
+
 # ── Disposable users, projects and repository registrations ─────────────────────
 
 
@@ -427,6 +473,125 @@ class Provisioner:
             self._user_utils.assign_user_to_project(member.user_id, name)
             wait_until_accessible(member.client, [name])
         return name
+
+    def account(
+        self, spec: AccountSpec, project: str | None = None
+    ) -> ClassifiedSender:
+        """A fresh user of the kind `spec`, joined to `project` when one is given.
+
+        Returns once the user type, global roles and project role are active on every replica
+        and the stored state (admin view of the user and of its memberships) shows exactly the
+        kind: the assertions fail naming the difference, so a test never runs on a wrong kind.
+        """
+        email = f"autotest_clicls_{secrets.token_hex(4)}@email.com"
+        if spec.first_login_type == REGULAR:
+            password = self._keycloak.create_platform_user(email=email)
+        else:
+            password = self._keycloak.create_platform_user_of_type(
+                email, spec.first_login_type
+            )
+        self._emails.append(email)
+        client = get_client(username=email, password=password)
+        account = ClassifiedSender(
+            email=email, client=client, user_id=client.users.about_me().user_id
+        )
+        changes = {}
+        if spec.user_type != spec.first_login_type:
+            changes["user_type"] = spec.user_type
+        if spec.is_maintainer:
+            changes["is_maintainer"] = True
+        if spec.is_auditor:
+            changes["is_auditor"] = True
+        if changes:
+            self._user_utils.update_admin_user(account.user_id, **changes)
+        if project:
+            self._assign(account, project, spec.project_role == PROJECT_ADMIN)
+        self._wait_until_profile_shows(account, spec, project)
+        self._assert_stored_state(account, spec, project)
+        return account
+
+    def project_names_of(self, account: ClassifiedSender) -> list[str]:
+        """The names of the projects the account is a member of (the admin view)."""
+        return self._user_utils.get_user_project_names(account.user_id)
+
+    def join(
+        self, account: ClassifiedSender, project: str, project_admin: bool = False
+    ) -> None:
+        """Make an existing account a member (or admin) of `project` and wait until it is active."""
+        self._assign(account, project, project_admin)
+        wait_until_profile(
+            account.client,
+            lambda profile: project in profile["applications"]
+            and (project in profile["applications_admin"]) == project_admin,
+            f"membership of {project}",
+        )
+
+    def _assign(
+        self, account: ClassifiedSender, project: str, project_admin: bool
+    ) -> None:
+        self._user_utils.assign_user_to_project(
+            account.user_id, project, is_project_admin=project_admin
+        )
+        wait_until_accessible(account.client, [project])
+
+    def _wait_until_profile_shows(
+        self, account: ClassifiedSender, spec: AccountSpec, project: str | None
+    ) -> None:
+        wait_until_profile(
+            account.client,
+            lambda profile: (
+                profile["user_type"],
+                profile["is_maintainer"],
+                profile["is_auditor"],
+                bool(project) and project in profile["applications_admin"],
+            )
+            == (
+                spec.user_type,
+                spec.is_maintainer,
+                spec.is_auditor,
+                bool(project) and spec.project_role == PROJECT_ADMIN,
+            ),
+            f"the {spec.name} account",
+        )
+
+    def _assert_stored_state(
+        self, account: ClassifiedSender, spec: AccountSpec, project: str | None
+    ) -> None:
+        response = self._admin_api.request("GET", f"/v1/admin/users/{account.user_id}")
+        assert_that(
+            response.status_code,
+            equal_to(200),
+            f"setup: reading the {spec.name} account: {response.status_code}",
+        )
+        stored = response.json()
+        assert_that(
+            {
+                field: stored.get(field)
+                for field in ("user_type", "is_maintainer", "is_auditor", "is_admin")
+            },
+            equal_to(
+                {
+                    "user_type": spec.user_type,
+                    "is_maintainer": spec.is_maintainer,
+                    "is_auditor": spec.is_auditor,
+                    # a maintainer is stored as a global admin as well
+                    "is_admin": spec.is_maintainer,
+                }
+            ),
+            f"setup: the stored user type and global roles of the {spec.name} account",
+        )
+        memberships = {
+            membership.project_name.lower(): membership.is_project_admin
+            for membership in self._user_utils.get_user_projects(account.user_id)
+        }
+        expected = {account.email.lower(): False} if spec.has_personal_project else {}
+        if project:
+            expected[project.lower()] = spec.project_role == PROJECT_ADMIN
+        assert_that(
+            memberships,
+            equal_to(expected),
+            f"setup: the stored project memberships of the {spec.name} account",
+        )
 
     def set_default(self, sender: ClassifiedSender, project: str) -> None:
         self._user_utils.set_default_project(sender.user_id, project)
