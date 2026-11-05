@@ -33,6 +33,7 @@ from codemie_test_harness.tests.test_data.cli_classification_test_data import (
     DEFAULT_PROJECT,
     INVALID_ORGANIZATION_ENVELOPES,
     LINKED_FOLDER,
+    ORGANIZATION_ENVELOPES_AT_THE_LIMIT,
     ORGANIZATION_INVALID,
     ORGANIZATION_REQUIRED,
     ORGANIZATION_SPELLINGS,
@@ -113,7 +114,6 @@ def test_session_routed_via_codemie_is_classified_codemie_whatever_the_organizat
         batch.session_id,
         batch.repo,
         projects=world.project,
-        subscription_type=CODEMIE,
     )
     assert_that(
         routing_of(row),
@@ -133,8 +133,9 @@ def test_session_routed_via_codemie_is_classified_codemie_whatever_the_organizat
 def test_organization_matching_the_corporate_list_is_classified_corporate(
     classification_world, organizations, spelling
 ):
-    """The policy lists the configured organization, and the plain name, a case and whitespace
-    variation of it and its utf8-b64u.v1 encoding all give subscription_type corporate."""
+    """The policy lists the configured organization, and the plain name, its upper-case spelling,
+    its utf8-b64u.v1 encoding and the encoding of a padded upper-case spelling (a value the plain
+    header cannot carry) all give subscription_type corporate."""
     world = classification_world
     policy = read_policy(world.sender.api)
     batch = new_session()
@@ -163,7 +164,6 @@ def test_organization_matching_the_corporate_list_is_classified_corporate(
         batch.session_id,
         batch.repo,
         projects=world.project,
-        subscription_type=CORPORATE,
     )
     assert_that(
         routing_of(row),
@@ -547,3 +547,34 @@ def test_invalid_organization_envelope_is_400_organization_invalid(
     )
 
     assert_rejected(response, 400, ORGANIZATION_INVALID)
+
+
+# @case classify-cli-sessions-by-subscription_TC_022
+@pytest.mark.cli_analytics
+@pytest.mark.not_for_parallel_run
+@pytest.mark.parametrize("envelope", ORGANIZATION_ENVELOPES_AT_THE_LIMIT)
+@pytest.mark.api
+def test_encoded_organization_at_the_size_limits_is_accepted_and_classified(
+    classification_world, organizations, envelope
+):
+    """A printable encoded organization of exactly 256 code points (and, for four-byte code
+    points, exactly 1024 bytes and 1366 payload characters) is not refused: it is decoded,
+    does not match the corporate list and so is stored as the owner's Personal session."""
+    world = classification_world
+    batch = new_session()
+
+    response = send_evidence(
+        world.sender.client,
+        batch,
+        organization_encoded=envelope,
+        project=world.project,
+        **LINKED,
+    )
+
+    assert_accepted(response, "event-hooks", CT_NDJSON)
+    owned = wait_for_session_row(world.sender.api, batch.session_id, batch.repo)
+    assert_that(
+        routing_of(owned),
+        equal_to(_routing(PERSONAL, PERSONAL)),
+        "a name at the size limits must be accepted and classified personal",
+    )
