@@ -16,9 +16,13 @@
 
 from uuid import uuid4
 
-# Error body returned for an unauthorized caller and for a missing project or target user
-# (existence hiding: the same generic message in every case).
+# Error body returned for an unauthorized caller and for a missing project
+# (existence hiding: the same generic message in both cases).
 PROJECT_NOT_FOUND_MESSAGE = "Project not found"
+
+# Error body returned when the target user id does not belong to any user
+# (ProjectService.update_project_ownership -> require_active_user, EPMCDME-13928).
+USER_NOT_FOUND_MESSAGE = "User not found"
 
 # Error body returned when the project is personal (ProjectService.ERRORS.PERSONAL_UPDATE).
 PERSONAL_PROJECT_UPDATE_MESSAGE = "Cannot update a personal project"
