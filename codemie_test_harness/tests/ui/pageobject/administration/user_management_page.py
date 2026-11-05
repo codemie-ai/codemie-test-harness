@@ -21,6 +21,11 @@ For the Auditor role:
   - Create user button is ABSENT
   - 'More options' menu only exposes 'View details' (no Edit/Deactivate/role-change)
 
+Status actions: the row menu ('More options') offers 'Deactivate user' / 'Reactivate user'; each
+opens a confirmation dialog titled '<Action> user?' and ends in an info toast
+'User deactivated|reactivated successfully' (or an error toast with the backend message). A
+deactivated user carries a 'Deactivated' badge under the name.
+
 Default project: the users list marks the stored default inside the Projects cell
 (`default-project-marker`); the User Details projects table has one 'Default' radio per project
 (`default-radio-<project>`).
@@ -91,6 +96,34 @@ class UserManagementPage(BasePage):
     def _user_email_button(self, email: str):
         """Button labelled with the user's email address (opens User Details dialog)."""
         return self._user_row(email).get_by_role("button", name=email)
+
+    def _row_menu_button(self, email: str):
+        """'More options' button in the actions cell of the user's row."""
+        return self._user_row(email).get_by_role("button", name="More options")
+
+    @property
+    def _row_menu(self):
+        """The currently open row action menu."""
+        return self.page.locator('[role="menu"]').first
+
+    def _row_menu_item(self, title: str):
+        """Item of the open row action menu with the given title."""
+        return self._row_menu.locator("button").filter(has_text=title)
+
+    def _status_dialog(self, action: str):
+        """Confirmation dialog of a status change ('Deactivate user?' / 'Reactivate user?')."""
+        return self.page.get_by_role("dialog", name=f"{action.capitalize()} user?")
+
+    def _deactivated_badge(self, email: str):
+        """'Deactivated' status badge in the Name cell of the user's row."""
+        return self._user_row(email).get_by_text("Deactivated", exact=True)
+
+    def _status_toast(self, action: str):
+        """Info toast shown after a successful status change."""
+        past = "deactivated" if action == "deactivate" else "reactivated"
+        return self.page.locator(".codemie-toast-info").filter(
+            has_text=f"User {past} successfully"
+        )
 
     @property
     def user_details_dialog(self):
@@ -208,6 +241,41 @@ class UserManagementPage(BasePage):
         return self
 
     @step
+    def open_row_menu(self, email: str):
+        """Open the 'More options' menu of the user's row (the user must already be listed).
+
+        Does not search again: re-filling the search box could reload the list and drop a stale row.
+        """
+        expect(self._user_row(email)).to_have_count(1, timeout=15000)
+        self._row_menu_button(email).click()
+        self._row_menu.wait_for(state="visible", timeout=5000)
+        return self
+
+    @step
+    def choose_status_action(self, email: str, action: str):
+        """Pick 'Deactivate user' / 'Reactivate user' from the row menu; wait for the dialog."""
+        self.open_row_menu(email)
+        self._row_menu_item(f"{action.capitalize()} user").click(force=True)
+        expect(self._status_dialog(action)).to_be_visible(timeout=10000)
+        return self
+
+    @step
+    def cancel_status_change(self, action: str):
+        """Cancel the status confirmation dialog and wait until it is gone."""
+        dialog = self._status_dialog(action)
+        dialog.get_by_role("button", name="Cancel", exact=True).click()
+        expect(dialog).to_be_hidden(timeout=10000)
+        return self
+
+    @step
+    def confirm_status_change(self, action: str):
+        """Confirm the status dialog and wait until it closes."""
+        dialog = self._status_dialog(action)
+        dialog.get_by_role("button", name=action.capitalize(), exact=True).click()
+        expect(dialog).to_be_hidden(timeout=15000)
+        return self
+
+    @step
     def open_user_details(self, email: str):
         """Search for the user and open the User Details dialog."""
         self.search_user(email)
@@ -270,6 +338,60 @@ class UserManagementPage(BasePage):
         return self
 
     # ── Assertions ────────────────────────────────────────────────────────────
+
+    @step
+    def should_see_status_confirmation(self, action: str, display_name: str):
+        """Assert the status dialog asks to confirm the action for exactly this user."""
+        dialog = self._status_dialog(action)
+        expect(dialog).to_be_visible(timeout=10000)
+        expect(
+            dialog.get_by_text(
+                f"Are you sure you want to {action} {display_name}?", exact=True
+            )
+        ).to_be_visible(timeout=10000)
+        return self
+
+    @step
+    def should_see_status_toast(self, action: str):
+        """Assert the success toast of the status change is shown."""
+        expect(self._status_toast(action)).to_be_visible(timeout=10000)
+        return self
+
+    @step
+    def should_see_error_toast_with_text(self, text: str):
+        """Assert an error toast is shown and its text contains ``text``."""
+        expect(self.error_toast).to_contain_text(text, timeout=10000)
+        return self
+
+    @step
+    def should_see_deactivated_badge(self, email: str):
+        """Assert the user's row carries the 'Deactivated' badge."""
+        expect(self._deactivated_badge(email)).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_not_see_deactivated_badge(self, email: str):
+        """Assert the user's row is shown without the 'Deactivated' badge."""
+        expect(self._user_row(email)).to_have_count(1, timeout=15000)
+        expect(self._deactivated_badge(email)).to_have_count(0, timeout=15000)
+        return self
+
+    @step
+    def should_offer_row_action(self, email: str, title: str):
+        """Assert the user's row menu contains the item, then dismiss the menu."""
+        self.open_row_menu(email)
+        expect(self._row_menu_item(title)).to_have_count(1)
+        self.page.keyboard.press("Escape")
+        return self
+
+    @step
+    def should_not_offer_row_action(self, email: str, title: str):
+        """Assert the user's row menu is open with items but without the given one, then dismiss it."""
+        self.open_row_menu(email)
+        expect(self._row_menu.locator("button").first).to_be_visible(timeout=5000)
+        expect(self._row_menu_item(title)).to_have_count(0)
+        self.page.keyboard.press("Escape")
+        return self
 
     @step
     def should_see_user_list_not_empty(self):

@@ -369,7 +369,15 @@ def assert_accepted(
 ) -> None:
     """Accepted-send helper: HTTP 200 and nothing discarded (NDJSON `{}`, OTLP empty
     partial_success). On a discard body it fails quoting reason and the rejected count."""
-    discard = parse_discard_response(response, signal, request_content_type)
+    assert_nothing_discarded(
+        response, signal, parse_discard_response(response, signal, request_content_type)
+    )
+
+
+def assert_nothing_discarded(
+    response: requests.Response, signal: str, discard: Discard
+) -> None:
+    """assert_accepted for a reply already parsed by parse_discard_response."""
     assert_that(
         discard,
         equal_to(Discard(0, "")),

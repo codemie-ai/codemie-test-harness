@@ -68,6 +68,26 @@ def temp_project_with_me(user_utils, temp_project):
     user_utils.remove_user_from_project(me.user_id, temp_project)
 
 
+@pytest.fixture
+def deactivated_user(user_utils, disposable_user):
+    """(email, user_id, client) of a disposable user that the admin has already deactivated."""
+    _, user_id, _ = disposable_user
+    user_utils.deactivate_user(user_id)
+    return disposable_user
+
+
+@pytest.fixture
+def disposable_project_member(user_utils, disposable_user, temp_project):
+    """(email, user_id, client, project) of a disposable user who administers a temporary project."""
+    email, user_id, user_client = disposable_user
+    user_utils.assign_user_to_project(user_id, temp_project, is_project_admin=True)
+    yield email, user_id, user_client, temp_project
+    try:
+        user_utils.remove_user_from_project(user_id, temp_project)
+    except Exception:
+        pass
+
+
 ACTOR_FIXTURES = {
     "admin": "admin_client",
     "maintainer": "maintainer_client",

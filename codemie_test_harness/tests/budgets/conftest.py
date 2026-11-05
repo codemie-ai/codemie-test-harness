@@ -48,9 +48,6 @@ from codemie_test_harness.tests.utils.admin_project_budget_group_utils import (
 from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
-from codemie_test_harness.tests.utils.admin_spend_tracking_utils import (
-    AdminSpendTrackingUtils,
-)
 from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
 from codemie_test_harness.tests.utils.budget_utils import BudgetUtils
 from codemie_test_harness.tests.utils.client_factory import get_client
@@ -321,11 +318,6 @@ def user2_premium_assistant(user2_assistant_utils):
             user2_assistant_utils.delete_assistant(created_assistant)
         except HTTPError as e:
             logger.warning(f"Failed to delete assistant {created_assistant.id}: {e}")
-
-
-@pytest.fixture(scope="session")
-def admin_spend_tracking_utils(client):
-    return AdminSpendTrackingUtils(client)
 
 
 @pytest.fixture(scope="session")

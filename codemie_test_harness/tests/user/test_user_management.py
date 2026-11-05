@@ -21,6 +21,7 @@ from hamcrest import (
     only_contains,
     greater_than_or_equal_to,
     has_item,
+    has_properties,
     has_property,
     instance_of,
     is_not,
@@ -237,6 +238,33 @@ def test_list_admin_users_filter_is_active_returns_only_active_users(user_utils)
         response.data,
         only_contains(has_property("is_active", True)),
         "All returned users should be active",
+    )
+
+
+@pytest.mark.user
+@pytest.mark.api
+def test_list_admin_users_filter_is_active_false_returns_deactivated_user(
+    user_utils, deactivated_user
+):
+    # @case platform-admins-deactivate-reactivate-users_TC_012
+    email, user_id, _ = deactivated_user
+
+    inactive = user_utils.list_admin_users(
+        search=email, filters=json.dumps({"is_active": False})
+    )
+    active = user_utils.list_admin_users(
+        search=email, filters=json.dumps({"is_active": True})
+    )
+
+    assert_that(
+        inactive.data,
+        has_item(has_properties(id=user_id, is_active=False)),
+        "Filter by is_active=false should return the deactivated user with is_active=False",
+    )
+    assert_that(
+        [u.id for u in active.data],
+        is_not(has_item(user_id)),
+        "Filter by is_active=true should not return the deactivated user",
     )
 
 

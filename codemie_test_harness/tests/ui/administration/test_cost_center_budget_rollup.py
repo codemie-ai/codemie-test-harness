@@ -77,5 +77,5 @@ def test_rollup_card_shows_no_projects_linked_for_each_category_of_empty_cost_ce
     details_page.should_show_no_projects_linked(CLI_LABEL)
     details_page.should_show_no_projects_linked(PREMIUM_MODELS_LABEL)
     details_page.should_have_summary(
-        total_budget=NOT_ASSIGNED_TEXT, spend=0.0, percent_used="—"
+        total_budget=NOT_ASSIGNED_TEXT, spend="—", percent_used="—"
     )

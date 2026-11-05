@@ -67,6 +67,9 @@ from codemie_test_harness.tests.utils.admin_budget_utils import AdminBudgetUtils
 from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
+from codemie_test_harness.tests.utils.admin_spend_tracking_utils import (
+    AdminSpendTrackingUtils,
+)
 from codemie_test_harness.tests.utils.admin_utils import AdminUtils
 from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
 from codemie_test_harness.tests.utils.base_utils import get_random_name, wait_for_entity
@@ -359,6 +362,12 @@ def large_file_fixture(tmp_path_factory):
 @pytest.fixture(scope="session")
 def client():
     return get_client()
+
+
+@pytest.fixture(scope="session")
+def admin_spend_tracking_utils(client):
+    """Session-scoped spend tracking helper (admin), to collect spend on request."""
+    return AdminSpendTrackingUtils(client)
 
 
 @pytest.fixture(scope="session")
