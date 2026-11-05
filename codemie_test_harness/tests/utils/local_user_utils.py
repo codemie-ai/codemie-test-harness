@@ -59,14 +59,26 @@ class LocalUserUtils:
         )
         return password
 
-    def create_external_user(self, email: str) -> str:
-        """Create a non-admin user and mark it as an external user (editable in local mode only)."""
+    def create_platform_user_of_type(
+        self, email: str, user_type: str, personal_project: bool = True
+    ) -> str:
+        """Create a non-admin user and set its user type before it ever signs in.
+
+        Local auth has no identity-provider claim for the type, so the admin update sets it; no
+        login has happened yet, so the first login already sees `user_type`. `personal_project`
+        matches KeycloakUtils; here the backend alone decides at the first login whether the
+        user gets a personal project, so callers check the stored memberships.
+        """
         password = self._generate_password()
         user = self._client.admin.create_local_user(
             email=email, username=email, password=password, is_admin=False
         )
-        self._client.users.update_admin_user(user.id, user_type="external")
+        self._client.users.update_admin_user(user.id, user_type=user_type)
         return password
+
+    def create_external_user(self, email: str) -> str:
+        """Create a non-admin user and mark it as an external user (editable in local mode only)."""
+        return self.create_platform_user_of_type(email, "external")
 
     def delete_user(self, email: str) -> None:
         users = self._client.admin.list_users(search=email)
