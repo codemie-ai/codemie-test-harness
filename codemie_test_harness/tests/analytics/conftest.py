@@ -15,12 +15,20 @@
 """Fixtures for CLI Analytics tests (/v1/analytics/cli-analytics/*)."""
 
 import secrets
+import time
 from dataclasses import dataclass
 
 import pytest
+import requests
 from codemie_sdk import CodeMieClient
 from hamcrest import assert_that, empty
 
+from codemie_test_harness.tests.test_data.cli_account_test_data import (
+    GLOBAL_ADMIN,
+    PERSONAL_SENDER_KINDS,
+    WORLD_ACCOUNT_KINDS,
+    spec_named,
+)
 from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     CLI_ANALYTICS_USERS,
     E7,
@@ -43,6 +51,7 @@ from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     wait_until_accessible,
 )
 from codemie_test_harness.tests.utils.cli_gate_utils import (
+    Batch,
     assert_sent_accepted,
     send_tracked,
     wait_until_listed,
@@ -53,8 +62,11 @@ from codemie_test_harness.tests.utils.cli_classification_utils import (
     OrganizationPlan,
     Provisioner,
     new_remote,
+    new_session,
+    send_evidence,
     unique_organization,
     wait_for_policy,
+    wait_for_session_row,
 )
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
@@ -504,11 +516,8 @@ def routing_world(module_provisioner, gate_admin_client):
     return RoutingWorld(sender, CliAnalyticsApi(gate_admin_client), projects, remotes)
 
 
-@pytest.fixture
-def corporate_list(cli_analytics_enabled, customer_config_utils, gate_admin_client):
-    """The installation's corporate organization list: `.set(organizations)` writes it through
-    the customer config and waits until the classification policy shows it; the setting is put
-    back (an own override kept, a default restored) when the test ends."""
+def _corporate_list_scope(customer_config_utils, gate_admin_client):
+    """Generator body of the corporate-list fixtures: yields a setter, restores the setting."""
     declaration = customer_config_utils.get_declaration(CLI_ANALYTICS_FEATURE_ID)
     original = declaration["value"]
     api = CliAnalyticsApi(gate_admin_client)
@@ -529,8 +538,133 @@ def corporate_list(cli_analytics_enabled, customer_config_utils, gate_admin_clie
 
 
 @pytest.fixture
+def corporate_list(cli_analytics_enabled, customer_config_utils, gate_admin_client):
+    """The installation's corporate organization list: `.set(organizations)` writes it through
+    the customer config and waits until the classification policy shows it; the setting is put
+    back (an own override kept, a default restored) when the test ends."""
+    yield from _corporate_list_scope(customer_config_utils, gate_admin_client)
+
+
+@pytest.fixture(scope="module")
+def module_corporate_list(
+    cli_analytics_enabled, customer_config_utils, gate_admin_client
+):
+    """Like `corporate_list`, for worlds shared by the tests of one module."""
+    yield from _corporate_list_scope(customer_config_utils, gate_admin_client)
+
+
+@pytest.fixture
 def organizations(corporate_list):
     """Two fresh organization names; the corporate list is set to the first one only."""
     plan = OrganizationPlan(unique_organization(), unique_organization())
     corporate_list([plan.corporate])
     return plan
+
+
+@pytest.fixture(scope="module")
+def module_organizations(module_corporate_list):
+    """Like `organizations`, for worlds shared by the tests of one module."""
+    plan = OrganizationPlan(unique_organization(), unique_organization())
+    module_corporate_list([plan.corporate])
+    return plan
+
+
+@dataclass
+class AccountWorld:
+    """One shared project with CLI analytics on, one account of each kind that is a member of it
+    (keyed by the kind's name), an ordinary owner who is a member too, and a corporate list that
+    names `organizations.corporate` only."""
+
+    provisioner: Provisioner
+    admin_api: CliAnalyticsApi
+    project: str
+    organizations: OrganizationPlan
+    owner: ClassifiedSender
+    accounts: dict
+
+    def api(self, account: str) -> CliAnalyticsApi:
+        """The read API of an account kind, or of the global admin."""
+        if account == GLOBAL_ADMIN:
+            return self.admin_api
+        return self.accounts[account].api
+
+
+@pytest.fixture(scope="module")
+def account_world(module_provisioner, module_organizations, gate_admin_client):
+    project = module_provisioner.project()
+    owner = module_provisioner.sender()
+    module_provisioner.join(owner, project)
+    accounts = {
+        name: module_provisioner.account(spec_named(name), project)
+        for name in WORLD_ACCOUNT_KINDS
+    }
+    return AccountWorld(
+        module_provisioner,
+        CliAnalyticsApi(gate_admin_client),
+        project,
+        module_organizations,
+        owner,
+        accounts,
+    )
+
+
+@dataclass
+class SentSession:
+    batch: Batch
+    response: requests.Response
+
+
+@dataclass
+class AccountSessions:
+    """The sessions the account kinds sent once, all listed before any test reads them.
+
+    personal: a Personal session of each ordinary kind (regular member, project admin,
+    maintainer, auditor) with a link to the shared project; corporate: the owner's Corporate
+    session in the shared project; private: the owner's Personal session; service: the Personal
+    session of the service account with a link to the shared project.
+    """
+
+    personal: dict
+    corporate: SentSession
+    private: SentSession
+    service: SentSession
+    sent_at: float
+
+
+@pytest.fixture(scope="module")
+def account_sessions(account_world):
+    world = account_world
+    other = world.organizations.other
+    linked = {"project": world.project, "project_source": "linked_folder"}
+
+    def _send(account, **evidence) -> SentSession:
+        batch = new_session()
+        return SentSession(batch, send_evidence(account.client, batch, **evidence))
+
+    personal = {
+        name: _send(world.accounts[name], organization=other, **linked)
+        for name in PERSONAL_SENDER_KINDS
+    }
+    corporate = _send(world.owner, organization=world.organizations.corporate, **linked)
+    private = _send(world.owner, organization=other)
+    service = _send(world.accounts["service-account"], organization=other, **linked)
+    sent_at = time.monotonic()
+    for sent in (corporate, service):
+        wait_for_session_row(
+            world.admin_api,
+            sent.batch.session_id,
+            sent.batch.repo,
+            projects=world.project,
+        )
+    own_sessions = [
+        (world.owner, private),
+        *[(world.accounts[name], personal[name]) for name in PERSONAL_SENDER_KINDS],
+    ]
+    for account, sent in own_sessions:
+        wait_for_session_row(
+            account.api,
+            sent.batch.session_id,
+            sent.batch.repo,
+            personal_only="true",
+        )
+    return AccountSessions(personal, corporate, private, service, sent_at)
