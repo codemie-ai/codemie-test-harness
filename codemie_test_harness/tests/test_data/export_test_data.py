@@ -23,7 +23,10 @@ real credentials.
 # document, only an `env:` reference derived from it.
 LITERAL_INTEGRATION_TOKEN = "literal-integration-token-value"
 LITERAL_DATASOURCE_URL_PASSWORD = "literal-datasource-url-password"
-LITERAL_MCP_COMMAND = "run-literal-mcp-command"
+# The backend only permits a fixed allowlist of MCP launchers for config.command (e.g. "uvx",
+# "npx"); redaction there is positional (redact_positional), so this ordinary, permitted value
+# still proves the point — it is always replaced by a reference, never left literal.
+LITERAL_MCP_COMMAND = "uvx"
 LITERAL_MCP_ENV_SECRET = "literal-env-map-secret-value"
 LITERAL_MCP_CONNECT_AUTH_TOKEN = "literal-connect-auth-token-value"
 
