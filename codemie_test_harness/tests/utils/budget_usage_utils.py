@@ -218,6 +218,22 @@ class BudgetUsageUtils(BaseUtils):
             interval=ROW_WAIT_INTERVAL,
         )
 
+    def wait_for_user_project_category_spend_above(
+        self,
+        email: str,
+        project_name: str,
+        category: str,
+        threshold: float,
+        timeout: float = STORED_ROW_WAIT_TIMEOUT,
+    ):
+        """Poll until the admin row's spend of ``category`` exceeds ``threshold``; returns the last read row."""
+        return poll_until(
+            lambda: self.get_user_project_spending_row(email, project_name),
+            lambda row: row is not None and (row.get(category) or 0) > threshold,
+            timeout=timeout,
+            interval=ROW_WAIT_INTERVAL,
+        )
+
     def get_user_project_spending_rows(self, email: str) -> list[dict]:
         return self.client.analytics.get_user_project_spending(email).data.rows
 
@@ -328,16 +344,26 @@ def wait_for_settled_key_spend(
     This is the project total the personal page measures against the hard limit. Returns the
     last read when ``timeout`` elapses first, so a caller asserting on it fails with the value.
     """
+    return wait_for_settled_spend(
+        lambda: lite_llm_budget_utils.get_key_spend_by_alias(alias), timeout
+    )
+
+
+def wait_for_settled_spend(read, timeout: float = KEY_SPEND_SETTLE_TIMEOUT) -> float:
+    """Value of ``read()`` once it is above zero and unchanged over several reads.
+
+    Returns the last read when ``timeout`` elapses first.
+    """
     state = {"previous": None, "stable": 0}
 
-    def read() -> float:
-        current = lite_llm_budget_utils.get_key_spend_by_alias(alias)
+    def read_stable() -> float:
+        current = read()
         state["stable"] = state["stable"] + 1 if current == state["previous"] else 0
         state["previous"] = current
         return current
 
     return poll_until(
-        read,
+        read_stable,
         lambda value: value > 0 and state["stable"] >= SPEND_STABLE_READS - 1,
         timeout=timeout,
         interval=SPEND_POLL_INTERVAL,

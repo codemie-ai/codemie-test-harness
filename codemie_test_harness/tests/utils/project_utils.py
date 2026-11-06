@@ -14,6 +14,7 @@
 
 """Utility functions for project management tests."""
 
+import json
 import logging
 import time
 from datetime import datetime
@@ -21,6 +22,7 @@ from typing import Callable, List, Optional
 from uuid import UUID
 
 from codemie_sdk.models.integration import IntegrationType
+from codemie_sdk.models.user import UserBudgetAssignmentInfo
 from codemie_sdk.models.project import (
     BulkAssignmentResponse,
     BulkAssignmentUserItem,
@@ -38,14 +40,19 @@ from codemie_sdk.models.project import (
 from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
-from codemie_test_harness.tests.utils.base_utils import BaseUtils
+from codemie_test_harness.tests.utils.base_utils import BaseUtils, poll_until
 
 _BUDGET_SPENDING_POLL_INTERVAL = 10
+_USERS_PER_PAGE = 100
 logger = logging.getLogger(__name__)
 
 
 class ProjectUtils(BaseUtils):
     """Helper class for project management operations."""
+
+    def __init__(self, client):
+        super().__init__(client)
+        self._user_email_cache: dict[str, str] = {}
 
     def create_project(
         self,
@@ -157,31 +164,10 @@ class ProjectUtils(BaseUtils):
             page += 1
         return all_projects
 
-    def wait_for_project_budget_spending(
-        self,
-        project_name: str,
-        budget_category: str,
-        timeout: int = 600,
+    def _project_category_budget(
+        self, project_name: str, budget_category: str
     ) -> Optional[ProjectBudgetItem]:
-        """Poll until the given budget category has non-null current_spending."""
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            projects = self.list_projects(
-                include_budgets=True, search=project_name, per_page=10
-            )
-            if projects.data:
-                budget = next(
-                    (
-                        b
-                        for b in projects.data[0].budgets
-                        if b.budget_category == budget_category
-                        and b.current_spending is not None
-                    ),
-                    None,
-                )
-                if budget is not None:
-                    return budget
-            time.sleep(_BUDGET_SPENDING_POLL_INTERVAL)
+        """The project's budget of the given category that has a spending figure, if any."""
         projects = self.list_projects(
             include_budgets=True, search=project_name, per_page=10
         )
@@ -196,6 +182,122 @@ class ProjectUtils(BaseUtils):
             ),
             None,
         )
+
+    def wait_for_project_budget_spending_above(
+        self,
+        project_name: str,
+        budget_category: str,
+        threshold: float,
+        timeout: int = 600,
+    ) -> Optional[ProjectBudgetItem]:
+        """Poll until the given budget category's current_spending exceeds threshold.
+
+        Pass the spend the test expects as the threshold (minus its tolerance), so the
+        poll does not return on a stale or partial figure before the ledger catches up.
+
+        On timeout it returns the latest budget it read (None if there was none),
+        so the caller's assertion shows the real figure.
+        """
+        budget = poll_until(
+            lambda: self._project_category_budget(project_name, budget_category),
+            lambda item: item is not None and item.current_spending > threshold,
+            timeout=timeout,
+            interval=_BUDGET_SPENDING_POLL_INTERVAL,
+        )
+        if budget is None or budget.current_spending <= threshold:
+            logger.warning(
+                "Ledger spending for %s/%s did not exceed %.6f within %ss — "
+                "returning latest observed value",
+                project_name,
+                budget_category,
+                threshold,
+                timeout,
+            )
+        return budget
+
+    def _users_holding_budget(self, budget_id: str, user_id: Optional[str]):
+        """Users to inspect for a budget assignment.
+
+        A default budget is held by hundreds of users, so paging the budget filter
+        can miss the user; look the user up by e-mail instead, paging through every
+        user whose e-mail contains it. A custom budget has a single holder, so the
+        budget filter is enough.
+        """
+        if user_id is None:
+            return self.client.users.list_admin_users(
+                filters=json.dumps({"budgets": [budget_id]}), per_page=_USERS_PER_PAGE
+            ).data
+        if user_id not in self._user_email_cache:
+            self._user_email_cache[user_id] = self.client.users.get_admin_user(
+                user_id
+            ).email
+        email = self._user_email_cache[user_id]
+        page = 0
+        while True:
+            response = self.client.users.list_admin_users(
+                page=page, search=email, per_page=_USERS_PER_PAGE
+            )
+            found = [user for user in response.data if user.id == user_id]
+            if found or len(response.data) < _USERS_PER_PAGE:
+                return found
+            page += 1
+
+    def wait_for_member_budget_spending_above(
+        self,
+        budget_id: str,
+        category: str,
+        threshold: float,
+        user_id: Optional[str] = None,
+        timeout: int = 600,
+    ) -> Optional[UserBudgetAssignmentInfo]:
+        """Poll until the user's assignment of the given budget and category has a
+        current_spending above threshold.
+
+        Pass the spend the test expects as the threshold (minus its tolerance), so the
+        poll does not return on a stale or partial figure before the ledger catches up.
+        With a user_id the user is looked up directly; without one, the budget's first
+        page of holders is searched. On timeout it returns the latest assignment read
+        (None if there was none), so the caller's assertion shows the real figure.
+        """
+        seen: List[str] = []
+
+        def read_assignment() -> Optional[UserBudgetAssignmentInfo]:
+            seen.clear()
+            match = None
+            for user in self._users_holding_budget(budget_id, user_id):
+                for assignment in user.budget_assignments:
+                    seen.append(
+                        f"{assignment.category}:{assignment.budget_id} "
+                        f"spend={assignment.current_spending} "
+                        f"unavailable={assignment.spend_unavailable}"
+                    )
+                    if (
+                        match is None
+                        and assignment.budget_id == budget_id
+                        and assignment.category == category
+                        and assignment.current_spending is not None
+                    ):
+                        match = assignment
+            return match
+
+        assignment = poll_until(
+            read_assignment,
+            lambda item: item is not None and item.current_spending > threshold,
+            timeout=timeout,
+            interval=_BUDGET_SPENDING_POLL_INTERVAL,
+        )
+        if assignment is None or assignment.current_spending <= threshold:
+            logger.warning(
+                "Ledger spending for budget %s/%s did not exceed %.6f within %ss — "
+                "returning latest observed value; user %s holds: %s",
+                budget_id,
+                category,
+                threshold,
+                timeout,
+                user_id,
+                seen or "no budget assignments",
+            )
+        return assignment
 
     def get_project_detail(
         self,
