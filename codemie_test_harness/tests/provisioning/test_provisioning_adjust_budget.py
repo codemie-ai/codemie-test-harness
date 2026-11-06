@@ -18,7 +18,7 @@ import pytest
 from hamcrest import assert_that, close_to, contains_string, equal_to, has_entries
 from requests import HTTPError
 
-from codemie_test_harness.cli.constants import KEY_PROVISIONING_FULL_TOKEN
+from codemie_test_harness.cli.constants import PROVISIONING_FULL_CLIENT_KEYS
 from codemie_test_harness.tests.test_data.budget_test_data import (
     PLATFORM_BUDGET_CATEGORIES,
 )
@@ -34,7 +34,7 @@ AMOUNT_TOLERANCE = 0.01
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_adjust_budget_changes_only_the_named_category_and_zero_removes_it(
     provisioning_full, provisioning_utils
@@ -67,7 +67,7 @@ def test_adjust_budget_changes_only_the_named_category_and_zero_removes_it(
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_adjust_budget_rejects_platform_left_at_zero_and_changes_nothing(
     provisioning_full, provisioning_utils

@@ -308,6 +308,47 @@ class CredentialsManager:
             "aws_param": "service_now",
             "aws_path": "token",
         },
+        # === PROVISIONING API CLIENTS ===
+        "PROVISIONING_CLIENT_FULL_USERNAME": {
+            "env": "PROVISIONING_CLIENT_FULL_USERNAME",
+            "aws_param": "provisioning_clients",
+            "aws_path": "full_username",
+        },
+        "PROVISIONING_CLIENT_FULL_PASSWORD": {
+            "env": "PROVISIONING_CLIENT_FULL_PASSWORD",
+            "aws_param": "provisioning_clients",
+            "aws_path": "full_password",
+        },
+        "PROVISIONING_CLIENT_FULL_NAME": {
+            "env": "PROVISIONING_CLIENT_FULL_NAME",
+            "aws_param": "provisioning_clients",
+            "aws_path": "full_name",
+        },
+        "PROVISIONING_CLIENT_FULL_EMAIL": {
+            "env": "PROVISIONING_CLIENT_FULL_EMAIL",
+            "aws_param": "provisioning_clients",
+            "aws_path": "full_email",
+        },
+        "PROVISIONING_CLIENT_BUDGETS_USERNAME": {
+            "env": "PROVISIONING_CLIENT_BUDGETS_USERNAME",
+            "aws_param": "provisioning_clients",
+            "aws_path": "budgets_username",
+        },
+        "PROVISIONING_CLIENT_BUDGETS_PASSWORD": {
+            "env": "PROVISIONING_CLIENT_BUDGETS_PASSWORD",
+            "aws_param": "provisioning_clients",
+            "aws_path": "budgets_password",
+        },
+        "PROVISIONING_CLIENT_READ_USERNAME": {
+            "env": "PROVISIONING_CLIENT_READ_USERNAME",
+            "aws_param": "provisioning_clients",
+            "aws_path": "read_username",
+        },
+        "PROVISIONING_CLIENT_READ_PASSWORD": {
+            "env": "PROVISIONING_CLIENT_READ_PASSWORD",
+            "aws_param": "provisioning_clients",
+            "aws_path": "read_password",
+        },
         # === KEYCLOAK CREDENTIALS ===
         "KEYCLOAK_URL": {
             "env": "KEYCLOAK_URL",

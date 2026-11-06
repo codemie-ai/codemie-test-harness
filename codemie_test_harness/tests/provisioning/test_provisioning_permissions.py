@@ -19,9 +19,9 @@ from hamcrest import assert_that, contains_string, equal_to, is_
 from requests import HTTPError
 
 from codemie_test_harness.cli.constants import (
-    KEY_PROVISIONING_BUDGETS_TOKEN,
-    KEY_PROVISIONING_FULL_TOKEN,
-    KEY_PROVISIONING_READ_TOKEN,
+    PROVISIONING_BUDGETS_CLIENT_KEYS,
+    PROVISIONING_FULL_CLIENT_KEYS,
+    PROVISIONING_READ_CLIENT_KEYS,
 )
 from codemie_test_harness.tests import API_DOMAIN, VERIFY_SSL
 from codemie_test_harness.tests.test_data.budget_test_data import (
@@ -42,7 +42,7 @@ from codemie_test_harness.tests.utils.user_utils import UserUtils
 
 @pytest.mark.parametrize(("call", "expected_status"), BUDGET_ONLY_ALLOWED_ROWS)
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_BUDGETS_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_BUDGETS_CLIENT_KEYS)
 @pytest.mark.api
 def test_budget_only_client_manages_budget_of_existing_project(
     provisioning_budgets, provisioning_utils, call, expected_status
@@ -57,7 +57,7 @@ def test_budget_only_client_manages_budget_of_existing_project(
 
 @pytest.mark.parametrize(("setup_project", "call"), BUDGET_ONLY_FORBIDDEN_ROWS)
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_BUDGETS_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_BUDGETS_CLIENT_KEYS)
 @pytest.mark.api
 def test_budget_only_client_cannot_create_project_or_send_cost_center_or_admins(
     provisioning_budgets, provisioning_utils, setup_project, call
@@ -87,7 +87,9 @@ def test_budget_only_client_cannot_create_project_or_send_cost_center_or_admins(
     ("service_fixture", "call", "permission"), MISSING_PERMISSION_ROWS
 )
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN, KEY_PROVISIONING_READ_TOKEN)
+@pytest.mark.requires_setting(
+    *PROVISIONING_FULL_CLIENT_KEYS, *PROVISIONING_READ_CLIENT_KEYS
+)
 @pytest.mark.api
 def test_client_without_the_needed_permission_gets_403(
     request, provisioning_utils, service_fixture, call, permission
@@ -109,7 +111,7 @@ def test_client_without_the_needed_permission_gets_403(
 
 @pytest.mark.parametrize("call_outside_provisioning", LOCKED_OUT_ROWS)
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_registered_client_is_refused_outside_the_provisioning_api(
     provisioning_full_token, call_outside_provisioning
@@ -126,8 +128,8 @@ def test_registered_client_is_refused_outside_the_provisioning_api(
 
 @pytest.mark.parametrize(("caller_fixture", "call"), NON_REGISTERED_ROWS)
 @pytest.mark.budget
-# A configured client token marks a stand prepared for the provisioning API (it is mounted only when enabled).
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+# A configured client login marks a stand prepared for the provisioning API (it is mounted only when enabled).
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_non_registered_callers_including_admins_get_403_on_provisioning_routes(
     request, provisioning_utils, caller_fixture, call

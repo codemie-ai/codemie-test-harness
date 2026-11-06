@@ -17,7 +17,7 @@
 import pytest
 from hamcrest import assert_that, empty, equal_to, has_items
 
-from codemie_test_harness.cli.constants import KEY_PROVISIONING_FULL_TOKEN
+from codemie_test_harness.cli.constants import PROVISIONING_FULL_CLIENT_KEYS
 from codemie_test_harness.tests.test_data.provisioning_test_data import VENDOR_NAMES
 from codemie_test_harness.tests.utils.provisioning_utils import (
     names_with_vendor,
@@ -26,8 +26,8 @@ from codemie_test_harness.tests.utils.provisioning_utils import (
 
 
 @pytest.mark.budget
-# A configured client token marks a stand prepared for the provisioning API (it is mounted only when enabled).
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+# A configured client login marks a stand prepared for the provisioning API (it is mounted only when enabled).
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_provisioning_routes_and_fields_carry_no_vendor_names(swagger_utils):
     # @case provisioning-api-for-third-party_TC_022

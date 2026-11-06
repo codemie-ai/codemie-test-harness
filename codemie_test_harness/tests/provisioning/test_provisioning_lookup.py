@@ -17,13 +17,13 @@
 import pytest
 from hamcrest import assert_that, equal_to
 
-from codemie_test_harness.cli.constants import KEY_PROVISIONING_READ_TOKEN
+from codemie_test_harness.cli.constants import PROVISIONING_READ_CLIENT_KEYS
 from codemie_test_harness.tests.test_data.provisioning_test_data import unknown_email
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_READ_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_READ_CLIENT_KEYS)
 @pytest.mark.api
 def test_lookup_returns_union_of_shared_projects_sorted_by_name(
     provisioning_read,

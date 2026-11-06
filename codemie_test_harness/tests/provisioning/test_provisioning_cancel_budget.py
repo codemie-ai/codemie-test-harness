@@ -18,7 +18,7 @@ import pytest
 from hamcrest import assert_that, equal_to, is_, none
 from requests import HTTPError
 
-from codemie_test_harness.cli.constants import KEY_PROVISIONING_FULL_TOKEN
+from codemie_test_harness.cli.constants import PROVISIONING_FULL_CLIENT_KEYS
 from codemie_test_harness.tests.test_data.provisioning_test_data import (
     CANCEL_EXISTING_PROJECT_ROWS,
     change_reference,
@@ -27,7 +27,7 @@ from codemie_test_harness.tests.test_data.provisioning_test_data import (
 
 @pytest.mark.parametrize("setup_project", CANCEL_EXISTING_PROJECT_ROWS)
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_cancel_budget_answers_204_and_leaves_no_budget(
     provisioning_full, provisioning_utils, setup_project
@@ -48,7 +48,7 @@ def test_cancel_budget_answers_204_and_leaves_no_budget(
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_cancel_budget_of_missing_project_answers_404_and_creates_nothing(
     provisioning_full, provisioning_utils

@@ -19,7 +19,7 @@ from hamcrest import assert_that, equal_to, is_, none
 from requests import HTTPError
 
 from codemie_sdk.models.provisioning import ProvisioningProjectBlock
-from codemie_test_harness.cli.constants import KEY_PROVISIONING_FULL_TOKEN
+from codemie_test_harness.cli.constants import PROVISIONING_FULL_CLIENT_KEYS
 from codemie_test_harness.tests.test_data.budget_test_data import (
     PLATFORM_BUDGET_CATEGORIES,
 )
@@ -34,7 +34,7 @@ from codemie_test_harness.tests.test_data.provisioning_test_data import (
 
 @pytest.mark.parametrize("call", WRITE_CALLS)
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_write_call_without_change_reference_is_rejected_with_422(
     provisioning_full, provisioning_utils, call
@@ -56,7 +56,7 @@ def test_write_call_without_change_reference_is_rejected_with_422(
 
 @pytest.mark.parametrize("names", REJECTED_NAME_ROWS)
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_with_invalid_name_is_rejected_with_400_and_creates_nothing(
     provisioning_full, provisioning_utils, names
@@ -80,7 +80,7 @@ def test_set_budget_with_invalid_name_is_rejected_with_400_and_creates_nothing(
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_for_deleted_project_is_rejected_with_409(
     provisioning_full, provisioning_utils
@@ -102,7 +102,7 @@ def test_set_budget_for_deleted_project_is_rejected_with_409(
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_naming_deleted_cost_center_is_rejected_with_409(
     provisioning_full, provisioning_utils, cost_center, cost_center_utils
@@ -127,7 +127,7 @@ def test_set_budget_naming_deleted_cost_center_is_rejected_with_409(
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_for_personal_project_is_rejected_with_403(
     provisioning_full, non_admin_user, provisioning_utils
@@ -151,7 +151,7 @@ def test_set_budget_for_personal_project_is_rejected_with_403(
 
 @pytest.mark.parametrize("malformed", MALFORMED_SET_ROWS)
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_with_malformed_request_is_rejected_with_422(
     provisioning_full, provisioning_utils, malformed

@@ -28,7 +28,7 @@ from hamcrest import (
 from codemie_sdk.models.provisioning import ProvisioningProjectBlock
 from codemie_test_harness.cli.constants import (
     KEY_PROVISIONING_FULL_EMAIL,
-    KEY_PROVISIONING_FULL_TOKEN,
+    PROVISIONING_FULL_CLIENT_KEYS,
 )
 from codemie_test_harness.tests.test_data.provisioning_test_data import (
     COST_CENTER_LINK_ROWS,
@@ -44,7 +44,7 @@ from codemie_test_harness.tests.utils.cost_center_utils import (
 
 @pytest.mark.parametrize(("linked", "requested", "expected"), COST_CENTER_LINK_ROWS)
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_links_cost_center_once_and_never_changes_an_existing_link(
     provisioning_full, provisioning_utils, cost_center, linked, requested, expected
@@ -86,7 +86,9 @@ def test_set_budget_links_cost_center_once_and_never_changes_an_existing_link(
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN, KEY_PROVISIONING_FULL_EMAIL)
+@pytest.mark.requires_setting(
+    *PROVISIONING_FULL_CLIENT_KEYS, KEY_PROVISIONING_FULL_EMAIL
+)
 @pytest.mark.api
 def test_set_budget_only_adds_admins_and_reports_unassignable_emails(
     provisioning_full,

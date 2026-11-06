@@ -29,7 +29,7 @@ from hamcrest import (
 from codemie_sdk.models.provisioning import ProvisioningProjectBlock
 from codemie_test_harness.cli.constants import (
     KEY_PROVISIONING_FULL_NAME,
-    KEY_PROVISIONING_FULL_TOKEN,
+    PROVISIONING_FULL_CLIENT_KEYS,
 )
 from codemie_test_harness.tests.test_data.provisioning_test_data import (
     DEFAULT_SOFT_LIMIT_FRACTION,
@@ -44,7 +44,9 @@ AMOUNT_TOLERANCE = 0.01
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN, KEY_PROVISIONING_FULL_NAME)
+@pytest.mark.requires_setting(
+    *PROVISIONING_FULL_CLIENT_KEYS, KEY_PROVISIONING_FULL_NAME
+)
 @pytest.mark.api
 def test_set_budget_creates_project_cost_center_admins_and_budget(
     provisioning_full,
@@ -101,7 +103,7 @@ def test_set_budget_creates_project_cost_center_admins_and_budget(
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_replaces_amounts_and_removes_categories_not_sent(
     provisioning_full, provisioning_utils
@@ -125,7 +127,7 @@ def test_set_budget_replaces_amounts_and_removes_categories_not_sent(
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_resend_converges_to_the_same_state(
     provisioning_full, non_admin_user, provisioning_utils
@@ -158,7 +160,7 @@ def test_set_budget_resend_converges_to_the_same_state(
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(KEY_PROVISIONING_FULL_TOKEN)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_keeps_soft_budget_of_unchanged_category_and_resets_changed_one(
     provisioning_full, provisioning_utils
