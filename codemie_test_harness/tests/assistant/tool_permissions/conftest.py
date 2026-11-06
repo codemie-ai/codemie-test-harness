@@ -141,6 +141,10 @@ def _trigger_tool_call_interruption(
 
     Returns True when ``thought.interrupted=True`` is found in the stream,
     indicating a pending tool-call checkpoint now exists for the conversation.
+
+    The stream is read to the end: the backend saves the paused turn before its
+    final chunk, so stopping at the interrupted chunk disconnects the client and
+    an immediate resume gets 409 "The paused turn is still being saved".
     """
     client = get_client()
     request = AssistantChatRequest(
@@ -150,12 +154,13 @@ def _trigger_tool_call_interruption(
     )
     response = client.assistants.chat(assistant_id, request)
 
+    interrupted = False
     for chunk in _iter_stream_chunks(response):
         thought = chunk.get("thought") or {}
         if thought.get("interrupted") is True:
-            return True
+            interrupted = True
 
-    return False
+    return interrupted
 
 
 # ---------------------------------------------------------------------------
