@@ -379,7 +379,12 @@ def test_project_wide_share_and_named_grant_coexist(
     """@case share-an-assistant-with-selected_TC_012"""
     assistant = assistant_factory.create(shared=True)
     grantee = regular_client.users.about_me()
-    user_utils.assign_user_to_project(grantee.user_id, PROJECT)
+    # Idempotent: B may already be a member of PROJECT from unrelated environment
+    # state, in which case the admin API 409s on a repeat add. Only add/remove what
+    # this test itself puts in place.
+    was_already_member = PROJECT in user_utils.get_user_project_names(grantee.user_id)
+    if not was_already_member:
+        user_utils.assign_user_to_project(grantee.user_id, PROJECT)
     try:
         client.assistants.share(assistant.id, [grantee.user_id])
 
@@ -419,7 +424,8 @@ def test_project_wide_share_and_named_grant_coexist(
             "B should still see the assistant via the project-wide shared flag alone",
         )
     finally:
-        user_utils.remove_user_from_project(grantee.user_id, PROJECT)
+        if not was_already_member:
+            user_utils.remove_user_from_project(grantee.user_id, PROJECT)
 
 
 # ---------------------------------------------------------------------------
@@ -496,7 +502,11 @@ def test_deleting_shared_assistant_leaves_no_dangling_grant(
 
     with pytest.raises(HTTPError) as exc_info:
         regular_client.assistants.get(assistant.id)
-    assert_response(exc_info.value.response, 404, "Assistant not found")
+    assert_response(
+        exc_info.value.response,
+        404,
+        f"No assistant found with the id '{assistant.id}'.",
+    )
 
 
 # ---------------------------------------------------------------------------
