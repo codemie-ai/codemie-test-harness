@@ -108,7 +108,7 @@ class AssistantUtils(BaseUtils):
             else [],
             enabled_builtin_subagents=enabled_builtin_subagents,
             tool_permissions=tool_permissions,
-            prompt_variables=prompt_variables,
+            prompt_variables=list(prompt_variables) if prompt_variables else [],
         )
 
         response = self.client.assistants.create(request)

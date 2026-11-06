@@ -22,6 +22,7 @@ export -> update-request -> submit round trip for assistant, workflow, datasourc
 integration and category.
 """
 
+import copy
 import uuid
 
 import pytest
@@ -44,6 +45,7 @@ from codemie_sdk.models.integration import (
 )
 from codemie_sdk.models.mcp_config import MCPConfigCreateRequest, MCPServerConfigData
 from codemie_sdk.models.skill import SkillCompanionFilePayload, SkillVisibility
+from codemie_sdk.models.workflow import WorkflowMode
 
 from codemie_test_harness.tests.enums.tools import AgentWorkspaceTool
 from codemie_test_harness.tests.test_data.export_test_data import (
@@ -57,6 +59,7 @@ from codemie_test_harness.tests.test_data.export_test_data import (
     TRANSFORM_NODE_CONFIG,
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name
+from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.workflow_utils import WorkflowUtils
 from codemie_test_harness.tests.utils.yaml_utils import (
     AssistantModel,
@@ -120,9 +123,12 @@ def test_export_produces_document_sufficient_to_recreate_entity(
     client, assistant_utils
 ):
     """@case public-export-rest-endpoint_TC_001"""
-    assistant = assistant_utils.create_assistant(
+    created = assistant_utils.create_assistant(
         system_prompt="Act as a careful reviewer", temperature=0.4
     )
+    # create_assistant()'s own return is the minimal list projection (name/id/description
+    # only); re-fetch the full assistant for project/llm_model_type.
+    assistant = assistant_utils.get_assistant_by_id(created.id)
 
     document = client.export.export("assistant", assistant.id)
 
@@ -188,13 +194,23 @@ def test_export_redacts_integration_credential_to_env_reference(
 @pytest.mark.export
 @pytest.mark.api
 def test_export_redacts_datasource_inline_credential_to_env_reference(
-    client, datasource_utils
+    client, datasource_utils, integration_utils
 ):
     """@case public-export-rest-endpoint_TC_002 (surface: datasource inline credential)"""
+    # A real git integration as setting_id: creation validates it has credentials (a cheap
+    # DB lookup) rather than probing the link's reachability, so a fake host with a literal
+    # credential embedded in it (what this test needs to exercise redact_link) is accepted.
+    integration = integration_utils.create_project_integration(
+        credential_type=CredentialTypes.GIT,
+        credentials=[
+            CredentialValues(key="url", value="https://git.example.com"),
+            CredentialValues(key="token", value="integration-token-placeholder"),
+        ],
+    )
     link = f"https://cred-user:{LITERAL_DATASOURCE_URL_PASSWORD}@git.example.com/wiki"
     datasource = (
         datasource_utils.create_git_faq_datasource_without_waiting_for_indexing(
-            link=link, branch="main"
+            link=link, branch="main", setting_id=integration.id
         )
     )
 
@@ -210,6 +226,9 @@ def test_export_redacts_mcp_tool_settings_command_to_env_reference(
     client, assistant_utils
 ):
     """@case public-export-rest-endpoint_TC_002 (surface: tool settings — MCP config.command)"""
+    # The command must be one of the backend's permitted MCP launchers ("uvx" is); redaction
+    # of config.command is positional (redact_positional), so even this ordinary, non-secret
+    # value is still always replaced by an env: reference rather than left literal.
     assistant = assistant_utils.create_assistant(
         mcp_servers=[
             MCPServerDetails(
@@ -242,7 +261,9 @@ def test_export_redacts_mcp_toolkit_settings_env_map_to_env_reference(
                 description=None,
                 enabled=True,
                 use_custom_config=True,
-                config=MCPServerConfig(env={"TOOLKIT_SETTING": LITERAL_MCP_ENV_SECRET}),
+                config=MCPServerConfig(
+                    command="uvx", env={"TOOLKIT_SETTING": LITERAL_MCP_ENV_SECRET}
+                ),
             )
         ]
     )
@@ -270,7 +291,9 @@ def test_export_redacts_mcp_connect_auth_token_to_env_reference(
                 description=None,
                 enabled=True,
                 use_custom_config=True,
-                config=MCPServerConfig(auth_token=LITERAL_MCP_CONNECT_AUTH_TOKEN),
+                config=MCPServerConfig(
+                    command="uvx", auth_token=LITERAL_MCP_CONNECT_AUTH_TOKEN
+                ),
             )
         ]
     )
@@ -320,7 +343,7 @@ def test_export_sensitive_prompt_variable_value_is_empty(client, assistant_utils
     "kind, entity_id, expected_message_fragment",
     [
         ("bogus", "abc", "bogus"),
-        ("assistant", _MISSING_ASSISTANT_ID, "wasn't found"),
+        ("assistant", _MISSING_ASSISTANT_ID, "not found"),
     ],
     ids=["unknown-kind", "missing-entity"],
 )
@@ -342,24 +365,41 @@ def test_export_fails_naming_the_problem(
 @pytest.mark.export
 @pytest.mark.api
 def test_export_fails_for_referenced_entity_the_caller_cannot_access(
-    regular_client, client, assistant_utils
+    regular_client, client, assistant_utils, default_llm
 ):
     """@case public-export-rest-endpoint_TC_005 (inaccessible referenced entity)"""
-    private_assistant = assistant_utils.create_assistant(shared=False)
+    # Workflow creation itself validates that every referenced assistant is visible to the
+    # creating user, so the workflow must be built while the assistant is still shared, then
+    # access revoked afterwards — exactly the real scenario AC-4 protects against (sharing
+    # later revoked on an assistant a workflow already references).
+    created = assistant_utils.create_assistant(shared=True)
+    shared_assistant = assistant_utils.get_assistant_by_id(created.id)
     regular_workflow_utils = WorkflowUtils(regular_client)
     workflow_yaml = WorkflowYamlModel(
         assistants=[
             AssistantModel(
                 id="referencing",
-                model=private_assistant.llm_model_type,
-                assistant_id=private_assistant.id,
+                model=default_llm.base_name,
+                assistant_id=shared_assistant.id,
             )
         ],
         states=[StateModel(id="referencing", assistant_id="referencing")],
     )
     workflow = regular_workflow_utils.create_workflow(
-        workflow_type="sequential",
+        workflow_type=WorkflowMode.SEQUENTIAL,
         workflow_yaml=prepare_yaml_content(workflow_yaml.model_dump(exclude_none=True)),
+    )
+    client.assistants.update(
+        shared_assistant.id,
+        AssistantUpdateRequest(
+            name=shared_assistant.name,
+            description=shared_assistant.description,
+            system_prompt=shared_assistant.system_prompt,
+            project=shared_assistant.project,
+            llm_model_type=shared_assistant.llm_model_type,
+            slug=shared_assistant.slug,
+            shared=False,
+        ),
     )
 
     try:
@@ -373,6 +413,7 @@ def test_export_fails_for_referenced_entity_the_caller_cannot_access(
         )
     finally:
         regular_workflow_utils.delete_workflow(workflow)
+        assistant_utils.delete_assistant_by_id(shared_assistant.id)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -458,12 +499,15 @@ def test_export_assistant_spec_covers_every_update_field(client, assistant_utils
     hedging_config = HedgingConfig(
         tool=HedgingToolDetails(name=_BUILTIN_HEDGE_TOOL_NAME)
     )
-    assistant = assistant_utils.create_assistant(
+    created = assistant_utils.create_assistant(
         temperature=0.3,
         top_p=0.8,
         enabled_builtin_subagents=[],
         tool_permissions=ToolPermissionsConfig(),
     )
+    # create_assistant()'s own return is the minimal list projection; re-fetch the full
+    # assistant so system_prompt/project/llm_model_type/slug/shared are actually present.
+    assistant = assistant_utils.get_assistant_by_id(created.id)
     # Fields AssistantCreateRequest/assistant_utils.create_assistant does not expose; set them
     # through a follow-up update so every None-defaulted field becomes non-null before export.
     client.assistants.update(
@@ -545,7 +589,7 @@ def test_export_round_trip_leaves_workflow_unchanged(
         ],
     )
     workflow = workflow_utils.create_workflow(
-        workflow_type="sequential",
+        workflow_type=WorkflowMode.SEQUENTIAL,
         workflow_yaml=prepare_yaml_content(workflow_yaml.model_dump(exclude_none=True)),
     )
 
@@ -554,7 +598,9 @@ def test_export_round_trip_leaves_workflow_unchanged(
         new_yaml_config = _workflow_definition_to_yaml_config(
             before["spec"]["workflow"]
         )
-        workflow_utils.update_workflow(workflow, yaml_config=new_yaml_config)
+        workflow_utils.update_workflow(
+            workflow, yaml_config=new_yaml_config, mode=WorkflowMode.SEQUENTIAL
+        )
         after = client.export.export("workflow", workflow.id)
 
         assert_that(after["spec"], equal_to(before["spec"]))
@@ -566,9 +612,12 @@ def test_export_round_trip_leaves_workflow_unchanged(
 @pytest.mark.api
 def test_export_round_trip_leaves_datasource_unchanged(client, datasource_utils):
     """@case public-export-rest-endpoint_TC_010 (kind: datasource)"""
+    # A real, publicly-reachable repo: creation synchronously probes a git_faq link with no
+    # setting_id (git ls-remote), so a fake host fails before the datasource even exists.
     datasource = (
         datasource_utils.create_git_faq_datasource_without_waiting_for_indexing(
-            link="https://git.example.com/public/wiki", branch="main"
+            link=CredentialsManager.get_parameter("GITHUB_PUBLIC_PROJECT"),
+            branch="main",
         )
     )
 
@@ -582,11 +631,14 @@ def test_export_round_trip_leaves_datasource_unchanged(client, datasource_utils)
                 project_name=spec["project_name"],
                 description=spec["description"],
                 project_space_visible=spec["shared_with_project"],
-                setting_id=spec["setting_id"],
+                setting_id=spec.get("setting_id"),
                 link=spec["link"],
                 branch=spec["branch"],
-                files_filter=spec["files_filter"],
-                skip_reindex=True,
+                files_filter=spec.get("files_filter"),
+                # Source fields (link/branch/files_filter) require this flag whenever present
+                # in the body at all, even unchanged — the real repo link means the resulting
+                # background reindex is harmless; the test does not wait for it.
+                full_reindex=True,
             ),
         )
         after = client.export.export("datasource", datasource.id)
@@ -643,6 +695,10 @@ def test_export_workflow_structured_definition_with_named_references(
         "max_interval": 10.0,
         "max_attempts": 2,
     }
+    # A real, deployment-reachable MCP server (same package the existing MCP workflow tests
+    # use), since workflow creation synchronously connects to every custom-config MCP server.
+    mcp_command = "uvx"
+    mcp_args = ["--with", "mcp<2.0.0", "mcp-server-time"]
     workflow_yaml = WorkflowYamlModel(
         assistants=[
             AssistantModel(
@@ -655,9 +711,7 @@ def test_export_workflow_structured_definition_with_named_references(
                         description=None,
                         enabled=True,
                         use_custom_config=True,
-                        config=MCPServerConfig(
-                            command="npx", args=["-y", "mcp-server-time"]
-                        ),
+                        config=MCPServerConfig(command=mcp_command, args=mcp_args),
                     )
                 ],
             )
@@ -695,7 +749,7 @@ def test_export_workflow_structured_definition_with_named_references(
         ],
     )
     workflow = workflow_utils.create_workflow(
-        workflow_type="sequential",
+        workflow_type=WorkflowMode.SEQUENTIAL,
         workflow_yaml=prepare_yaml_content(workflow_yaml.model_dump(exclude_none=True)),
     )
 
@@ -725,12 +779,23 @@ def test_export_workflow_structured_definition_with_named_references(
         )
 
         # render()'s claim, verified indirectly: convert the definition back into yaml_config
-        # (the catalog assistant's name resolved back to its id) and submit it as a real
+        # (the catalog assistant's name resolved back to its id, and the MCP server's env:
+        # command/args references resolved back to the real values — exactly what a real
+        # apply tool does by reading them from the environment) and submit it as a real
         # update; re-exporting must reproduce the identical document.
+        definition_for_update = copy.deepcopy(definition)
+        mcp_config = definition_for_update["assistants"]["wf_assistant"]["mcp_servers"][
+            0
+        ]["config"]
+        mcp_config["command"] = mcp_command
+        mcp_config["args"] = mcp_args
         rendered_yaml_config = _workflow_definition_to_yaml_config(
-            definition, assistant_ids={catalog_assistant.name: catalog_assistant.id}
+            definition_for_update,
+            assistant_ids={catalog_assistant.name: catalog_assistant.id},
         )
-        workflow_utils.update_workflow(workflow, yaml_config=rendered_yaml_config)
+        workflow_utils.update_workflow(
+            workflow, yaml_config=rendered_yaml_config, mode=WorkflowMode.SEQUENTIAL
+        )
         after_document = client.export.export("workflow", workflow.id)
         assert_that(after_document["spec"]["workflow"], equal_to(definition))
     finally:
@@ -805,12 +870,15 @@ def test_export_unsupported_datasource_type_fails_naming_type(client, file_datas
 @pytest.mark.api
 def test_export_fails_naming_clashing_referenced_name(client, assistant_utils):
     """@case public-export-rest-endpoint_TC_014"""
+    # shared=True puts both siblings in the ambiguity scope's peer query
+    # (Assistant.shared.is_(True)); a private (default) sibling with the same creator was
+    # confirmed live not to be matched by that query's creator-owned branch.
     shared_name = get_random_name()
     sibling_a = assistant_utils.create_assistant(
-        assistant_name=shared_name, slug=f"{shared_name}-a"
+        assistant_name=shared_name, slug=f"{shared_name}-a", shared=True
     )
     sibling_b = assistant_utils.create_assistant(
-        assistant_name=shared_name, slug=f"{shared_name}-b"
+        assistant_name=shared_name, slug=f"{shared_name}-b", shared=True
     )
     referencer = assistant_utils.create_assistant(assistant_ids=[sibling_b.id])
     # sibling_a only needs to exist to create the name clash in scope.
@@ -916,11 +984,17 @@ def test_export_refuses_tool_level_mcp_credential(client, workflow_utils, defaul
         tools=[
             ToolModel(
                 id="leaky_tool",
+                # A real, deployment-reachable MCP server exposing a real tool name: workflow
+                # creation synchronously connects to a tool-level MCP server and validates the
+                # tool exists on it, so a fake command/tool name would fail at creation, before
+                # the export behaviour under test ever runs.
+                tool="get_current_time",
                 mcp_server={
                     "name": "leaky_mcp",
                     "enabled": True,
                     "config": {
-                        "command": "npx",
+                        "command": "uvx",
+                        "args": ["--with", "mcp<2.0.0", "mcp-server-time"],
                         "env": {"API_TOKEN": "literal-tool-secret"},
                     },
                 },
@@ -934,7 +1008,7 @@ def test_export_refuses_tool_level_mcp_credential(client, workflow_utils, defaul
         ],
     )
     workflow = workflow_utils.create_workflow(
-        workflow_type="sequential",
+        workflow_type=WorkflowMode.SEQUENTIAL,
         workflow_yaml=prepare_yaml_content(workflow_yaml.model_dump(exclude_none=True)),
     )
 
