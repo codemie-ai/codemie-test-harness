@@ -308,16 +308,6 @@ class CredentialsManager:
             "aws_param": "service_now",
             "aws_path": "token",
         },
-        "SERVICENOW_SERVICE_ACCOUNT_CLIENT_ID": {
-            "env": "SERVICENOW_SERVICE_ACCOUNT_CLIENT_ID",
-            "aws_param": "service_now",
-            "aws_path": "service_now_service_account_client_id",
-        },
-        "SERVICENOW_SERVICE_ACCOUNT_CLIENT_SECRET": {
-            "env": "SERVICENOW_SERVICE_ACCOUNT_CLIENT_SECRET",
-            "aws_param": "service_now",
-            "aws_path": "service_now_service_account_secret",
-        },
         # === KEYCLOAK CREDENTIALS ===
         "KEYCLOAK_URL": {
             "env": "KEYCLOAK_URL",
