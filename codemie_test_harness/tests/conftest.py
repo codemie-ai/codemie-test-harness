@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
 import re
 import secrets
+import tempfile
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -22,7 +25,8 @@ from time import sleep
 from typing import List, Optional
 
 import pytest
-from hamcrest import assert_that, not_none
+from filelock import FileLock
+from hamcrest import assert_that, equal_to, has_item, not_none
 from codemie_sdk import CodeMieClient
 from codemie_sdk.models.assistant import (
     ToolKitDetails,
@@ -75,9 +79,6 @@ from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
 from codemie_test_harness.tests.utils.base_utils import get_random_name, wait_for_entity
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.customer_config_utils import CustomerConfigUtils
-from codemie_test_harness.tests.utils.marketplace_management_utils import (
-    MarketplaceManagementUtils,
-)
 from codemie_test_harness.tests.utils.constants import (
     FILES_PATH,
 )
@@ -149,6 +150,22 @@ from codemie_test_harness.tests.utils.llm_utils import LLMUtils
 from codemie_test_harness.tests.utils.local_user_utils import LocalUserUtils
 from codemie_test_harness.tests.utils.ordered_users_utils import OrderedUsersBuilder
 from codemie_test_harness.tests.utils.logger_util import setup_logger
+from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
+    CORE_GATE_MINIMUM,
+    CRITICAL,
+    DESCRIPTION_LENGTH_RULE,
+    PENDING_REVIEW,
+    VALID_REASON,
+    CoreGates,
+    build_marketplace_submission,
+    build_short_description,
+)
+from codemie_test_harness.tests.utils.marketplace_management_utils import (
+    personal_project_of,
+    MarketplaceManagementUtils,
+    MarketplaceSubmitter,
+    poll_marketplace_listing,
+)
 from codemie_test_harness.tests.utils.notification_utils import (
     GmailUtils,
     AzureEmailUtils,
@@ -258,6 +275,14 @@ def pytest_configure(config):
     config.option.timeout_method = (
         "thread" if platform.system() == "Windows" else "signal"
     )
+
+    # One state file per run, created by the controller and inherited by xdist workers
+    # through the environment (see `marketplace_core_gates`).
+    if not hasattr(config, "workerinput"):
+        os.environ[_CORE_GATES_STATE_ENV] = str(
+            Path(tempfile.gettempdir())
+            / f"marketplace-core-gates-{uuid.uuid4().hex}.json"
+        )
 
     # Resolve the root directory and .env file path
     _, root_dir = resolve_tests_path_and_root()
@@ -737,11 +762,6 @@ def clean_marketplace_thresholds(customer_config_utils):
         logger.warning(
             f"Failed to reset {MARKETPLACE_THRESHOLDS_COMPONENT_ID} setting: {e}"
         )
-
-
-@pytest.fixture(scope="session")
-def marketplace_management_utils(client):
-    return MarketplaceManagementUtils(client)
 
 
 @pytest.fixture(scope="session")
@@ -2586,6 +2606,9 @@ def pytest_sessionfinish(session):
     cleanup is intentionally NOT done here — see test_clean_all_entities
     for that.
     """
+    if not hasattr(session.config, "workerinput"):
+        _restore_marketplace_core_gates()
+
     if CredentialsManager.get_parameter("CLEANUP_DATA", "true").lower() != "true":
         return
 
@@ -2667,3 +2690,323 @@ def pytest_sessionfinish(session):
         logger.error(f"Failed to cleanup cost centers: {e}")
 
     logger.info("Session cleanup completed.")
+
+
+# ---------------------------------------------------------------------------
+# Marketplace admin approval gate
+# ---------------------------------------------------------------------------
+
+
+_CORE_GATES_STATE_ENV = "MARKETPLACE_CORE_GATES_STATE_FILE"
+
+
+def _core_gates_state_path() -> Optional[Path]:
+    """File that holds the Core Gates setting as it was before this run changed it."""
+    value = os.environ.get(_CORE_GATES_STATE_ENV)
+    return Path(value) if value else None
+
+
+def _restore_marketplace_core_gates() -> None:
+    """Put the Core Gates setting back as the first worker found it; runs once per run.
+
+    Called from `pytest_sessionfinish` of the controller (or of the only process without
+    xdist), after every worker has finished, so no running test loses its thresholds.
+    """
+    path = _core_gates_state_path()
+    if path is None or not path.exists():
+        return
+    original = None
+    try:
+        original = json.loads(path.read_text())["original"]
+        utils = MarketplaceManagementUtils(get_client())
+        if utils.get_core_gates_setting() != original:
+            utils.restore_core_gates_setting(original)
+            logger.info(f"Marketplace core gates restored to {original}")
+    except Exception as e:
+        logger.error(
+            f"Failed to restore the marketplace core gates (they were {original}): {e}"
+        )
+    finally:
+        path.unlink(missing_ok=True)
+        Path(f"{path}.lock").unlink(missing_ok=True)
+
+
+@pytest.fixture(scope="session")
+def marketplace_core_gates(client) -> CoreGates:
+    """The core gate thresholds the marketplace tests build their data from.
+
+    Production: the thresholds are only read and never changed. Any other stand: the
+    first worker records the setting as it was (overridden or not, and its value), then
+    the thresholds are set to CORE_GATE_MINIMUM if they differ. At the end of the run
+    `_restore_marketplace_core_gates` puts the setting back. Either way the result is
+    what the stand reports now, so the tests need no checks of their own.
+    """
+    utils = MarketplaceManagementUtils(client)
+    if EnvironmentResolver.is_production():
+        return CoreGates.from_config(utils.get_gates_config())
+    state_path = _core_gates_state_path()
+    if state_path is None:
+        gates = utils.ensure_core_gates(
+            CORE_GATE_MINIMUM, CORE_GATE_MINIMUM, CORE_GATE_MINIMUM
+        )
+    else:
+        with FileLock(f"{state_path}.lock", timeout=120):
+            if not state_path.exists():
+                state_path.write_text(
+                    json.dumps({"original": utils.get_core_gates_setting()})
+                )
+            gates = utils.ensure_core_gates(
+                CORE_GATE_MINIMUM, CORE_GATE_MINIMUM, CORE_GATE_MINIMUM
+            )
+    return CoreGates.from_config(gates)
+
+
+@pytest.fixture(scope="session")
+def marketplace_short_description(marketplace_core_gates) -> str:
+    """A description one character below the stand's description_min, for CRITICAL findings."""
+    return build_short_description(marketplace_core_gates)
+
+
+@pytest.fixture(scope="session")
+def marketplace_management_utils(client, marketplace_core_gates):
+    """Marketplace-management endpoints called as the harness admin user."""
+    return MarketplaceManagementUtils(client)
+
+
+def _marketplace_persona_mode() -> bool:
+    """True when the submitter is the static persona instead of a user made in Keycloak.
+
+    Always on production (no users are created there). `MARKETPLACE_SUBMITTER_PERSONA=true`
+    switches it on elsewhere, only so the persona path can be verified on a preview stand.
+    """
+    return (
+        EnvironmentResolver.is_production()
+        or str(
+            CredentialsManager.get_parameter("MARKETPLACE_SUBMITTER_PERSONA", "false")
+        ).lower()
+        == "true"
+    )
+
+
+def _persona_submitter(llm_model: str) -> MarketplaceSubmitter:
+    """The existing non-admin persona (AUTH_USERNAME_DEFAULT) as the submitter.
+
+    Never falls back to the admin account: an admin's publish skips the review queue, so
+    a missing or admin persona fails here with a message instead of queuing nothing.
+    The assistants go to the persona's own personal project, found from its profile (the
+    login name when the profile names none).
+    """
+    username = CredentialsManager.get_parameter("AUTH_USERNAME_DEFAULT")
+    password = CredentialsManager.get_parameter("AUTH_PASSWORD_DEFAULT")
+    assert_that(
+        bool(username and password),
+        equal_to(True),
+        "AUTH_USERNAME_DEFAULT / AUTH_PASSWORD_DEFAULT are not set: the marketplace "
+        "submitter persona is unavailable",
+    )
+    assert_that(
+        username == CredentialsManager.get_parameter("AUTH_USERNAME"),
+        equal_to(False),
+        "AUTH_USERNAME_DEFAULT is the admin account; a submitter must be a plain user, "
+        "because an admin's publish skips the review queue",
+    )
+    user_client = get_client(username=username, password=password)
+    assert_principal_is(user_client, username, not_admin=True)
+    project = personal_project_of(user_client.users.about_me()) or username
+    return MarketplaceSubmitter(
+        username, password, user_client, llm_model, project=project
+    )
+
+
+@pytest.fixture(scope="module")
+def marketplace_submitter(request, default_llm, marketplace_core_gates):
+    """A plain user (no admin or maintainer role) who owns and submits assistants.
+
+    Created once per module and worker; the role is verified so that a stand that
+    makes every user an admin fails here instead of passing the refusal checks.
+    On production, and wherever `MARKETPLACE_SUBMITTER_PERSONA=true` (a switch that
+    exists only to verify the persona path on a preview stand), the user is the static
+    persona AUTH_USERNAME_DEFAULT: nothing is created or deleted in Keycloak.
+    Depends on `marketplace_core_gates`, so every assistant factory built on it runs
+    after the gate thresholds are set.
+    """
+    if _marketplace_persona_mode():
+        yield _persona_submitter(default_llm.base_name)
+        return
+    keycloak_utils = request.getfixturevalue("keycloak_utils")
+    email = f"autotest_submitter_{secrets.token_hex(4)}@email.com"
+    password = keycloak_utils.create_platform_user(email=email)
+    try:
+        user_client = get_client(username=email, password=password)
+        assert_principal_is(user_client, email, not_admin=True)
+        yield MarketplaceSubmitter(email, password, user_client, default_llm.base_name)
+    finally:
+        try:
+            keycloak_utils.delete_user(email)
+        except Exception as e:
+            logger.warning(f"Failed to delete user {email}: {e}")
+
+
+def _delete_submitter_assistant(submitter, admin_client, assistant_id) -> None:
+    """Delete an assistant of the submitter in any review state (pending, rejected, approved).
+
+    The owner deletes it; the admin client is the fallback. A failure of both is logged as
+    an error, because the assistant is then left behind.
+    """
+    try:
+        submitter.assistant_utils.delete_assistant_by_id(assistant_id)
+    except Exception:
+        try:
+            admin_client.assistants.delete(assistant_id)
+        except Exception as e:
+            logger.error(f"Failed to delete assistant {assistant_id}: {e}")
+
+
+@pytest.fixture
+def marketplace_assistants_to_delete(marketplace_submitter, client):
+    """Collects the assistants a test creates for the submitter and deletes them on teardown."""
+    created = []
+    yield created
+    for assistant in created:
+        _delete_submitter_assistant(marketplace_submitter, client, assistant.id)
+
+
+@pytest.fixture
+def delete_marketplace_assistant(
+    marketplace_submitter, client, marketplace_assistants_to_delete
+):
+    """Deletes an assistant right away (for one that is public) and drops it from the teardown list."""
+
+    def _delete(assistant) -> None:
+        _delete_submitter_assistant(marketplace_submitter, client, assistant.id)
+        marketplace_assistants_to_delete.remove(assistant)
+
+    return _delete
+
+
+@pytest.fixture
+def draft_assistant(
+    marketplace_submitter, marketplace_assistants_to_delete, marketplace_core_gates
+):
+    """Factory: an assistant of the submitter that was never published."""
+
+    def _create(name=None, categories=None):
+        assistant = marketplace_submitter.create_assistant(
+            build_marketplace_submission(
+                marketplace_core_gates, name=name, categories=categories
+            )
+        )
+        marketplace_assistants_to_delete.append(assistant)
+        return assistant
+
+    return _create
+
+
+@pytest.fixture
+def pending_assistant(
+    marketplace_submitter, marketplace_assistants_to_delete, draft_assistant
+):
+    """Factory: an assistant the submitter published, waiting in the review queue."""
+
+    def _create(name=None, categories=None):
+        assistant = draft_assistant(name=name, categories=categories)
+        marketplace_submitter.submit_for_review(assistant)
+        return assistant
+
+    return _create
+
+
+@pytest.fixture
+def critical_pending_assistant(
+    pending_assistant,
+    marketplace_submitter,
+    marketplace_management_utils,
+    marketplace_short_description,
+):
+    """Factory: a queued assistant whose live gate recompute reports a CRITICAL finding.
+
+    The publish route refuses CRITICAL content from a plain user, but the gates are
+    recomputed on every read of the queue, so shortening the description after the
+    submission produces the finding while the assistant stays PENDING_REVIEW.
+    """
+
+    def _create(name=None, categories=None):
+        assistant = pending_assistant(name=name, categories=categories)
+        marketplace_submitter.edit_description(assistant, marketplace_short_description)
+        detail = marketplace_management_utils.get_detail(assistant.id)
+        assert_that(
+            [
+                finding.rule
+                for finding in detail.gate_findings
+                if finding.severity == CRITICAL
+            ],
+            has_item(DESCRIPTION_LENGTH_RULE),
+            "the edited description must make the gate recompute report a CRITICAL finding",
+        )
+        assert_that(detail.marketplace_status, equal_to(PENDING_REVIEW))
+        return assistant
+
+    return _create
+
+
+@pytest.fixture
+def approved_assistant(
+    pending_assistant, marketplace_management_utils, assistant_utils
+):
+    """Factory: an assistant the admin approved (APPROVED, verified, in the marketplace).
+
+    Returns once the marketplace listing shows the assistant: indexing runs in the
+    background after the approval, and the UI tests look for the card straight away.
+    """
+
+    def _create(name=None, categories=None):
+        assistant = pending_assistant(name=name, categories=categories)
+        version = marketplace_management_utils.get_detail(
+            assistant.id
+        ).marketplace_version
+        marketplace_management_utils.approve(assistant.id, expected_version=version)
+        listed = poll_marketplace_listing(assistant_utils, assistant.id, listed=True)
+        assert_that(
+            listed,
+            has_item(assistant.id),
+            "the approved assistant did not appear in the marketplace listing in time",
+        )
+        return assistant
+
+    return _create
+
+
+@pytest.fixture
+def rejected_assistant(pending_assistant, marketplace_management_utils):
+    """Factory: an assistant the admin rejected with a reason (kept on `decision_reason`)."""
+
+    def _create(name=None, categories=None, reason=VALID_REASON):
+        assistant = pending_assistant(name=name, categories=categories)
+        version = marketplace_management_utils.get_detail(
+            assistant.id
+        ).marketplace_version
+        marketplace_management_utils.reject(
+            assistant.id, reason, expected_version=version
+        )
+        assistant.decision_reason = reason
+        return assistant
+
+    return _create
+
+
+@pytest.fixture
+def assistant_in_marketplace_state(
+    draft_assistant, pending_assistant, rejected_assistant, approved_assistant
+):
+    """Factory: one assistant of the submitter in the given state (draft, pending, rejected, verified)."""
+    factories = {
+        "draft": draft_assistant,
+        "pending": pending_assistant,
+        "rejected": rejected_assistant,
+        "verified": approved_assistant,
+    }
+
+    def _create(state):
+        return factories[state]()
+
+    return _create

@@ -390,6 +390,28 @@ class AssistantsPage(BasePage):
         expect(self.get_assistant_card_by_name(name)).to_be_hidden()
         return self
 
+    def assistant_status_badge(self, name: str):
+        """Marketplace review badge (REVIEW, REJECTED or VERIFIED) of an assistant card."""
+        return self.get_assistant_card_by_name(name).get_by_test_id(
+            "assistant-status-badge"
+        )
+
+    @step
+    def should_see_status_badge(self, name: str, status: str, text: str):
+        """The card shows the badge with the given data-status and label."""
+        badge = self.assistant_status_badge(name)
+        expect(badge).to_have_attribute("data-status", status, timeout=15000)
+        expect(badge).to_contain_text(text)
+        return self
+
+    @step
+    def should_see_rejection_reason_on_badge(self, name: str, reason: str):
+        """The rejected badge carries the rejection reason as its tooltip text."""
+        expect(self.assistant_status_badge(name)).to_have_attribute(
+            "data-pr-tooltip", reason
+        )
+        return self
+
     @step
     def should_see_updating_popup(self, text: str):
         """Verify that an update popup is visible."""

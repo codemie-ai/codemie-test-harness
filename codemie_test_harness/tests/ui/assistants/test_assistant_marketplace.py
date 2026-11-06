@@ -28,6 +28,9 @@ Test Coverage:
 
 import pytest
 
+from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
+    publish_ready_content,
+)
 from codemie_test_harness.tests.ui.pageobject.assistants.assistants_page import (
     AssistantsPage,
 )
@@ -48,7 +51,7 @@ logger = setup_logger(__name__)
 
 @pytest.fixture
 def parent_with_published_and_unpublished_sub_assistants(
-    assistant_factory, assistant_utils
+    assistant_factory, assistant_utils, marketplace_core_gates
 ):
     """Parent assistant with one sub-assistant already on Marketplace and one private.
 
@@ -57,7 +60,8 @@ def parent_with_published_and_unpublished_sub_assistants(
     """
     test_data = get_sub_assistant_marketplace_data()
     published_sub_assistant = assistant_factory.create(
-        assistant_name=test_data.published_sub_assistant_name
+        assistant_name=test_data.published_sub_assistant_name,
+        **publish_ready_content(marketplace_core_gates),
     )
     unpublished_sub_assistant = assistant_factory.create(
         assistant_name=test_data.unpublished_sub_assistant_name
@@ -180,14 +184,16 @@ def test_marketplace_ratings_and_feedback_visibility(page):
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.prod_regression
-def test_marketplace_filter_by_category(page, assistant, assistant_utils):
+def test_marketplace_filter_by_category(
+    page, assistant, assistant_utils, marketplace_core_gates
+):
     """
     Test #4: Filter marketplace assistants by category.
 
     AC: Filter marketplace items by category - Categories filter.
     """
     # Create assistant
-    created_assistant = assistant()
+    created_assistant = assistant(**publish_ready_content(marketplace_core_gates))
 
     # Publish directly with ignore_recommendations=True and categories
     assistant_utils.publish_assistant_to_marketplace(
@@ -204,7 +210,7 @@ def test_marketplace_filter_by_category(page, assistant, assistant_utils):
     marketplace_page.filter_by_category()
 
     # Search for the published assistant first, then verify it appears
-    marketplace_page.search_assistants(created_assistant.name)
+    marketplace_page.search_until_listed(created_assistant.name)
     marketplace_page.should_see_assistant_in_marketplace(created_assistant.name)
 
 
@@ -216,6 +222,7 @@ def test_marketplace_search_assistants_by_name(
     page,
     assistant,
     assistant_utils,
+    marketplace_core_gates,
 ):
     """
     Test #5: Search assistants in marketplace.
@@ -223,7 +230,7 @@ def test_marketplace_search_assistants_by_name(
     AC: Search marketplace by name/keyword - Search functionality.
     """
     # Create assistant
-    created_assistant = assistant()
+    created_assistant = assistant(**publish_ready_content(marketplace_core_gates))
 
     # Publish directly without live LLM quality validation
     assistant_utils.publish_assistant_to_marketplace(
@@ -237,7 +244,7 @@ def test_marketplace_search_assistants_by_name(
     marketplace_page.navigate_to()
 
     # Search for assistant by name first, then verify it appears
-    marketplace_page.search_assistants(created_assistant.name)
+    marketplace_page.search_until_listed(created_assistant.name)
     marketplace_page.should_see_assistant_in_marketplace(created_assistant.name)
 
 
