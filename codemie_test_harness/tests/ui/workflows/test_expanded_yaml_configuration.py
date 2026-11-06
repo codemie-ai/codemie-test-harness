@@ -137,10 +137,6 @@ def test_expanded_yaml_dialog_has_equal_size_in_editor_and_execution_details(
 
 
 # @case workflow-editor-expanded-yaml-configuration_TC_003
-@pytest.mark.xfail(
-    strict=True,
-    reason="Known product defect: typed text in the expanded YAML editor keeps only its last character",
-)
 @pytest.mark.workflow
 @pytest.mark.ui
 def test_expanded_yaml_edit_syncs_to_inline_editor_and_persists_on_save(
@@ -178,10 +174,6 @@ def test_expanded_yaml_edit_syncs_to_inline_editor_and_persists_on_save(
 
 
 # @case workflow-editor-expanded-yaml-configuration_TC_003
-@pytest.mark.xfail(
-    strict=True,
-    reason="Known product defect: typed text in the expanded YAML editor keeps only its last character",
-)
 @pytest.mark.workflow
 @pytest.mark.ui
 def test_expanded_yaml_edit_is_discarded_on_cancel(page, test_workflow, workflow_utils):
@@ -211,10 +203,6 @@ def test_expanded_yaml_edit_is_discarded_on_cancel(page, test_workflow, workflow
 
 
 # @case workflow-editor-expanded-yaml-configuration_TC_005
-@pytest.mark.xfail(
-    strict=True,
-    reason="Known product defect: typed text in the expanded YAML editor keeps only its last character",
-)
 @pytest.mark.workflow
 @pytest.mark.ui
 def test_expanded_yaml_invalid_yaml_shows_error_and_failed_border(open_expanded_yaml):
