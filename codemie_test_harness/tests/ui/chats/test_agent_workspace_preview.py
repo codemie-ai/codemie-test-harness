@@ -19,15 +19,14 @@ Covers:
   TC_001  Markdown files (.md, .markdown) render as formatted Markdown (AC-1)
   TC_002  Front matter shows as a monospace block above the formatted body (AC-2)
   TC_003  JSON is pretty-printed; invalid JSON and 16+ digit integers stay unchanged (AC-3, AC-4)
-  TC_004  Text extensions show their raw text (AC-5)
-  TC_005  Unknown extension, no extension or dotfile shows the no-preview hint (AC-6)
-  TC_006  Expand control enlarges the preview and collapses it again (AC-7)
+  TC_004  Text extensions and dotfiles show their raw text (AC-5)
+  TC_005  Unknown extension or no extension shows the no-preview hint (AC-6)
+  TC_006  Expand opens a full-screen dialog of the file; Collapse returns to the popup (AC-7)
   TC_009  Download still delivers the file (AC-9)
   TC_010  HTML is shown as text and Markdown scripts do not execute (AC-10)
-  TC_011  Expanded state resets after the browser is closed and reopened
 
-Manual only (no scenarios): expanded image preview (write_file stores text only), Esc closing
-only the expanded view.
+Not automated: expanded image preview (write_file stores text only), Esc closing only the
+expanded view, and the expanded state across closing the browser (the expanded dialog is modal).
 
 Each test seeds its own conversation and workspace through the SDK, so the preview is
 checked against known content.
@@ -203,7 +202,8 @@ def test_workspace_preview_shows_raw_text_for_text_extensions(
     open_workspace_browser, file
 ):
     """
-    TC_004: A file with a text extension (any letter case) shows its text unchanged.
+    TC_004: A file with a text extension (any letter case), or a dotfile such as .env,
+    shows its text unchanged in the code block.
 
     AC-5: Text extensions show their raw text.
     """
@@ -227,8 +227,8 @@ def test_workspace_preview_shows_hint_for_file_without_preview(
     open_workspace_browser, file
 ):
     """
-    TC_005: A file with an unknown extension, no extension or only a leading dot shows the
-    no-preview hint listing Markdown, JSON, text formats and images, and no preview.
+    TC_005: A file with an unknown extension or no extension shows the no-preview hint
+    listing Markdown, JSON, text formats and images, and no preview.
 
     AC-6: Files the preview cannot render show the hint.
     """
@@ -250,28 +250,24 @@ def test_workspace_preview_shows_hint_for_file_without_preview(
 @pytest.mark.parametrize("file", EXPAND_FILES, ids=EXPAND_IDS)
 def test_workspace_preview_expands_and_collapses(open_workspace_browser, file):
     """
-    TC_006: Expand relabels the control to "Collapse preview", hides the file list panel
-    and widens the popup to nearly the whole viewport with the same file shown; the
-    control again restores "Expand preview", the file list and the normal size.
+    TC_006: Expand opens a separate full-screen dialog above the unchanged popup, titled with
+    the file name, showing the same file content and a "Collapse" button; Collapse closes
+    it and the popup is back as it was. The size of the expanded dialog is not asserted.
 
     AC-7: Expand control enlarges the preview and collapses it again.
     """
     browser = open_workspace_browser([file])
     browser.select_file(file.path)
     browser.should_show_file_preview(file)
-    browser.should_offer_expand()
-    normal_width = browser.popup_width()
+    browser.should_offer_expand(file)
 
-    browser.toggle_expand()
+    browser.expand_preview(file)
 
-    browser.should_be_expanded()
-    browser.should_show_file_preview(file)
+    browser.should_show_expanded_view(file)
 
-    browser.toggle_expand()
+    browser.collapse_preview()
 
-    browser.should_offer_expand()
-    browser.should_have_popup_width(normal_width)
-    browser.should_show_file_preview(file)
+    browser.should_be_back_to_popup(file)
 
 
 # ---------------------------------------------------------------------------
@@ -322,35 +318,3 @@ def test_workspace_preview_does_not_execute_html_or_markdown_scripts(
     browser.select_file(file.path)
 
     browser.should_show_payload_inertly(file, flag)
-
-
-# ---------------------------------------------------------------------------
-# TC_011 — expanded state resets on reopen
-# ---------------------------------------------------------------------------
-
-
-# @case agent-workspace-browser-readable-preview_TC_011
-@pytest.mark.chat
-@pytest.mark.ui
-def test_workspace_expanded_state_resets_after_reopening_browser(
-    open_workspace_browser,
-):
-    """
-    TC_011: After the preview is expanded and the browser is closed and reopened, the file
-    list panel is visible and the control reads "Expand preview" again.
-
-    Gap from the change: stale expanded state would hide the file list.
-    """
-    file = EXPAND_FILES[0]
-    browser = open_workspace_browser([file])
-    browser.select_file(file.path)
-    browser.toggle_expand()
-    browser.should_be_expanded()
-
-    browser.close()
-    browser.should_be_closed()
-    browser.open()
-    browser.select_file(file.path)
-
-    browser.should_offer_expand()
-    browser.should_show_file_preview(file)

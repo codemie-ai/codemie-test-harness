@@ -49,15 +49,14 @@ class WorkspaceFile:
         return self.content if self.expected_text is None else self.expected_text
 
 
-EXPAND_LABEL = "Expand preview"
-COLLAPSE_LABEL = "Collapse preview"
+# Live names of the expand control (popup) and of the button that closes the expanded dialog.
+EXPAND_LABEL = "Expand"
+COLLAPSE_LABEL = "Collapse"
 DOWNLOAD_BUTTON_LABEL = "Download selected file"
 NO_PREVIEW_HINT_PATTERN = (
     r"Preview is (currently )?available for Markdown.*JSON.*text.*image"
 )
 
-# Share of the viewport width the expanded popup must cover ("nearly the whole screen").
-EXPANDED_MIN_VIEWPORT_RATIO = 0.9
 VIEWPORT = {"width": 1920, "height": 980}
 
 # ---------------------------------------------------------------------------
@@ -171,8 +170,12 @@ _TEXT_CONTENT = {
 TEXT_FILES = [
     WorkspaceFile(f"sample.{extension}", content)
     for extension, content in _TEXT_CONTENT.items()
-] + [WorkspaceFile("SAMPLE.TXT", _TEXT_CONTENT["txt"])]
-TEXT_FILE_IDS = list(_TEXT_CONTENT) + ["TXT-upper-case"]
+] + [
+    WorkspaceFile("SAMPLE.TXT", _TEXT_CONTENT["txt"]),
+    # A dotfile has no extension but is previewed as a text file (text/plain).
+    WorkspaceFile(".env", "SAMPLE_KEY=sample"),
+]
+TEXT_FILE_IDS = list(_TEXT_CONTENT) + ["TXT-upper-case", "dotfile"]
 
 # ---------------------------------------------------------------------------
 # No preview
@@ -181,9 +184,8 @@ TEXT_FILE_IDS = list(_TEXT_CONTENT) + ["TXT-upper-case"]
 NO_PREVIEW_FILES = [
     WorkspaceFile("data.xyz", "unknown extension payload"),
     WorkspaceFile("README_noext", "no extension file"),
-    WorkspaceFile(".env", "SAMPLE_KEY=sample"),
 ]
-NO_PREVIEW_IDS = ["unknown-extension", "no-extension", "dotfile"]
+NO_PREVIEW_IDS = ["unknown-extension", "no-extension"]
 
 # ---------------------------------------------------------------------------
 # Expand / collapse

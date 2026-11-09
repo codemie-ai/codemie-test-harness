@@ -34,7 +34,6 @@ from codemie_test_harness.tests.ui.test_data.agent_workspace_preview_test_data i
     COLLAPSE_LABEL,
     DOWNLOAD_BUTTON_LABEL,
     EXPAND_LABEL,
-    EXPANDED_MIN_VIEWPORT_RATIO,
     NO_PREVIEW_HINT_PATTERN,
     PreviewKind,
     WorkspaceFile,
@@ -44,8 +43,6 @@ POPUP_TITLE = "Agent workspace"
 # The PrimeReact dialog that holds the workspace file panel (no testid on the dialog itself).
 POPUP_SELECTOR = '.p-dialog:has([data-testid="workspace-file-panel"])'
 GUIDED_TOUR_TIMEOUT_MS = 5000
-WIDTH_TOLERANCE_PX = 2
-HIDDEN_CLASS = re.compile(r"(^|\s)hidden(\s|$)")
 
 
 @dataclass
@@ -87,11 +84,6 @@ class AgentWorkspaceBrowser(BasePage):
         return self.page.locator(POPUP_SELECTOR)
 
     @property
-    def close_button(self) -> Locator:
-        """Footer "Close" button (the last one; the dialog header has its own close icon)."""
-        return self.popup.get_by_role("button", name="Close", exact=True).last
-
-    @property
     def file_panel(self) -> Locator:
         """Left column with the file list."""
         return self.page.locator('[data-testid="workspace-file-panel"]')
@@ -130,9 +122,42 @@ class AgentWorkspaceBrowser(BasePage):
         return self.popup.get_by_text(re.compile(NO_PREVIEW_HINT_PATTERN, re.I | re.S))
 
     @property
-    def expand_button(self) -> Locator:
-        """Expand / Collapse toggle of the preview."""
+    def markdown_expand_button(self) -> Locator:
+        """Expand control of a Markdown preview (the only preview kind with a testid on it)."""
         return self.page.locator('[data-testid="workspace-preview-expand"]')
+
+    @property
+    def text_expand_button(self) -> Locator:
+        """Expand control of a text preview: the "Expand" button of the code block header
+        (next to "Copy"), scoped to the workspace popup."""
+        return self.popup.get_by_role("button", name=EXPAND_LABEL, exact=True)
+
+    def expand_control(self, file: WorkspaceFile) -> Locator:
+        """Expand control that belongs to the preview kind of ``file``."""
+        if file.kind is PreviewKind.MARKDOWN:
+            return self.markdown_expand_button
+        return self.text_expand_button
+
+    @property
+    def expanded_dialog(self) -> Locator:
+        """Full-screen dialog opened by Expand: the dialog that has a "Collapse" button.
+
+        Located by role and name only; ``.last`` picks the expanded dialog should it be
+        rendered inside the workspace popup.
+        """
+        return (
+            self.page.get_by_role("dialog")
+            .filter(
+                has=self.page.get_by_role("button", name=COLLAPSE_LABEL, exact=True)
+            )
+            .last
+        )
+
+    @property
+    def collapse_button(self) -> Locator:
+        return self.expanded_dialog.get_by_role(
+            "button", name=COLLAPSE_LABEL, exact=True
+        )
 
     @property
     def download_button(self) -> Locator:
@@ -165,21 +190,21 @@ class AgentWorkspaceBrowser(BasePage):
         return self.should_be_open()
 
     @step
-    def close(self):
-        """Close the popup with its footer button."""
-        self.close_button.click()
-        return self
-
-    @step
     def select_file(self, path: str):
         """Select a file in the list."""
         self.file_row(path).click()
         return self
 
     @step
-    def toggle_expand(self):
-        """Click the Expand / Collapse control of the preview."""
-        self.expand_button.click()
+    def expand_preview(self, file: WorkspaceFile):
+        """Click Expand in the popup (opens the expanded dialog above it)."""
+        self.expand_control(file).click()
+        return self
+
+    @step
+    def collapse_preview(self):
+        """Click Collapse in the expanded dialog."""
+        self.collapse_button.click()
         return self
 
     @step
@@ -192,27 +217,12 @@ class AgentWorkspaceBrowser(BasePage):
         download.save_as(path)
         return WorkspaceDownload(path=path, filename=download.suggested_filename)
 
-    def popup_width(self) -> float:
-        """Current popup width in pixels."""
-        return self.popup.evaluate("el => el.getBoundingClientRect().width")
-
     # ==================== ASSERTIONS ====================
 
     @step
     def should_be_open(self):
         expect(self.popup).to_be_visible()
         expect(self.popup.get_by_text(POPUP_TITLE, exact=True)).to_be_visible()
-        return self
-
-    @step
-    def should_be_closed(self):
-        expect(self.popup).to_be_hidden()
-        return self
-
-    @step
-    def should_list_files(self, paths):
-        for path in paths:
-            expect(self.file_row(path)).to_be_visible()
         return self
 
     @step
@@ -295,41 +305,41 @@ class AgentWorkspaceBrowser(BasePage):
         return self
 
     @step
-    def should_offer_expand(self):
-        expect(self.expand_button).to_have_attribute("aria-label", EXPAND_LABEL)
+    def should_offer_expand(self, file: WorkspaceFile):
+        """Popup shows the file list panel and the "Expand" control of the preview."""
         expect(self.file_panel).to_be_visible()
-        expect(self.file_panel).not_to_have_class(HIDDEN_CLASS)
+        expect(self.expand_control(file)).to_be_visible()
+        expect(self.expand_control(file)).to_have_text(EXPAND_LABEL)
         return self
 
     @step
-    def should_be_expanded(self):
-        """Control offers Collapse, file list panel is hidden, popup fills the viewport."""
-        expect(self.expand_button).to_have_attribute("aria-label", COLLAPSE_LABEL)
-        expect(self.file_panel).to_have_class(HIDDEN_CLASS)
-        self.page.wait_for_function(
-            """({selector, ratio}) => {
-                const el = document.querySelector(selector);
-                return !!el && el.getBoundingClientRect().width >= ratio * window.innerWidth;
-            }""",
-            arg={"selector": POPUP_SELECTOR, "ratio": EXPANDED_MIN_VIEWPORT_RATIO},
-        )
+    def should_show_expanded_view(self, file: WorkspaceFile):
+        """Expanded dialog is open: file name as title, the file content and a "Collapse"
+        button. Everything is located by role, name or text inside the dialog."""
+        dialog = self.expanded_dialog
+        expect(dialog).to_be_visible()
+        expect(self.collapse_button).to_be_visible()
+        expect(dialog.get_by_text(file.path, exact=True).first).to_be_visible()
+        if file.kind is PreviewKind.MARKDOWN:
+            expect(dialog.get_by_role("heading", name=file.heading)).to_be_visible()
+        else:
+            for line in file.content.split("\n"):
+                expect(dialog).to_contain_text(line)
         return self
 
     @step
-    def should_have_popup_width(self, width: float):
-        """Popup is back at ``width`` pixels (within a small tolerance)."""
-        self.page.wait_for_function(
-            """({selector, width, tolerance}) => {
-                const el = document.querySelector(selector);
-                return !!el && Math.abs(el.getBoundingClientRect().width - width) <= tolerance;
-            }""",
-            arg={
-                "selector": POPUP_SELECTOR,
-                "width": width,
-                "tolerance": WIDTH_TOLERANCE_PX,
-            },
-        )
+    def should_have_no_expanded_view(self):
+        expect(self.expanded_dialog).to_have_count(0)
         return self
+
+    @step
+    def should_be_back_to_popup(self, file: WorkspaceFile):
+        """Expanded dialog is gone; the popup is open with its file list panel, the file
+        still previewed and the Expand control shown."""
+        self.should_have_no_expanded_view()
+        self.should_be_open()
+        self.should_offer_expand(file)
+        return self.should_show_file_preview(file)
 
     @step
     def should_deliver_file(
