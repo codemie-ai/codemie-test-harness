@@ -21,6 +21,9 @@ from codemie_test_harness.tests.ui.pageobject.assistants.assistants_marketplace_
 from codemie_test_harness.tests.ui.pageobject.assistants.create_edit_assistant_page import (
     CreateEditAssistantPage,
 )
+from codemie_test_harness.tests.ui.pageobject.assistants.share_assistant_popup import (
+    ShareAssistantPopup,
+)
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, expect
 from reportportal_client import step
@@ -115,6 +118,11 @@ class AssistantsPage(BasePage):
     def action_copy_link(self):
         """Dropdown 'Copy Link' button."""
         return self.page.locator("button").filter(has_text="Copy Link")
+
+    @property
+    def action_share(self):
+        """Dropdown 'Share' button (owner-only)."""
+        return self.page.locator("button").filter(has_text="Share")
 
     @property
     def action_edit(self):
@@ -327,6 +335,14 @@ class AssistantsPage(BasePage):
         self.open_action_menu(name, self.action_edit)
         self.action_edit.click()
         return CreateEditAssistantPage(self.page)
+
+    @step
+    def open_share_popup(self, name: str):
+        """Open the 'Share assistant' dialog from the card's 3-dot menu (owner-only)."""
+        self.close_new_release_popup()
+        self.open_action_menu(name, self.action_share)
+        self.action_share.click()
+        return ShareAssistantPopup(self.page)
 
     @step
     def open_assistant_details(self, name: str):

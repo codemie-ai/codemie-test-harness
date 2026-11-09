@@ -375,6 +375,7 @@ class CliSessionSeed:
     duration: timedelta | None = None
     cost_usd: float | None = None
     model: str = SEED_MODEL
+    skill_name: str | None = None
     session_id: str = field(
         default_factory=lambda: f"autotest-cli-{uuid.uuid4().hex[:12]}"
     )
@@ -405,6 +406,18 @@ class CliSessionSeed:
                     ),
                     "type": "agent.session.end",
                     "event_id": f"end:{self.session_id}",
+                }
+            )
+        if self.skill_name:
+            events.append(
+                {
+                    **envelope,
+                    "type": "agent.skill.dispatch",
+                    "event_id": f"skill:{self.session_id}:{self.skill_name}",
+                    "prompt_id": f"prompt-{self.session_id}",
+                    "skill_name": self.skill_name,
+                    "command_name": self.skill_name,
+                    "command_source": "plugin",
                 }
             )
         if self.cost_usd is None:
@@ -687,3 +700,38 @@ def catalog_cost_by_user(
     for seed in seeds:
         costs[seed.user] = costs.get(seed.user, 0.0) + session_catalog_cost(seed, price)
     return costs
+
+
+# ── Delivery framework label of a session ────────────────────────────────────
+
+STLC_LABEL = "STLC Factory (QA factory)"
+
+# (skill that starts the session, framework label the Sessions view must show)
+DELIVERY_FRAMEWORK_CASES = [
+    pytest.param("stlc-factory:suite-health", STLC_LABEL, id="stlc-suite-health"),
+    pytest.param("stlc-factory:exploratory", STLC_LABEL, id="stlc-exploratory"),
+    pytest.param("stlc-feature", STLC_LABEL, id="stlc-feature"),
+    pytest.param("stlc-factory:stlc-foundation", STLC_LABEL, id="stlc-foundation"),
+    pytest.param(
+        "sdlc-factory:feature-verification",
+        "CodeMie AI Factory",
+        id="control-sdlc-factory",
+    ),
+    pytest.param("superpowers:brainstorming", "Superpowers", id="control-superpowers"),
+    pytest.param(None, "Pure chat", id="control-no-skill"),
+]
+
+
+def get_delivery_framework_session_seeds() -> dict[str | None, CliSessionSeed]:
+    """One session per case of DELIVERY_FRAMEWORK_CASES, keyed by its skill."""
+    skills = [case.values[0] for case in DELIVERY_FRAMEWORK_CASES]
+    return {
+        skill: CliSessionSeed(
+            key=skill or "no_skill",
+            started_at=seed_day_start() + timedelta(hours=10, minutes=index),
+            input_tokens=1000 * (index + 1),
+            output_tokens=10 * (index + 1),
+            skill_name=skill,
+        )
+        for index, skill in enumerate(skills)
+    }
