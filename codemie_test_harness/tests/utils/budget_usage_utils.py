@@ -218,22 +218,6 @@ class BudgetUsageUtils(BaseUtils):
             interval=ROW_WAIT_INTERVAL,
         )
 
-    def wait_for_user_project_category_spend_above(
-        self,
-        email: str,
-        project_name: str,
-        category: str,
-        threshold: float,
-        timeout: float = STORED_ROW_WAIT_TIMEOUT,
-    ):
-        """Poll until the admin row's spend of ``category`` exceeds ``threshold``; returns the last read row."""
-        return poll_until(
-            lambda: self.get_user_project_spending_row(email, project_name),
-            lambda row: row is not None and (row.get(category) or 0) > threshold,
-            timeout=timeout,
-            interval=ROW_WAIT_INTERVAL,
-        )
-
     def get_user_project_spending_rows(self, email: str) -> list[dict]:
         return self.client.analytics.get_user_project_spending(email).data.rows
 
