@@ -27,10 +27,7 @@ from hamcrest import (
 )
 
 from codemie_sdk.models.provisioning import ProvisioningProjectBlock
-from codemie_test_harness.cli.constants import (
-    KEY_PROVISIONING_FULL_NAME,
-    PROVISIONING_FULL_CLIENT_KEYS,
-)
+from codemie_test_harness.cli.constants import PROVISIONING_FULL_CLIENT_KEYS
 from codemie_test_harness.tests.test_data.provisioning_test_data import (
     DEFAULT_SOFT_LIMIT_FRACTION,
     SOFT_BUDGET_CATEGORIES,
@@ -44,13 +41,11 @@ AMOUNT_TOLERANCE = 0.01
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(
-    *PROVISIONING_FULL_CLIENT_KEYS, KEY_PROVISIONING_FULL_NAME
-)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_creates_project_cost_center_admins_and_budget(
     provisioning_full,
-    provisioning_client_name,
+    provisioning_client_names,
     non_admin_user,
     provisioning_utils,
 ):
@@ -91,7 +86,7 @@ def test_set_budget_creates_project_cost_center_admins_and_budget(
         "the active user is a project admin",
     )
     group = provisioning_utils.active_budget_group(project_name)
-    assert_that(group["name"], equal_to(f"{provisioning_client_name} {reference}"))
+    provisioning_client_names.observe(group["name"], reference)
     assert_that(group["budget_duration"], equal_to("30d"))
     assert_that(
         provisioning_utils.category_budgets(project_name),

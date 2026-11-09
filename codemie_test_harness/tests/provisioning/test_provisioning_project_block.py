@@ -17,7 +17,6 @@
 import pytest
 from hamcrest import (
     assert_that,
-    contains_inanyorder,
     equal_to,
     has_items,
     is_,
@@ -26,10 +25,7 @@ from hamcrest import (
 )
 
 from codemie_sdk.models.provisioning import ProvisioningProjectBlock
-from codemie_test_harness.cli.constants import (
-    KEY_PROVISIONING_FULL_EMAIL,
-    PROVISIONING_FULL_CLIENT_KEYS,
-)
+from codemie_test_harness.cli.constants import PROVISIONING_FULL_CLIENT_KEYS
 from codemie_test_harness.tests.test_data.provisioning_test_data import (
     COST_CENTER_LINK_ROWS,
     INVALID_COST_CENTER_NAME,
@@ -47,7 +43,13 @@ from codemie_test_harness.tests.utils.cost_center_utils import (
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_links_cost_center_once_and_never_changes_an_existing_link(
-    provisioning_full, provisioning_utils, cost_center, linked, requested, expected
+    provisioning_full,
+    provisioning_client_names,
+    provisioning_utils,
+    cost_center,
+    linked,
+    requested,
+    expected,
 ):
     # @case provisioning-api-for-third-party_TC_013
     name_a = get_random_cost_center_name()
@@ -63,9 +65,11 @@ def test_set_budget_links_cost_center_once_and_never_changes_an_existing_link(
         cost_center_id=cost_center_ids.get(linked)
     )
 
+    reference = change_reference()
+
     result = provisioning_full.set_budget(
         project_name,
-        change_reference(),
+        reference,
         budget_request(
             {"platform": 100.0},
             ProvisioningProjectBlock(cost_center=names[requested]),
@@ -83,16 +87,16 @@ def test_set_budget_links_cost_center_once_and_never_changes_an_existing_link(
         equal_to(names[expected]),
         "the stored link is the one expected",
     )
+    provisioning_client_names.observe(
+        provisioning_utils.active_budget_group(project_name)["name"], reference
+    )
 
 
 @pytest.mark.budget
-@pytest.mark.requires_setting(
-    *PROVISIONING_FULL_CLIENT_KEYS, KEY_PROVISIONING_FULL_EMAIL
-)
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
-def test_set_budget_only_adds_admins_and_reports_unassignable_emails(
+def test_set_budget_only_adds_admins_and_reports_unknown_emails(
     provisioning_full,
-    provisioning_client_email,
     non_admin_user,
     disposable_user,
     user_utils,
@@ -116,20 +120,52 @@ def test_set_budget_only_adds_admins_and_reports_unassignable_emails(
         change_reference(),
         budget_request(
             {"platform": 100.0},
-            ProvisioningProjectBlock(
-                admin_emails=[member_email, unknown, provisioning_client_email]
-            ),
+            ProvisioningProjectBlock(admin_emails=[member_email, unknown]),
         ),
     )
 
     assert_that(result.budget.admins_assigned, equal_to([member_email]))
     assert_that(
         result.budget.admins_not_assigned,
-        contains_inanyorder(unknown, provisioning_client_email),
-        "an unknown email and the registered client are not made admins",
+        equal_to([unknown]),
+        "an unknown email is not made an admin",
     )
     assert_that(
         provisioning_utils.admin_ids(project_name),
         has_items(member_id, admin_id),
         "the member was promoted and the original admin is still an admin",
+    )
+
+
+@pytest.mark.budget
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
+@pytest.mark.api
+def test_set_budget_reports_registered_client_email_as_not_assigned(
+    provisioning_full,
+    provisioning_client_email,
+    provisioning_utils,
+):
+    # @case provisioning-api-for-third-party_TC_014
+    project_name = provisioning_utils.create_project()
+    admins_before = provisioning_utils.admin_ids(project_name)
+
+    result = provisioning_full.set_budget(
+        project_name,
+        change_reference(),
+        budget_request(
+            {"platform": 100.0},
+            ProvisioningProjectBlock(admin_emails=[provisioning_client_email]),
+        ),
+    )
+
+    assert_that(
+        result.budget.admins_not_assigned,
+        equal_to([provisioning_client_email]),
+        "a registered client is a service account and is not made an admin",
+    )
+    assert_that(result.budget.admins_assigned, equal_to([]))
+    assert_that(
+        provisioning_utils.admin_ids(project_name),
+        equal_to(admins_before),
+        "no project admin was added",
     )

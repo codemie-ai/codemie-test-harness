@@ -15,10 +15,17 @@
 """Create the projects, cost centers and budgets provisioning tests need, read back what a
 provisioning call changed, and remove everything afterwards."""
 
+import base64
+import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
+
+import requests
+from hamcrest import assert_that, empty, has_length, is_not
+from pydantic import ValidationError
 
 from codemie_test_harness.tests.utils.admin_project_budget_group_utils import (
     AdminProjectBudgetGroupUtils,
@@ -35,6 +42,118 @@ from codemie_test_harness.tests.utils.project_budget_groups import ProjectBudget
 logger = logging.getLogger(__name__)
 
 PROVISIONING_PATH_PREFIX = "/v1/provisioning"
+TOKEN_REFRESH_MARGIN_SECONDS = 60
+TOKEN_REQUEST_TIMEOUT_SECONDS = 30
+# The registry caps a client name so that "<name> <reference>" fits a budget name.
+MAX_CLIENT_NAME_LENGTH = 35
+
+
+class ClientCredentialsTokenSource:
+    """Mints Keycloak access tokens for a service account with the client-credentials grant and
+    renews them shortly before they expire. ``token`` is the callable to hand to the SDK."""
+
+    def __init__(
+        self,
+        auth_server_url: str,
+        realm: str,
+        client_id: str,
+        client_secret: str,
+        verify_ssl: bool,
+    ):
+        self._token_url = f"{auth_server_url.rstrip('/')}/realms/{realm}/protocol/openid-connect/token"
+        self._credentials = {
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+        }
+        self._verify_ssl = verify_ssl
+        self._token = ""
+        self._expires_at = 0.0
+
+    def token(self) -> str:
+        if time.monotonic() >= self._expires_at:
+            response = requests.post(
+                self._token_url,
+                data=self._credentials,
+                verify=self._verify_ssl,
+                timeout=TOKEN_REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            body = response.json()
+            self._token = body["access_token"]
+            self._expires_at = (
+                time.monotonic() + body["expires_in"] - TOKEN_REFRESH_MARGIN_SECONDS
+            )
+        return self._token
+
+
+def token_claims(token: str) -> dict:
+    """Claims of a JWT access token, read from its payload without verifying the signature."""
+    payload = token.split(".")[1]
+    return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+
+
+def resolve_client_email(user_utils, token: str, client_id: str) -> str | None:
+    """The CodeMie e-mail of the user behind a service account, or None when it cannot be confirmed.
+
+    The user is the one whose id equals the token's ``sub``. Its e-mail is read from the admin
+    user record. When that record has no e-mail, the client id or the token's e-mail claim is
+    used only if the admin user list shows that address belongs to the user with that id.
+    """
+    claims = token_claims(token)
+    user_id = claims.get("sub")
+    if not user_id or user_utils.get_admin_user_status_code(user_id) != 200:
+        return None
+    try:
+        email = user_utils.get_admin_user(user_id).email
+    except ValidationError:
+        email = None
+    if email:
+        return email
+    for candidate in (client_id, claims.get("email"), claims.get("preferred_username")):
+        matches = (
+            user_utils.list_all_admin_users(search=candidate)
+            if candidate and "@" in candidate
+            else []
+        )
+        if any(
+            user.id == user_id and user.email.lower() == candidate.lower()
+            for user in matches
+        ):
+            return candidate
+    return None
+
+
+class ClientNameRecorder:
+    """Derives the registered client name from the budget names the client creates.
+
+    A budget the client creates is named "<client name> <change reference>". The name is not
+    configured in the harness, so it is read back from those budgets, and every budget seen in
+    the session must give the same one.
+    """
+
+    def __init__(self):
+        self._names: set[str] = set()
+
+    def observe(self, budget_name: str, reference: str) -> str:
+        suffix = f" {reference}"
+        assert_that(
+            budget_name.endswith(suffix),
+            f"budget name {budget_name!r} ends with the change reference {reference!r}",
+        )
+        name = budget_name.removesuffix(suffix)
+        assert_that(name, is_not(empty()), "the client name part is not empty")
+        assert_that(
+            len(name) <= MAX_CLIENT_NAME_LENGTH,
+            f"client name {name!r} is at most {MAX_CLIENT_NAME_LENGTH} characters",
+        )
+        self._names.add(name)
+        assert_that(
+            self._names,
+            has_length(1),
+            "every budget the client creates carries the same client name",
+        )
+        return name
 
 
 @dataclass(frozen=True)
