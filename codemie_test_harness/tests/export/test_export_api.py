@@ -41,6 +41,8 @@ from codemie_sdk.models.integration import (
     CredentialTypes,
     CredentialValues,
     Integration,
+    IntegrationTestRequest,
+    IntegrationTestResponse,
     IntegrationType,
 )
 from codemie_sdk.models.mcp_config import MCPConfigCreateRequest, MCPServerConfigData
@@ -620,6 +622,10 @@ def test_export_round_trip_leaves_datasource_unchanged(client, datasource_utils)
             branch="main",
         )
     )
+    # Settle the datasource's own initial indexing before the first export: otherwise a
+    # field that only fills in once indexing completes could still change on its own, with
+    # nothing to do with the update below, and flip between the two snapshots.
+    datasource_utils.wait_for_indexing(datasource.id)
 
     try:
         before = client.export.export("datasource", datasource.id)
@@ -637,10 +643,14 @@ def test_export_round_trip_leaves_datasource_unchanged(client, datasource_utils)
                 files_filter=spec.get("files_filter"),
                 # Source fields (link/branch/files_filter) require this flag whenever present
                 # in the body at all, even unchanged — the real repo link means the resulting
-                # background reindex is harmless; the test does not wait for it.
+                # background reindex is harmless.
                 full_reindex=True,
             ),
         )
+        # Wait for that reindex to settle before taking the second snapshot: a fake,
+        # unreachable link would let the request skip straight to the comparison, but this
+        # one is real and the reindex it starts is real and asynchronous.
+        datasource_utils.wait_for_indexing(datasource.id)
         after = client.export.export("datasource", datasource.id)
 
         assert_that(after["spec"], equal_to(before["spec"]))
@@ -946,7 +956,7 @@ def second_project(project_utils):
 @pytest.mark.export
 @pytest.mark.api
 def test_export_refuses_cross_project_reference(
-    client, assistant_utils, workflow_with_assistant, second_project
+    client, assistant_utils, second_project, workflow_with_assistant
 ):
     """@case public-export-rest-endpoint_TC_017"""
     other_project_assistant = assistant_utils.create_assistant(
@@ -1079,7 +1089,7 @@ def global_mcp_config(client):
 @pytest.mark.export
 @pytest.mark.api
 def test_export_refuses_bare_mcp_catalog_link(
-    client, workflow_with_virtual_assistant, global_mcp_config
+    client, global_mcp_config, workflow_with_virtual_assistant
 ):
     """@case public-export-rest-endpoint_TC_020"""
     name = get_random_name()
@@ -1111,6 +1121,7 @@ def test_export_refuses_bare_mcp_catalog_link(
 
 
 @pytest.mark.export
+@pytest.mark.github
 @pytest.mark.api
 @pytest.mark.parametrize(
     "scope", ["project", "user"], ids=["project-scope", "user-scope"]
@@ -1119,7 +1130,11 @@ def test_export_integration_round_trip_leaves_entity_unchanged(
     client, integration_utils, scope
 ):
     """@case public-export-rest-endpoint_TC_022"""
-    credentials = [CredentialValues(key="token", value="original-secret-value")]
+    # Real, working GitHub credentials, not a placeholder: the round trip below sends
+    # CREDENTIAL_MASK for every credential key (export never reveals the stored value), and
+    # the only way to prove the update didn't clobber the real secret with that mask literal
+    # is to use the credential for real afterwards.
+    credentials = CredentialsManager.github_credentials()
     if scope == "project":
         integration = integration_utils.create_project_integration(
             credential_type=CredentialTypes.GIT, credentials=credentials
@@ -1162,6 +1177,18 @@ def test_export_integration_round_trip_leaves_entity_unchanged(
         after_keys = sorted(e["key"] for e in after["spec"]["credential_values"])
         before_keys = sorted(e["key"] for e in before["spec"]["credential_values"])
         assert_that(after_keys, equal_to(before_keys))
+
+        test_response = integration_utils.test_integration(
+            IntegrationTestRequest(
+                credential_type=CredentialTypes.GIT, setting_id=integration.id
+            ),
+            IntegrationTestResponse,
+        )
+        assert_that(
+            test_response,
+            equal_to(IntegrationTestResponse(message="", success=True)),
+            "stored credential no longer works after the round trip",
+        )
     finally:
         setting_type = (
             IntegrationType.PROJECT if scope == "project" else IntegrationType.USER
