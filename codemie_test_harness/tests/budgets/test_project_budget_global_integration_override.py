@@ -33,8 +33,7 @@ from codemie_test_harness.tests.utils.budget_usage_utils import wait_for_settled
 logger = logging.getLogger(__name__)
 
 KNOWN_ISSUE = (
-    "Known issue: the ledger tracks spend made with a global integration key on the "
-    "projects' platform budgets, although the key itself paid for it"
+    "Spend incorrectly attributed to personal/project budget instead of global LiteLLM integration key"
 )
 MONEY_TOLERANCE = 0.0001
 
