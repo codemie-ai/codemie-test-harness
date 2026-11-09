@@ -24,6 +24,7 @@ from codemie_test_harness.tests.ui.test_data.assistant_test_data import (
 from codemie_test_harness.tests.ui.test_data.assistant_test_data import (
     TOOLKIT_TOOLS,
     AssistantPopUpMessages,
+    toolkit_labels,
     AssistantValidationErrors,
     CodebaseTool,
 )
@@ -55,7 +56,8 @@ def test_edit_assistant_page_elements_visibility(page, assistant):
         content = TOOLKIT_TOOLS[Section.AVAILABLE_TOOLS]
         edit_page.tools.select_section(Section.AVAILABLE_TOOLS.value)
         for toolkit, tools in content.items():
-            edit_page.tools.select_toolkit(Section.AVAILABLE_TOOLS.value, toolkit.value)
+            for label in toolkit_labels(toolkit):
+                edit_page.tools.select_toolkit(Section.AVAILABLE_TOOLS.value, label)
             for tool in tools:
                 edit_page.tools.should_be_visible_tool(tool.value)
 
@@ -163,7 +165,8 @@ def test_edit_assistant_tools_interactions(
         if section == Section.AVAILABLE_TOOLS:
             edit_page.tools.select_section(section.value)
             for toolkit, tools in content.items():
-                edit_page.tools.select_toolkit(section.value, toolkit.value)
+                for label in toolkit_labels(toolkit):
+                    edit_page.tools.select_toolkit(section.value, label)
                 for tool in tools:
                     if tool in unavailable_tools:
                         continue
@@ -179,8 +182,9 @@ def test_edit_assistant_tools_interactions(
     if Section.AVAILABLE_TOOLS in TOOLKIT_TOOLS:
         content = TOOLKIT_TOOLS[Section.AVAILABLE_TOOLS]
         for toolkit, tools in content.items():
-            toolkit_label = toolkit.value
-            view_page.should_see_toolkit_visible(toolkit_label)
+            toolkit_label = view_page.should_see_toolkit_visible_as_any(
+                toolkit_labels(toolkit)
+            )
             for tool in tools:
                 if tool in unavailable_tools:
                     continue

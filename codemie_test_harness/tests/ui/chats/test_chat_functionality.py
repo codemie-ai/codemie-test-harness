@@ -530,9 +530,9 @@ def test_stop_generation_button_css_state_and_halt_flow(
     chat_page.click_stop_generation()
 
     chat_page.wait_for_idle_state()
-    # Generation was interrupted via Stop, so the submit control comes back
-    # as "Continue" (resume this step), not "Send" (start a fresh turn).
-    chat_page.should_have_continue_button_visible()
+    # An assistant chat has no step to resume after Stop: the workflow
+    # "Continue" mode is limited to workflow chats, so "Send" comes back.
+    chat_page.should_have_send_button_visible()
     chat_page.should_not_have_stop_button_visible()
 
 
@@ -570,8 +570,8 @@ def test_stop_button_visible_after_resend_first_message_in_multi_message_chat(
     chat_page.click_stop_generation()
     chat_page.wait_for_idle_state()
     chat_page.should_not_have_stop_button_visible()
-    # Interrupted via Stop again, so "Continue" is expected here too.
-    chat_page.should_have_continue_button_visible()
+    # Stopped again in an assistant chat, so "Send" is expected here too.
+    chat_page.should_have_send_button_visible()
 
 
 @pytest.mark.sanity

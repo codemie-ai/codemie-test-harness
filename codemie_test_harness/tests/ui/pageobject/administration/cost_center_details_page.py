@@ -1,3 +1,17 @@
+# Copyright 2026 EPAM Systems, Inc. (“EPAM”)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Page object for the Cost Center Details administration page.
 
 URL: /settings/administration/cost-centers/{cost_center_id}
@@ -84,6 +98,10 @@ class CostCenterDetailsPage(BasePage):
 
     # ── Assertions ────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _money_or_text(value: float | str) -> str:
+        return value if isinstance(value, str) else format_money(value)
+
     @step
     def should_show_budget_rollup(self):
         """Verify the 'Budget rollup' section is shown and its card did not fail to load."""
@@ -93,22 +111,17 @@ class CostCenterDetailsPage(BasePage):
 
     @step
     def should_have_summary(
-        self, total_budget: float | str, spend: float, percent_used: str
+        self, total_budget: float | str, spend: float | str, percent_used: str
     ):
         """Verify the summary row: 'Total budget', 'Spend' and '% used'.
 
-        ``total_budget`` is an amount, or the exact text shown instead of one.
+        ``total_budget`` and ``spend`` are an amount, or the exact text shown instead of one.
         """
-        expected_total = (
-            total_budget
-            if isinstance(total_budget, str)
-            else format_money(total_budget)
-        )
         expect(self.summary_value("Total budget")).to_have_text(
-            expected_total, timeout=15000
+            self._money_or_text(total_budget), timeout=15000
         )
         expect(self.summary_value("Spend")).to_have_text(
-            format_money(spend), timeout=15000
+            self._money_or_text(spend), timeout=15000
         )
         expect(self.summary_value("% used")).to_have_text(percent_used, timeout=15000)
         return self

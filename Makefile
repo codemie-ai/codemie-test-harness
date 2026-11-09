@@ -13,9 +13,9 @@ install:
 		poetry run pip install "codemie-sdk-python==$(SDK_VERSION)"; \
 	fi
 
-# Installs scripts/pre-commit-hook.sh as the repo-wide git pre-commit hook.
-# It only lints staged test-harness/*.py files, so it is safe to run even
-# though .git/hooks is shared with the other codemie-sdk subprojects.
+# Installs scripts/pre-commit-hook.sh as the git pre-commit hook.
+# It lints and licence-checks the staged .py files and runs the internal-value scan.
+# The hook is copied, not linked: re-run with FORCE=1 after the script changes.
 # Refuses to overwrite a different existing hook; FORCE=1 backs it up to
 # pre-commit.bak first.
 install-hooks:
