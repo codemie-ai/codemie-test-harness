@@ -45,12 +45,14 @@ def test_admin_sets_default_project_in_user_details(
     page, user_utils, default_project_member
 ):
     """TC-21: details rows show the current default; picking another one persists it and moves
-    the marker in the users list."""
+    the marker in the users list. The identity block shows the opened member's ID and email."""
     member = default_project_member
     user_utils.set_default_project(member.user_id, member.project_a)
     users_page = UserManagementPage(page).navigate_to()
 
     users_page.open_user_details(member.email)
+    # @case show-user-id-user-details_TC_001
+    users_page.should_see_user_identity(member.user_id, member.email)
     users_page.should_see_default_selected_only_for(member.project_a)
     users_page.set_default_project(member.project_b)
     users_page.should_see_default_selected_only_for(member.project_b)
