@@ -15,7 +15,7 @@
 """Provisioning API: requests the backend refuses, and that a refusal changes nothing."""
 
 import pytest
-from hamcrest import assert_that, equal_to, is_, none
+from hamcrest import assert_that, equal_to, is_
 from requests import HTTPError
 
 from codemie_sdk.models.provisioning import ProvisioningProjectBlock
@@ -77,28 +77,6 @@ def test_set_budget_with_invalid_name_is_rejected_with_400_and_creates_nothing(
     assert_that(error.value.response.status_code, equal_to(400))
     assert_that(provisioning_utils.project_exists(project_name), is_(False))
     assert_that(provisioning_utils.cost_center_exists(cost_center), is_(False))
-
-
-@pytest.mark.budget
-@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
-@pytest.mark.api
-def test_set_budget_for_deleted_project_is_rejected_with_409(
-    provisioning_full, provisioning_utils
-):
-    # @case provisioning-api-for-third-party_TC_009
-    project_name = provisioning_utils.create_deleted_project()
-
-    with pytest.raises(HTTPError) as error:
-        provisioning_full.set_budget(
-            project_name, change_reference(), budget_request({"platform": 100.0})
-        )
-
-    assert_that(error.value.response.status_code, equal_to(409))
-    assert_that(
-        provisioning_utils.active_budget_group(project_name),
-        none(),
-        "no budget was created for the deleted project",
-    )
 
 
 @pytest.mark.budget

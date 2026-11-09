@@ -45,8 +45,8 @@ from codemie_test_harness.tests.utils.cost_center_utils import (
 def test_set_budget_links_cost_center_once_and_never_changes_an_existing_link(
     provisioning_full,
     provisioning_client_names,
-    provisioning_utils,
     cost_center,
+    provisioning_utils,
     linked,
     requested,
     expected,

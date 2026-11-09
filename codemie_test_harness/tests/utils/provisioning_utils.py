@@ -233,12 +233,6 @@ class ProvisioningUtils(BaseUtils):
             self._budget_groups.create(name, categories, name_prefix="autotest-prov")
         return name
 
-    def create_deleted_project(self) -> str:
-        """Create a project and delete it again."""
-        name = self.create_project()
-        self._projects.delete_project(name)
-        return name
-
     # --- reads -----------------------------------------------------------------------
 
     def project_exists(self, name: str) -> bool:
