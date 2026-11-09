@@ -59,6 +59,28 @@ def test_default_user_cannot_deactivate_user(user_utils, default_user_utils):
 
 @pytest.mark.user
 @pytest.mark.api
+def test_default_user_cannot_reactivate_user(
+    user_utils, default_user_utils, deactivated_user
+):
+    # @case platform-admins-deactivate-reactivate-users_TC_004
+    _, user_id, _ = deactivated_user
+
+    status = default_user_utils.reactivate_user_status_code(user_id)
+
+    assert_that(
+        status,
+        equal_to(403),
+        "Default user should be denied access to reactivate user endpoint",
+    )
+    assert_that(
+        user_utils.get_admin_user(user_id).is_active,
+        equal_to(False),
+        "The user must stay deactivated after the refused reactivation",
+    )
+
+
+@pytest.mark.user
+@pytest.mark.api
 def test_admin_user_can_list_users(user_utils):
     response = user_utils.list_admin_users()
 

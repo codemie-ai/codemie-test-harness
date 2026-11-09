@@ -509,6 +509,19 @@ class MCPServersAction(Enum):
     MANUAL_SETUP = "Manual Setup"
 
 
+# Labels a toolkit can be shown under. The backend labels the FileSystem toolkit
+# "File Management" when the user is an admin and FILE_SYSTEM_TOOLS_ENABLED=true
+# (full toolkit); otherwise it has no label and the UI shows the id "FileSystem".
+TOOLKIT_LABEL_ALIASES = {
+    Toolkit.FILESYSTEM: ("FileSystem", "File Management"),
+}
+
+
+def toolkit_labels(toolkit: Toolkit) -> tuple:
+    """Return every label the UI may show for the toolkit."""
+    return TOOLKIT_LABEL_ALIASES.get(toolkit, (toolkit.value,))
+
+
 TOOLKIT_TOOLS = {
     Section.AVAILABLE_TOOLS: {
         Toolkit.GIT: [

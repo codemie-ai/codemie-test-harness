@@ -19,7 +19,7 @@ Covers PUT /v1/projects/{projectName}/ownership:
     TC-004  an unauthorized caller is rejected with 404 "Project not found"
     TC-005  existing members, their roles and the previous owner's membership survive
     TC-006  a new owner who is not a member is added as project admin
-    TC-007  a missing target user is rejected with 404
+    TC-007  a missing target user is rejected with 404 "User not found"
     TC-008  a personal project is rejected with 403
 
 The activity event of a transfer (TC-009) is covered in tests/activity.
@@ -43,6 +43,7 @@ from requests import HTTPError
 from codemie_test_harness.tests.test_data.project_ownership_test_data import (
     PERSONAL_PROJECT_UPDATE_MESSAGE,
     PROJECT_NOT_FOUND_MESSAGE,
+    USER_NOT_FOUND_MESSAGE,
     get_nonexistent_user_id,
     get_transfer_message,
 )
@@ -204,8 +205,8 @@ def test_transfer_ownership_to_missing_user_returns_404(
     )
     assert_that(
         exc_info.value.response.json()["error"]["message"],
-        equal_to(PROJECT_NOT_FOUND_MESSAGE),
-        "Missing target user gets the generic project-not-found message",
+        equal_to(USER_NOT_FOUND_MESSAGE),
+        "Missing target user gets the user-not-found message",
     )
     assert_that(
         project_utils.get_project_detail(ownership_project.name).created_by,

@@ -56,6 +56,8 @@ class ToolModel(BaseModel):
     datasource_ids: Optional[List[str]] = None
     # Tools a script step may call (the workspace script tool only): a list of {name, integration_alias?}.
     tool_access: Optional[List["ToolModel"]] = None
+    # A workflow tool's own MCP server (as opposed to an assistant's): {name, config: {command/url/args/env/...}}.
+    mcp_server: Optional[dict] = None
 
 
 class AssistantModel(BaseModel):
@@ -79,6 +81,8 @@ class StateModel(BaseModel):
     next: Optional[dict] = {"state_id": "end"}
     output_schema: Optional[str] = None
     resolve_dynamic_values_in_prompt: Optional[bool] = True
+    # Per-state retry policy: {initial_interval, backoff_factor, max_interval, max_attempts}.
+    retry_policy: Optional[dict] = None
 
 
 class WorkflowYamlModel(BaseModel):

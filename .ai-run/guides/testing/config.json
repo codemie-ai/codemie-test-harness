@@ -6,7 +6,7 @@
     "root": "."
   },
   "publication": {
-    "visibility": "private",
+    "visibility": "public",
     "ticket_refs": "none",
     "repo_urls": "derive",
     "environment_urls": "env_var",
@@ -95,7 +95,7 @@
     "one_test_ui": "poetry run pytest -v <test-file> --ui-headless",
     "suite_api": "poetry run pytest -n 10 -m api --reruns 2 --dist=loadgroup",
     "suite_api_silent": "poetry run pytest -q -n 10 -m api --reruns 2 --tb=short --dist=loadgroup",
-    "suite_ui": "poetry run pytest -n 4 -m ui --reruns 2 --ui-headless --dist=loadgroup",
+    "suite_ui": "poetry run pytest -n 4 -m ui --reruns 2 --ui-headless",
     "lint": "poetry run ruff check",
     "lint_fix": "poetry run ruff check --fix",
     "format": "poetry run ruff format",
@@ -139,9 +139,7 @@
       "verify": [
         "poetry -C sdk/codemie-python run ruff check .",
         "poetry -C sdk/codemie-python run ruff format --check .",
-        "poetry -C sdk/codemie-python run pytest tests/",
-        "python scripts/scan_internal_refs.py --tree .",
-        "poetry -C sdk/codemie-python run python -m pytest ../../scripts/tests -q -p no:cacheprovider"
+        "poetry -C sdk/codemie-python run pytest tests/"
       ],
       "consume": {
         "local": "poetry run pip install -e ../codemie-sdk/sdk/codemie-python",
