@@ -31,7 +31,7 @@ jobs:
       - name: Install Poetry
         run: pipx install poetry
 
-      # No committed lock file; dependencies are resolved against PyPI. The test suites are not run here:
+      # Dependencies come from the committed poetry.lock. The test suites are not run here:
       # they need internal CodeMie environments.
       - name: Install dependencies
         run: poetry install --no-interaction

@@ -26,7 +26,7 @@ Every PR needs one approval from a collaborator with write access before it can 
 
 ## Local Checks
 
-The project has no lockfile, so install the dependencies fresh:
+Install the dependencies from the committed `poetry.lock`:
 
 ```bash
 poetry install

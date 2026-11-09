@@ -35,7 +35,7 @@ a dedicated non-parallel pass.
 - **Run one test:** `poetry run pytest -v <test-file> --ui-headless`
 - **Run suite:** `poetry run pytest -n 4 -m ui --reruns 2 --ui-headless`
 
-`--ui-headless` is required explicitly — the pytest.ini line that would make it the default is commented out.
+`--ui-headless` is required explicitly: without it the browser runs headed (`tests/ui/conftest.py`, `browser_type_launch_args` fixture).
 
 ## Suite inventory
 
@@ -43,7 +43,7 @@ a dedicated non-parallel pass.
 |---|---|---|
 | `api` | `codemie_test_harness/tests/` (all areas except `ui/`) | API / integration tests against a deployed stand |
 | `ui` | `codemie_test_harness/tests/ui/` | Playwright UI tests |
-| `sanity` | marker, across areas | assistants / workflows / datasources without integrations; the only suite that needs no AWS credentials |
+| `sanity` | marker, across areas | assistants / workflows / datasources without integrations; the only suite that needs no integration settings |
 | `smoke` | marker, across areas | quick checks for local development |
 | `enterprise` | marker, across areas | enterprise-only features |
 | `prod_regression` | marker, `ui` only | UI tests safe to run on PROD with a regular user or admin (not a maintainer); run with `-m "ui and prod_regression"`. Never on `budget`, `cli_analytics`, `auditor` or `aice` tests |
@@ -53,7 +53,7 @@ a dedicated non-parallel pass.
 
 - Every test carries exactly one of `@pytest.mark.api` or `@pytest.mark.ui` — never both. A test with neither is selected by no suite.
 - Stated stack order for new tests: scope (`smoke`, `sanity`) → feature → `api`/`ui` last, directly above `def`. Older tests vary (`timeout` or `parametrize` sometimes sit last); don't reorder existing tests just for this.
-- **No ticket references in new tests.** Do not add `@pytest.mark.testcase(...)`, and do not put a ticket key anywhere in test code, names, comments, docstrings or test data. The factory's `# @case <case ID>` traceability comment stays: its ID is ticket-free (`<slug>_TC_001`). Some existing tests still carry the old marker or ticket-keyed `@case` IDs; leave them, and do not copy the form.
+- **No ticket references in new tests.** Do not add `@pytest.mark.testcase(...)`, and do not put a ticket key anywhere in test code, names, comments, docstrings or test data. The factory's `# @case <case ID>` traceability comment stays: its ID is ticket-free (`<slug>_TC_001`).
 - `@pytest.mark.not_for_parallel_run` on any test that mutates state other tests share.
 
 ## Execution traps
@@ -66,7 +66,7 @@ a dedicated non-parallel pass.
 
 ## Code rules
 
-- **SDK first.** Every CodeMie API call in a test or fixture goes through `client.<service>` or a `*_utils` wrapper. The tests import the published `codemie-sdk-python`, pinned in `pyproject.toml`; the SDK is developed in its own public repository, recorded as the `sdk` entry in `config.json` (`code_repos`, change policy `extend`). If the SDK lacks the call, add it there — new code only, following that repository's contributing guide and its checks — never in a copy inside this monorepo. `from requests import HTTPError` is the normal way to assert an error the SDK raises — that import is fine. Known raw-HTTP exceptions: `conversations/test_conversation_feedback.py` (SDK gap for `/v1/feedback`) and `assistant/tools/ado/test_assistant_for_ado_work_item_tools.py` (verifies state in Azure DevOps itself, not CodeMie).
+- **SDK first.** Every CodeMie API call in a test or fixture goes through `client.<service>` or a `*_utils` wrapper. The tests import the published `codemie-sdk-python`, pinned in `pyproject.toml`; the SDK is developed in its own public repository, recorded as the `sdk` entry in `config.json` (`code_repos`, change policy `extend`). If the SDK lacks the call, add it there — new code only, following that repository's contributing guide and its checks — never in a copy inside this repository. `from requests import HTTPError` is the normal way to assert an error the SDK raises — that import is fine. Known raw-HTTP exceptions: `conversations/test_conversation_feedback.py` (SDK gap for `/v1/feedback`) and `assistant/tools/ado/test_assistant_for_ado_work_item_tools.py` (verifies state in Azure DevOps itself, not CodeMie).
 - **Credentials** come from `CredentialsManager.get_parameter("KEY")`, never `os.getenv()`. Some older datasource and UI workflow tests still read values with `os.getenv()`; don't copy that. `EnvironmentResolver` (`tests/utils/env_resolver.py`) derives the current environment from `CODEMIE_API_DOMAIN`.
 - **No mocking library** in tests — they run against a deployed stand.
 - **Every `.py` file carries the Apache-2.0 licence header** from `scripts/license_template.txt`; a new file needs it (`make license-fix` inserts it).
@@ -92,8 +92,7 @@ A few legacy tests still contain some of these (`wait_for_timeout`, `pytest.fail
 
 ## Project conventions
 
-- `test-harness/AGENTS.md` is this repository's AI entrypoint; the monorepo-root `AGENTS.md` points here for test-harness guidance.
-- Lint and format through `ruff` (`Makefile`): `poetry run ruff check --fix`, `poetry run ruff check`, `poetry run ruff format`. Check-only forms: `poetry run ruff check`, `poetry run ruff format --check`.
-- Other `Makefile` targets: `make license-check` / `make license-fix` (licence headers), `make license-scan` (dependency licences), `make scan-internal` (internal values), `make install-hooks` (pre-commit hook for lint, format and the internal-value scan). The scan scripts are invoked as `python3`; where only `python` exists, run them with that.
-- UI tests need Playwright browsers (`playwright install`). Most suites need AWS credentials to load integration settings from Parameter Store; `sanity` is the one suite that needs none (README).
+- `AGENTS.md` is this repository's AI entrypoint.
+- Lint, format, licence, scan and hook commands: see [quality-gates.md](../quality-gates.md).
+- UI tests need Playwright browsers (`playwright install`). The full suites (`smoke`, `api`, `ui`) contain integration tests that need their own settings; the `sanity-*` suites need none (`README.md`, "Settings").
 - To run the tests against an unreleased SDK change, install the SDK clone on top of the Poetry environment (`consume.local` of the `sdk` entry in `config.json`); `make install` returns to the pinned release. The tests then follow whatever branch that clone has checked out.
