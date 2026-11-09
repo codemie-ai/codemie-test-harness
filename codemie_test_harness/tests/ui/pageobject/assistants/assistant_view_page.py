@@ -42,6 +42,11 @@ class AssistantViewPage:
         return self.page.locator("h4.name-target")
 
     @property
+    def status_badge(self):
+        """Marketplace review badge in the header, next to the creator line."""
+        return self.page.get_by_test_id("assistant-status-badge")
+
+    @property
     def assistant_author(self):
         return self.page.locator("div.flex.text-xs.text-text-quaternary > p")
 
@@ -592,6 +597,15 @@ class AssistantViewPage:
     def click_sub_assistant(self, name: str):
         """Click on a sub-assistant item."""
         self.sub_assistant_item_by_name(name).click()
+        return self
+
+    @step
+    def should_see_verified_badge_in_header(self):
+        """The detail header shows the VERIFIED badge."""
+        expect(self.status_badge).to_have_attribute(
+            "data-status", "verified", timeout=15000
+        )
+        expect(self.status_badge).to_contain_text("\u2713 VERIFIED")
         return self
 
     @step

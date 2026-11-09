@@ -27,6 +27,9 @@ from hamcrest import (
     any_of,
 )
 
+from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
+    fit_to_core_gates,
+)
 from codemie_test_harness.tests.test_data.marketplace_test_data import (
     VALIDATION_TEST_CONFIGS,
     COMPLETE_VALID_CONFIG,
@@ -218,10 +221,14 @@ def _make_test_params():
     [pytest.param(tc, id=tc["id"]) for tc in VALIDATION_TEST_CONFIGS],
 )
 def test_marketplace_validation_fields_recommendation(
-    assistant, assistant_utils, test_case
+    assistant, assistant_utils, marketplace_core_gates, test_case
 ):
-    """Test validation recommendations for different field configurations."""
-    config = test_case["config"]
+    """Test validation recommendations for different field configurations.
+
+    The deliberately wrong description and system prompt are extended to the stand's core
+    gate thresholds, so the quality check (not the length gates) is what rejects them.
+    """
+    config = fit_to_core_gates(test_case["config"], marketplace_core_gates)
     expected_issues = test_case["expected_issues"]
 
     # Create assistant with specific configuration
