@@ -15,7 +15,7 @@
 
 """Check (default) or add (--fix) the licence header in tracked .py files.
 
-Run from test-harness/. Scope: tracked `*.py` files under the current
+Run from the repository root. Scope: tracked `*.py` files under the current
 directory (`git ls-files`). The header text is scripts/license_template.txt,
 rendered with a "# " prefix and searched in the first 50 lines. Files are read
 and written as bytes, so line endings are preserved.

@@ -414,6 +414,18 @@ class AssistantViewPage:
         expect(self.toolkit_block(toolkit_name)).to_be_visible()
 
     @step
+    def should_see_toolkit_visible_as_any(self, toolkit_names) -> str:
+        """Assert that the toolkit is shown under one of its labels and return that label."""
+        blocks = [self.toolkit_block(name) for name in toolkit_names]
+        any_block = blocks[0]
+        for block in blocks[1:]:
+            any_block = any_block.or_(block)
+        expect(any_block.first).to_be_visible()
+        return next(
+            name for name, block in zip(toolkit_names, blocks) if block.count() > 0
+        )
+
+    @step
     def should_see_toolkit_contains(self, toolkit_name: str, tool_label: str):
         """Assert a toolkit contains a tool label (visible)."""
         expect(self.toolkit_tool_label(toolkit_name, tool_label)).to_be_visible()

@@ -12,3 +12,11 @@ codemie_test_harness/tests/test_data/files/large-files/large_file.txt
 test_screenshots
 codemie-test-reports/
 docs/superpowers/qa-tasks/
+.ai-run/runs/
+.ai-run/sdlc-factory/
+.agents/memory/
+docs/superpowers/tasks/
+docs/superpowers/runs/
+.claude/settings.local.json
+.superpowers
+.codegraph/
