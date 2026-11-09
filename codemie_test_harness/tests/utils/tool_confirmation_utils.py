@@ -111,8 +111,23 @@ def parent_of(thought: dict, index: dict[str, dict]) -> Optional[dict]:
     return index.get(thought.get("parent_id") or "")
 
 
+def is_delegation_step(thought: dict) -> bool:
+    """True for the step that hands work to a sub-assistant (tool ``transfer_to_<name>``).
+
+    Its input relays the whole instruction, Jira parameters included, so it must
+    not be mistaken for the Jira tool call itself.
+    """
+    tool_name = (thought.get("metadata") or {}).get("tool_name") or ""
+    return tool_name.startswith("transfer_to")
+
+
 def jira_call_method(thought: dict) -> Optional[str]:
-    """HTTP method of the Generic Jira Tool call a step shows; None for any other step."""
+    """HTTP method of the Generic Jira Tool call a step shows.
+
+    None for any other step, delegation steps included.
+    """
+    if is_delegation_step(thought):
+        return None
     input_text = thought.get("input_text") or ""
     if "relative_url" not in input_text:
         return None

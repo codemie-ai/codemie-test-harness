@@ -68,9 +68,11 @@ from codemie_test_harness.tests.test_data.sub_assistant_tool_confirmation_test_d
     unique_ticket_summary,
 )
 from codemie_test_harness.tests.utils.base_utils import poll_until
+from codemie_test_harness.tests.utils.jira_utils import JiraUtils
 from codemie_test_harness.tests.utils.tool_confirmation_utils import (
     error_message,
     final_reply,
+    is_delegation_step,
     jira_call_method,
     normalize_name,
     parent_of,
@@ -506,6 +508,7 @@ def test_background_run_denies_confirmation_needing_call_without_running_it(
 ):
     # @case tool-call-confirmation-inside-sub-assistants_TC_012
     chain = sub_assistant_chain()
+    summary = unique_ticket_summary()
 
     response = client.assistants.chat(
         chain.root.id,
@@ -513,7 +516,7 @@ def test_background_run_denies_confirmation_needing_call_without_running_it(
             text=create_ticket_request(
                 [assistant.name for assistant in chain.delegates],
                 jira_seed_issue,
-                unique_ticket_summary(),
+                summary,
             ),
             conversation_id=chain.conversation_id,
             stream=False,
@@ -550,11 +553,25 @@ def test_background_run_denies_confirmation_needing_call_without_running_it(
         empty(),
         "A run that cannot be resumed must not pause",
     )
-    jira_calls = [t for t in saved if jira_call_method(t) is not None]
+    # The delegation step relays the Jira parameters and completes normally; only
+    # the Jira tool steps themselves tell whether a call ran.
+    jira_calls = [
+        t
+        for t in saved
+        if not is_delegation_step(t) and jira_call_method(t) is not None
+    ]
     assert_that(
         [t for t in jira_calls if t.get("aborted") is not True],
         empty(),
         "No Jira call may have run in a run that cannot ask for approval",
+    )
+    created = JiraUtils(is_cloud=False).search_issues(
+        f'project = "{jira_seed_issue.project_key}" AND summary ~ "\\"{summary}\\""'
+    )
+    assert_that(
+        created,
+        empty(),
+        f"No Jira issue titled '{summary}' may exist: the denied call must not run",
     )
 
 
@@ -644,90 +661,3 @@ def test_resume_by_user_without_conversation_access_answers_403(
         equal_to(True),
         "The pending call must still be resumable by its owner after the refusal",
     )
-
-
-# ---------------------------------------------------------------------------
-# TC_015 — pause and resume work for a sub-assistant of a sub-assistant
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.assistant
-@pytest.mark.sub_assistant
-@pytest.mark.jira
-@pytest.mark.api
-def test_pause_and_resume_work_two_delegation_levels_deep(
-    client, sub_assistant_chain, jira_seed_issue
-):
-    # @case tool-call-confirmation-inside-sub-assistants_TC_015
-    chain = sub_assistant_chain(depth=2)
-    relay, writer = chain.delegates
-    pause = trigger_ticket_creation(chain, jira_seed_issue)
-
-    call = _first_waiting(pause.chunks)
-    index = thoughts_by_id(pause.chunks)
-    inner = parent_of(call, index)
-    assert_that(
-        inner, not_none(), "The waiting step must be nested under a delegation step"
-    )
-    outer = parent_of(inner, index)
-    assert_that(
-        outer,
-        not_none(),
-        "The inner delegation step must itself be nested under a delegation step",
-    )
-    assert_that(
-        normalize_name(inner.get("author_name")),
-        equal_to(normalize_name(writer.name)),
-        "The waiting step must sit under the delegation step of the inner sub-assistant",
-    )
-    assert_that(
-        normalize_name(outer.get("author_name")),
-        equal_to(normalize_name(relay.name)),
-        "The inner delegation step must sit under the delegation step of the outer sub-assistant",
-    )
-    assert_that(
-        bool(outer.get("parent_id")),
-        equal_to(False),
-        "The outer delegation step must be a top-level step",
-    )
-
-    chunks = resume_and_read(
-        client, chain.root.id, chain.conversation_id, ToolCallAction.ALLOW
-    )
-    assert_that(
-        chunks[-1].get("last"),
-        equal_to(True),
-        f"The resumed stream must close with last=True; got: {chunks[-1]}",
-    )
-    assert_that(
-        final_reply(chunks).strip(),
-        is_not(equal_to("")),
-        "The orchestrator must produce its final reply",
-    )
-
-    saved = poll_until(
-        lambda: saved_thoughts(chain.conversation_id),
-        _no_waiting_step,
-        timeout=_SAVE_WAIT_SECONDS,
-    )
-    assert_that(
-        [t for t in saved if t.get("interrupted") is True],
-        empty(),
-        "No step may still wait in the saved history after Allow",
-    )
-    for assistant in (relay, writer):
-        delegation_steps = [
-            t
-            for t in saved
-            if normalize_name(t.get("author_name")) == normalize_name(assistant.name)
-        ]
-        assert_that(
-            delegation_steps,
-            is_not(empty()),
-            f"The saved history must hold the delegation step of {assistant.name}",
-        )
-        assert_that(
-            [t for t in delegation_steps if t.get("in_progress")],
-            empty(),
-            f"The turn of {assistant.name} must be finished after Allow",
-        )

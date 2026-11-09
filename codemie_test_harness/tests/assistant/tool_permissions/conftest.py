@@ -37,8 +37,6 @@ from codemie_test_harness.tests.test_data.sub_assistant_tool_confirmation_test_d
     JIRA_WRITER_DESCRIPTION,
     JIRA_WRITER_SYSTEM_PROMPT,
     ORCHESTRATOR_SYSTEM_PROMPT,
-    RELAY_DESCRIPTION,
-    RELAY_SYSTEM_PROMPT,
 )
 from codemie_test_harness.tests.test_data.tool_call_permissions_test_data import (
     APPROVAL_SYSTEM_PROMPT,
@@ -233,16 +231,14 @@ def sub_assistant_chain(
 ):
     """Factory: build an orchestrator, its sub-assistants and a conversation on it.
 
-    ``depth`` is the number of sub-assistants stacked below the orchestrator
-    (1: orchestrator -> writer, 2: orchestrator -> relay -> writer). The writer
-    owns the Jira tool and carries ``policy``. Assistants are deleted by
+    The orchestrator delegates to one sub-assistant, the writer, which owns the
+    Jira tool and carries ``policy``. Assistants are deleted by
     ``assistant_factory``; the conversations are deleted here.
     """
     conversation_ids: list[str] = []
 
     def _build(
         policy: ToolCallPolicy = ToolCallPolicy.ASK_FOR_APPROVAL,
-        depth: int = 1,
         shared: bool = False,
     ) -> SubAssistantChain:
         writer = assistant_factory.create(
@@ -265,14 +261,6 @@ def sub_assistant_chain(
             ),
         )
         delegates = [writer]
-        for _ in range(depth - 1):
-            relay = assistant_factory.create(
-                llm_model_type=default_llm.base_name,
-                system_prompt=RELAY_SYSTEM_PROMPT,
-                description=RELAY_DESCRIPTION,
-                assistant_ids=[delegates[0].id],
-            )
-            delegates.insert(0, relay)
         root = assistant_factory.create(
             llm_model_type=default_llm.base_name,
             system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,

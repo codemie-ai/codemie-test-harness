@@ -53,14 +53,6 @@ JIRA_WRITER_DESCRIPTION = (
     "Jira specialist: reads and creates Jira issues through the Generic Jira Tool"
 )
 
-RELAY_SYSTEM_PROMPT = (
-    "You are a relay assistant without tools of your own. For every request you "
-    "MUST pass the work on to your sub-assistant and then report its outcome. "
-    "Never answer without delegating."
-)
-
-RELAY_DESCRIPTION = "Relay: passes Jira work on to its own Jira specialist"
-
 ORCHESTRATOR_SYSTEM_PROMPT = (
     "You are a coordinator assistant without tools of your own. For every request "
     "you MUST delegate the work to your sub-assistant and then report its outcome. "
