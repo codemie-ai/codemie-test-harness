@@ -32,9 +32,6 @@ from codemie_test_harness.tests.utils.budget_usage_utils import wait_for_settled
 
 logger = logging.getLogger(__name__)
 
-KNOWN_ISSUE = (
-    "Spend incorrectly attributed to personal/project budget instead of global LiteLLM integration key"
-)
 MONEY_TOLERANCE = 0.0001
 
 
@@ -200,7 +197,6 @@ def user2_assistants(default_llm, user2_assistant_utils):
 @pytest.mark.api
 @pytest.mark.enterprise
 @pytest.mark.timeout(1000)
-@pytest.mark.xfail(reason=KNOWN_ISSUE)
 def test_global_integration_owned_by_regular_project_overrides_all_chat_contexts(
     keycloak_user_2,
     user2_project1_with_platform_budget,
@@ -299,7 +295,6 @@ def test_global_integration_owned_by_regular_project_overrides_all_chat_contexts
 @pytest.mark.api
 @pytest.mark.enterprise
 @pytest.mark.timeout(1000)
-@pytest.mark.xfail(reason=KNOWN_ISSUE)
 def test_global_integration_owned_by_personal_project_overrides_all_chat_contexts(
     keycloak_user_2,
     user2_project1_with_platform_budget,

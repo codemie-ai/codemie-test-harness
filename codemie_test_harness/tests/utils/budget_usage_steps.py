@@ -426,7 +426,7 @@ def assert_personal_page_spend_and_total_equal_admin_table(
     assert_that(expected_total_value, greater_than(0))
     assert_that(
         member_row["current_spending"],
-        close_to(round(admin_row["platform"], 2), SPEND_PARITY_TOLERANCE),
+        close_to(admin_row["platform"], SPEND_PARITY_TOLERANCE),
         "current_spending differs between the personal page and the admin table",
     )
     assert_that(
