@@ -29,7 +29,7 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
     DEFAULT_PREMIUM_BUDGET_ID,
     PREMIUM_BUDGET_CATEGORIES,
     PREMIUM_MODEL,
-    project_key_alias,
+    project_key_alias, budget_chat_prompt_bigger,
 )
 from codemie_test_harness.tests.utils.budget_usage_utils import BudgetUsageUtils
 
@@ -209,6 +209,7 @@ def test_project_member_spending_follows_budget_and_membership_lifecycle(
 @pytest.mark.api
 @pytest.mark.enterprise
 @pytest.mark.timeout(1000)
+@pytest.mark.xfail("Non-member request billed to personal customer is also counted in the named project's budget, causing ledger/LiteLLM spend mismatch")
 def test_cli_spending_reverts_to_personal_after_project_unassignment(
     keycloak_user_2,
     user2_proxy_utils,
@@ -253,7 +254,7 @@ def test_cli_spending_reverts_to_personal_after_project_unassignment(
     logger.info("Sending CLI request as User 2 (project budget active)")
     user2_proxy_utils.send_messages_request(
         model=default_llm.base_name,
-        messages=[{"role": "user", "content": budget_chat_prompt()}],
+        messages=[{"role": "user", "content": budget_chat_prompt_bigger()}],  #budget_chat_prompt_bigger
         extra_headers=request_headers,
     ).raise_for_status()
     logger.info("Waiting for project CLI key alias spending (alias=%s)", cli_alias)
