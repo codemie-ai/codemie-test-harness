@@ -20,6 +20,7 @@ This class encapsulates all interactions with the Assistants Marketplace page.
 
 import re
 import time
+from typing import Callable, Optional
 
 from playwright.sync_api import expect, Locator
 from reportportal_client import step
@@ -205,13 +206,22 @@ class AssistantsMarketplacePage(BasePage):
         return self
 
     @step("Search until the assistant is listed")
-    def search_until_listed(self, assistant_name: str, timeout_s: float = 60):
+    def search_until_listed(
+        self,
+        assistant_name: str,
+        timeout_s: float = 60,
+        reapply_filters: Optional[Callable[[], object]] = None,
+    ):
         """Search for an assistant that was just published, reloading until its card shows.
 
         A search sent right after a publish can be answered by an instance that does not
         see the new assistant yet, or answered late; the page then keeps the unfiltered
         list and never asks again. Reloading and searching again is what a user does. The
         wait is bounded, and the last attempt still fails if the card never appears.
+
+        A reload clears the filters, so a caller that filtered before the search passes
+        `reapply_filters`; it runs after every reload, and the card can only show with the
+        filters on.
         """
         deadline = time.monotonic() + timeout_s
         while True:
@@ -225,6 +235,8 @@ class AssistantsMarketplacePage(BasePage):
                 if time.monotonic() >= deadline:
                     raise
                 self.navigate_to()
+                if reapply_filters is not None:
+                    reapply_filters()
 
     @step("Filter by category")
     def filter_by_category(self, category: str = "Quality Assurance"):

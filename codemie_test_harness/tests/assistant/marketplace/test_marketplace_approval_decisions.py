@@ -248,13 +248,14 @@ def test_force_publish_over_critical_findings_records_attribution(
 
     assert_that(
         response,
-        has_properties(
-            ok=True,
-            status=APPROVED,
-            override_notice=VALID_REASON,
-            bypassed_gate_findings_unavailable=False,
-        ),
+        has_properties(ok=True, status=APPROVED, override_notice=VALID_REASON),
     )
+    assert_that(
+        response.model_fields_set,
+        has_item("bypassed_gate_findings_unavailable"),
+        "the response must report the flag, not fall back to the SDK default",
+    )
+    assert_that(response.bypassed_gate_findings_unavailable, equal_to(False))
     assistant = marketplace_submitter.management.get_assistant(submitted.id)
     assert_that(
         assistant, has_properties(marketplace_status=APPROVED, is_verified=True)
@@ -265,9 +266,14 @@ def test_force_publish_over_critical_findings_records_attribution(
         has_properties(
             override_notice=VALID_REASON,
             overridden_by=client.users.about_me().email,
-            bypassed_gate_findings_unavailable=False,
         ),
     )
+    assert_that(
+        detail.model_fields_set,
+        has_item("bypassed_gate_findings_unavailable"),
+        "the detail must report the flag, not fall back to the SDK default",
+    )
+    assert_that(detail.bypassed_gate_findings_unavailable, equal_to(False))
     assert_that(
         sorted(finding.rule for finding in detail.bypassed_gate_findings),
         equal_to(critical_rules),

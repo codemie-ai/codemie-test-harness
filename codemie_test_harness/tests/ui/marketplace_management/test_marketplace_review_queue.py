@@ -18,10 +18,15 @@ Assistants are submitted through the API by a plain user and the admin works the
 queue in the browser. Tests only touch their own rows: they search for or tick
 specific assistants and never use select-all.
 
-The search, selection, approve and reject tests are marked `prod_regression`: they only
-touch assistants that the test created (found by their unique name or row id) and delete
-them at the end, so they are safe next to the real submissions of a production queue.
-The bulk reject test is not marked: a wrong selection would reject other people's rows.
+The selection and drawer reject tests are marked `prod_regression`: they find the
+assistant they created by its unique name, act on that row only and delete it at the end,
+so they are safe next to the real submissions of a production queue.
+Not marked:
+- the search test and the bulk reject test, because a production queue holds more rows
+  than the first page, so rows the test just created are not listed without a search;
+- the drawer approve test, because an approved assistant is public and verified for as
+  long as it exists;
+- the bulk reject test also because a wrong selection would reject other people's rows.
 """
 
 import pytest
@@ -52,7 +57,6 @@ def open_row_in_queue(page, assistant_id: str, assistant_name: str):
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
-@pytest.mark.prod_regression
 def test_review_queue_search_narrows_rows_and_clear_all_restores_them(
     page, pending_assistant
 ):
@@ -82,17 +86,15 @@ def test_review_queue_selection_swaps_filter_row_for_bulk_actions(
     page, pending_assistant
 ):
     # @case marketplace-admin-approval-gate_TC_006
-    first = pending_assistant()
-    second = pending_assistant()
+    submitted = pending_assistant()
 
-    queue = MarketplaceReviewQueuePage(page).navigate_to()
+    queue = open_row_in_queue(page, submitted.id, submitted.name)
 
     queue.should_see_review_queue_tab()
     queue.should_see_table_columns()
-    queue.should_see_row(first.id).should_see_row(second.id)
     queue.should_see_filter_bar()
 
-    queue.select_rows(first.id, second.id)
+    queue.select_rows(submitted.id)
 
     queue.should_see_bulk_actions()
     queue.should_not_see_filter_bar()
@@ -101,7 +103,6 @@ def test_review_queue_selection_swaps_filter_row_for_bulk_actions(
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
-@pytest.mark.prod_regression
 def test_approve_from_drawer_removes_assistant_from_queue(
     page, pending_assistant, marketplace_submitter, delete_marketplace_assistant
 ):

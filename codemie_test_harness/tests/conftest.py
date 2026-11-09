@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import json
 import os
 import re
@@ -25,7 +26,7 @@ from time import sleep
 from typing import List, Optional
 
 import pytest
-from filelock import FileLock
+from filelock import FileLock, Timeout
 from hamcrest import assert_that, equal_to, has_item, not_none
 from codemie_sdk import CodeMieClient
 from codemie_sdk.models.assistant import (
@@ -276,13 +277,10 @@ def pytest_configure(config):
         "thread" if platform.system() == "Windows" else "signal"
     )
 
-    # One state file per run, created by the controller and inherited by xdist workers
-    # through the environment (see `marketplace_core_gates`).
+    # The controller takes a lease for the run; xdist workers inherit its id through the
+    # environment (see `marketplace_core_gates`).
     if not hasattr(config, "workerinput"):
-        os.environ[_CORE_GATES_STATE_ENV] = str(
-            Path(tempfile.gettempdir())
-            / f"marketplace-core-gates-{uuid.uuid4().hex}.json"
-        )
+        _start_core_gates_lease()
 
     # Resolve the root directory and .env file path
     _, root_dir = resolve_tests_path_and_root()
@@ -2607,7 +2605,7 @@ def pytest_sessionfinish(session):
     for that.
     """
     if not hasattr(session.config, "workerinput"):
-        _restore_marketplace_core_gates()
+        _release_marketplace_core_gates()
 
     if CredentialsManager.get_parameter("CLEANUP_DATA", "true").lower() != "true":
         return
@@ -2697,38 +2695,108 @@ def pytest_sessionfinish(session):
 # ---------------------------------------------------------------------------
 
 
-_CORE_GATES_STATE_ENV = "MARKETPLACE_CORE_GATES_STATE_FILE"
+_CORE_GATES_RUN_ENV = "MARKETPLACE_CORE_GATES_RUN_ID"
+_CORE_GATES_DIR = Path(tempfile.gettempdir()) / "marketplace-core-gates"
+_core_gates_lease: Optional[FileLock] = None
 
 
-def _core_gates_state_path() -> Optional[Path]:
-    """File that holds the Core Gates setting as it was before this run changed it."""
-    value = os.environ.get(_CORE_GATES_STATE_ENV)
-    return Path(value) if value else None
+def _core_gates_run_id() -> Optional[str]:
+    return os.environ.get(_CORE_GATES_RUN_ENV)
 
 
-def _restore_marketplace_core_gates() -> None:
-    """Put the Core Gates setting back as the first worker found it; runs once per run.
+def _core_gates_lease_path(run_id: str) -> Path:
+    return _CORE_GATES_DIR / f"lease-{run_id}.lock"
+
+
+def _core_gates_mutex() -> FileLock:
+    return FileLock(str(_CORE_GATES_DIR / "state.lock"), timeout=120)
+
+
+def _read_core_gates_state() -> Optional[dict]:
+    try:
+        return json.loads((_CORE_GATES_DIR / "state.json").read_text())
+    except FileNotFoundError:
+        return None
+
+
+def _write_core_gates_state(state: dict) -> None:
+    (_CORE_GATES_DIR / "state.json").write_text(json.dumps(state))
+
+
+def _start_core_gates_lease() -> None:
+    """Take the lease for this run and hold it until the process ends.
+
+    The operating system drops the lock when the process dies, even after SIGKILL, so
+    a later run can tell a finished run from a running one by trying to take the lease.
+    """
+    global _core_gates_lease
+    run_id = uuid.uuid4().hex
+    _CORE_GATES_DIR.mkdir(parents=True, exist_ok=True)
+    _core_gates_lease = FileLock(str(_core_gates_lease_path(run_id)))
+    _core_gates_lease.acquire()
+    os.environ[_CORE_GATES_RUN_ENV] = run_id
+
+
+def _core_gates_lease_is_held(run_id: str) -> bool:
+    probe = FileLock(str(_core_gates_lease_path(run_id)))
+    try:
+        probe.acquire(timeout=0)
+    except Timeout:
+        return True
+    probe.release()
+    with contextlib.suppress(OSError):
+        _core_gates_lease_path(run_id).unlink(missing_ok=True)
+    return False
+
+
+def _live_core_gates_runs(state: dict, exclude: str) -> List[str]:
+    """Runs recorded in the state, other than `exclude`, whose process is still alive."""
+    return [
+        run_id
+        for run_id in state["runs"]
+        if run_id != exclude and _core_gates_lease_is_held(run_id)
+    ]
+
+
+def _release_marketplace_core_gates() -> None:
+    """Give up this run's claim on the Core Gates override; runs once per run.
 
     Called from `pytest_sessionfinish` of the controller (or of the only process without
-    xdist), after every worker has finished, so no running test loses its thresholds.
+    xdist), after every worker has finished. The last live run puts the setting back as
+    it was before the first run changed it, so a run that overlaps with another one
+    never takes the thresholds away from it. A state left by a run that was killed has
+    no live runs, so it is repaired here or by the next run that uses the thresholds.
     """
-    path = _core_gates_state_path()
-    if path is None or not path.exists():
+    run_id = _core_gates_run_id()
+    if run_id is None:
         return
-    original = None
     try:
-        original = json.loads(path.read_text())["original"]
-        utils = MarketplaceManagementUtils(get_client())
-        if utils.get_core_gates_setting() != original:
-            utils.restore_core_gates_setting(original)
-            logger.info(f"Marketplace core gates restored to {original}")
-    except Exception as e:
-        logger.error(
-            f"Failed to restore the marketplace core gates (they were {original}): {e}"
-        )
+        with _core_gates_mutex():
+            state = _read_core_gates_state()
+            if state is None:
+                return
+            state["runs"] = _live_core_gates_runs(state, exclude=run_id)
+            if state["runs"]:
+                _write_core_gates_state(state)
+                return
+            original = state["original"]
+            try:
+                utils = MarketplaceManagementUtils(get_client())
+                if utils.get_core_gates_setting() != original:
+                    utils.restore_core_gates_setting(original)
+                    logger.info(f"Marketplace core gates restored to {original}")
+                (_CORE_GATES_DIR / "state.json").unlink(missing_ok=True)
+            except Exception as e:
+                _write_core_gates_state(state)
+                logger.error(
+                    f"Failed to restore the marketplace core gates (they were {original}); "
+                    f"the next run will try again: {e}"
+                )
     finally:
-        path.unlink(missing_ok=True)
-        Path(f"{path}.lock").unlink(missing_ok=True)
+        if _core_gates_lease is not None:
+            _core_gates_lease.release()
+        with contextlib.suppress(OSError):
+            _core_gates_lease_path(run_id).unlink(missing_ok=True)
 
 
 @pytest.fixture(scope="session")
@@ -2736,25 +2804,29 @@ def marketplace_core_gates(client) -> CoreGates:
     """The core gate thresholds the marketplace tests build their data from.
 
     Production: the thresholds are only read and never changed. Any other stand: the
-    first worker records the setting as it was (overridden or not, and its value), then
-    the thresholds are set to CORE_GATE_MINIMUM if they differ. At the end of the run
-    `_restore_marketplace_core_gates` puts the setting back. Either way the result is
-    what the stand reports now, so the tests need no checks of their own.
+    run records itself and, if no earlier run left a record, the setting as it was
+    (overridden or not, and its value); then the thresholds are set to CORE_GATE_MINIMUM
+    if they differ. A record left by a run that was killed is kept, so its original
+    value is not mistaken for the stand's own. `_release_marketplace_core_gates` puts the
+    setting back once no live run needs it. Either way the result is what the stand
+    reports now, so the tests need no checks of their own.
     """
     utils = MarketplaceManagementUtils(client)
     if EnvironmentResolver.is_production():
         return CoreGates.from_config(utils.get_gates_config())
-    state_path = _core_gates_state_path()
-    if state_path is None:
+    run_id = _core_gates_run_id()
+    if run_id is None:
         gates = utils.ensure_core_gates(
             CORE_GATE_MINIMUM, CORE_GATE_MINIMUM, CORE_GATE_MINIMUM
         )
     else:
-        with FileLock(f"{state_path}.lock", timeout=120):
-            if not state_path.exists():
-                state_path.write_text(
-                    json.dumps({"original": utils.get_core_gates_setting()})
-                )
+        with _core_gates_mutex():
+            state = _read_core_gates_state() or {
+                "original": utils.get_core_gates_setting(),
+                "runs": [],
+            }
+            state["runs"] = [*_live_core_gates_runs(state, exclude=run_id), run_id]
+            _write_core_gates_state(state)
             gates = utils.ensure_core_gates(
                 CORE_GATE_MINIMUM, CORE_GATE_MINIMUM, CORE_GATE_MINIMUM
             )

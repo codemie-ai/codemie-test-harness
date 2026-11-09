@@ -27,10 +27,12 @@ import pytest
 from hamcrest import (
     anything,
     assert_that,
+    empty,
     equal_to,
     greater_than,
     greater_than_or_equal_to,
     has_item,
+    has_items,
     has_key,
     has_properties,
     instance_of,
@@ -50,6 +52,7 @@ from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data im
     PENDING_REVIEW,
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name
+from codemie_test_harness.tests.utils.marketplace_management_utils import PAGE_SIZE
 
 
 @dataclass
@@ -93,10 +96,10 @@ def test_admin_sees_submitted_assistant_in_pending_queue(
 
     assert_that(
         first_page,
-        has_properties(
-            total=anything(), page=anything(), page_size=anything(), items=anything()
-        ),
+        has_properties(page=1, page_size=PAGE_SIZE, total=greater_than_or_equal_to(1)),
     )
+    assert_that(first_page.items, not_(empty()))
+    assert_that(len(first_page.items), less_than_or_equal_to(PAGE_SIZE))
     rows = {item.assistant_id: item for item in queue}
     assert_that(
         rows, has_key(submitted.id), "the submitted assistant is missing from the queue"
@@ -124,11 +127,12 @@ def test_overview_reports_pending_count_and_waiting_over_seven_days(
     pending = marketplace_management_utils.get_overview().pending
 
     assert_that(
-        pending,
-        has_properties(
-            count=anything(), waiting_over_7d=anything(), avg_wait_days=anything()
-        ),
+        pending.model_fields_set,
+        has_items("count", "waiting_over_7d", "avg_wait_days"),
+        "the overview must report the pending stats, not fall back to the SDK defaults",
     )
+    assert_that(pending.waiting_over_7d, greater_than_or_equal_to(0))
+    assert_that(pending.avg_wait_days, greater_than_or_equal_to(0))
     assert_that(
         pending.count,
         greater_than_or_equal_to(1),

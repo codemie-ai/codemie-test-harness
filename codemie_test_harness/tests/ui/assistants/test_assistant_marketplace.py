@@ -210,7 +210,9 @@ def test_marketplace_filter_by_category(
     marketplace_page.filter_by_category()
 
     # Search for the published assistant first, then verify it appears
-    marketplace_page.search_until_listed(created_assistant.name)
+    marketplace_page.search_until_listed(
+        created_assistant.name, reapply_filters=marketplace_page.filter_by_category
+    )
     marketplace_page.should_see_assistant_in_marketplace(created_assistant.name)
 
 
