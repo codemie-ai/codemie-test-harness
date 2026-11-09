@@ -107,9 +107,16 @@ class ShareAssistantPopup(BasePage):
         """Click 'Remove' for a grantee in the 'People With Access' list.
 
         Removal is applied immediately (optimistic UI update backed by an
-        immediate DELETE call), independent of the Save button.
+        immediate DELETE call), independent of the Save button. Waits for
+        that DELETE to resolve so a caller that reloads right after this
+        call is guaranteed the revoke was persisted, instead of racing an
+        in-flight request that `page.reload()` could cancel.
         """
-        self.remove_button(name).click()
+        with self.page.expect_response(
+            lambda response: "/share" in response.url
+            and response.request.method == "DELETE"
+        ):
+            self.remove_button(name).click()
         return self
 
     # --------------------------

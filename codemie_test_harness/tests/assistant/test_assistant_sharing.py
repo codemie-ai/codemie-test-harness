@@ -49,6 +49,7 @@ from codemie_test_harness.tests.utils.activity_utils import ActivityUtils
 from codemie_test_harness.tests.utils.base_utils import (
     assert_error_details,
     assert_response,
+    poll_until,
 )
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 
@@ -58,6 +59,24 @@ PERSONAL_INTEGRATION_MESSAGE = (
     "Assistant uses a personal integration and cannot be shared with users. "
     "Replace personal integrations with project integrations before sharing."
 )
+
+
+@pytest.fixture(autouse=True)
+def _require_distinct_owner_and_grantee(client, regular_client):
+    """Guard: every test here shares from `client` (owner) to `regular_client` (grantee).
+
+    `regular_client` (tests/conftest.py) falls back to AUTH_USERNAME when
+    AUTH_USERNAME_DEFAULT is unset, which is the owner's own account — the
+    tests would then silently share an assistant with its own owner and the
+    resulting assertions would fail confusingly deep in the test body. Fail
+    fast with the actual cause instead.
+    """
+    assert_that(
+        regular_client.users.about_me().user_id,
+        is_not(equal_to(client.users.about_me().user_id)),
+        "AUTH_USERNAME_DEFAULT must identify a different internal user from "
+        "AUTH_USERNAME for these sharing tests to be meaningful",
+    )
 
 
 def _find_active_external_user(user_utils):
@@ -526,12 +545,16 @@ def test_grant_and_revoke_write_activity_log_events(
     activity_utils = ActivityUtils(maintainer_client)
 
     client.assistants.share(assistant.id, [grantee_id])
-    client.assistants.revoke_share(assistant.id, [grantee_id])
 
-    granted_events = activity_utils.list_activity_events(
-        entity_id=assistant.id,
-        event_type=["assistant.grant.added"],
-        domain=["assistant"],
+    # Activity events are written asynchronously — poll until the grant event shows up.
+    granted_events = poll_until(
+        lambda: activity_utils.list_activity_events(
+            entity_id=assistant.id,
+            event_type=["assistant.grant.added"],
+            domain=["assistant"],
+            sort_dir="desc",
+        ),
+        lambda events: bool(events.data),
     )
     assert_that(
         len(granted_events.data),
@@ -546,10 +569,17 @@ def test_grant_and_revoke_write_activity_log_events(
         "principal should be the granted user",
     )
 
-    revoked_events = activity_utils.list_activity_events(
-        entity_id=assistant.id,
-        event_type=["assistant.grant.removed"],
-        domain=["assistant"],
+    client.assistants.revoke_share(assistant.id, [grantee_id])
+
+    # Same async-write caveat applies to the revoke event.
+    revoked_events = poll_until(
+        lambda: activity_utils.list_activity_events(
+            entity_id=assistant.id,
+            event_type=["assistant.grant.removed"],
+            domain=["assistant"],
+            sort_dir="desc",
+        ),
+        lambda events: bool(events.data),
     )
     assert_that(
         len(revoked_events.data),

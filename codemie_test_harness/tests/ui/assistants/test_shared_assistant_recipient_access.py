@@ -24,6 +24,7 @@ scoped to this file only.
 import os
 
 import pytest
+from hamcrest import assert_that, equal_to, is_not
 
 from codemie_test_harness.tests.ui.pageobject.assistants.assistants_page import (
     AssistantsPage,
@@ -37,7 +38,7 @@ from codemie_test_harness.tests.utils.credentials_manager import CredentialsMana
 
 
 @pytest.fixture(autouse=True)
-def login(page):
+def login(page, client):
     """Override tests/ui/conftest.py login — authenticate as the shared-with recipient (B)."""
     username = CredentialsManager.get_parameter(
         "AUTH_USERNAME_DEFAULT", CredentialsManager.get_parameter("AUTH_USERNAME")
@@ -46,6 +47,16 @@ def login(page):
         "AUTH_PASSWORD_DEFAULT", CredentialsManager.get_parameter("AUTH_PASSWORD")
     )
     user = get_client(username=username, password=password).users.about_me()
+    # AUTH_USERNAME_DEFAULT falls back to AUTH_USERNAME (the owner's own account)
+    # when unset — same fallback `regular_client` uses. Without this guard, the
+    # recipient would silently be the owner, and the no-edit-button assertion
+    # below would fail in a confusing way instead of naming the real cause.
+    assert_that(
+        user.user_id,
+        is_not(equal_to(client.users.about_me().user_id)),
+        "AUTH_USERNAME_DEFAULT must identify a different internal user from "
+        "AUTH_USERNAME for this recipient-side test to be meaningful",
+    )
     frontend_url = os.getenv("FRONTEND_URL", "")
     LoginPage(page).login_suppressing_popups(
         username, password, user.user_id, frontend_url
