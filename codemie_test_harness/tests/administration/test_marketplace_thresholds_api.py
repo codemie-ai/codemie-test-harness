@@ -27,7 +27,7 @@ run concurrently with each other without racing on the same row. They carry
 ``xdist_group(name="marketplace_thresholds")`` instead of excluding them from
 parallel runs: pytest-xdist pins the whole group to one worker (serial among
 themselves) while every other worker still runs the rest of the suite. This
-only takes effect with ``--dist=loadgroup`` (see qa-strategy.md); without it the
+only takes effect with ``--dist=loadgroup`` (see strategy.md); without it the
 group is a no-op and these tests go back to being scattered across workers.
 """
 

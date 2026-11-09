@@ -28,7 +28,7 @@ Python scripts run as `python3` (`Makefile`, targets `scan-internal`, `license-c
 
 ## Tests
 
-CI does not run the test suites: they need a running CodeMie installation (`CONTRIBUTING.md`, intro). Commands to run one test or a suite are in [testing/qa-strategy.md](testing/qa-strategy.md), "Run one test" and "Run suite". Markers, traps and environments are in [testing/qa-strategy.md](testing/qa-strategy.md) and [testing/environments.md](testing/environments.md). Test commands were not run for this guide.
+CI does not run the test suites: they need a running CodeMie installation (`CONTRIBUTING.md`, intro). Commands to run one test or a suite are in [testing/strategy.md](testing/strategy.md), "Run one test" and "Run suite". Markers, traps and environments are in [testing/strategy.md](testing/strategy.md) and [testing/environments.md](testing/environments.md). Test commands were not run for this guide.
 
 ## Pre-commit hook
 

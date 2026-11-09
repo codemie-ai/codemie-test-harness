@@ -9,12 +9,10 @@ AGENTS.md has no native import directive. Open the paths below as plain files.
 | Category | Guide Path | Purpose |
 |---|---|---|
 | Project | .ai-run/guides/project.md | Identity, tracker, ticket and PR adapters, `config.json` twin |
-| QA strategy | .ai-run/guides/testing/qa-strategy.md | Frameworks, layers, markers, code rules, anti-patterns, test-run commands |
-| QA health | .ai-run/guides/testing/qa-health.md | Suite inventory, skipped and xfail tests, flakiness signals, test debt |
+| Testing strategy | .ai-run/guides/testing/strategy.md | Layers, markers, code rules, anti-patterns, test-run commands |
 | Environments | .ai-run/guides/testing/environments.md | Target stands, settings sources, test data, safety |
 | Risk model | .ai-run/guides/testing/risk-model.md | Risk areas and priorities |
 | Test config | .ai-run/guides/testing/config.json | Machine-readable disciplines, adapters, conventions, SDK entry |
-| Safety | .ai-run/guides/safety-no-go.md | Files never read, commands never run, actions that need a person |
 | Quality gates | .ai-run/guides/quality-gates.md | Exact checks, CI jobs, pre-commit hook, gaps |
 | Git | .ai-run/guides/standards/git-workflow.md | Branches, commits, PR titles, ticket-key rule |
 | Release | docs/RELEASING.md | Tags, versions, publish workflow |
@@ -23,13 +21,12 @@ AGENTS.md has no native import directive. Open the paths below as plain files.
 
 | Category | User Intent | Example Requests | P0 Guide | P1 Guide |
 |---|---|---|---|---|
-| Test | Add or change a test | "add a budget API test" | .ai-run/guides/testing/qa-strategy.md | .ai-run/guides/testing/environments.md |
+| Test | Add or change a test | "add a budget API test" | .ai-run/guides/testing/strategy.md | .ai-run/guides/testing/environments.md |
 | Environment | Settings, stands, test data | "which stand is safe for destructive tests" | .ai-run/guides/testing/environments.md | .ai-run/guides/testing/risk-model.md |
-| SDK | A test needs a missing SDK call | "add an SDK method for budgets" | .ai-run/guides/testing/qa-strategy.md | .ai-run/guides/testing/config.json |
-| Verification | Run or add checks | "run the checks" | .ai-run/guides/quality-gates.md | .ai-run/guides/testing/qa-strategy.md |
+| SDK | A test needs a missing SDK call | "add an SDK method for budgets" | .ai-run/guides/testing/strategy.md | .ai-run/guides/testing/config.json |
+| Verification | Run or add checks | "run the checks" | .ai-run/guides/quality-gates.md | .ai-run/guides/testing/strategy.md |
 | Git | Commit, branch, PR | "open a PR" | .ai-run/guides/standards/git-workflow.md | .ai-run/guides/project.md |
 | Release | Publish the package | "release a new version" | docs/RELEASING.md | .ai-run/guides/quality-gates.md |
-| Test health | Skips, flaky or known-defect tests | "which tests are skipped" | .ai-run/guides/testing/qa-health.md | .ai-run/guides/testing/qa-strategy.md |
 
 ## Skills
 
@@ -42,9 +39,8 @@ AGENTS.md has no native import directive. Open the paths below as plain files.
 
 | Rule | Trigger | Action |
 |---|---|---|
-| Safety | ANY task | Load `.ai-run/guides/safety-no-go.md`; never read secrets, run destructive commands or publish. `.claude/settings.json` enforces it for Claude Code |
 | Check Guides First | ANY task | Match the request to a category and load the P0 guide before searching broadly |
-| Testing | "write tests" / "run tests" | Load `.ai-run/guides/testing/qa-strategy.md`. The suites need a running CodeMie installation. |
+| Testing | "write tests" / "run tests" | Load `.ai-run/guides/testing/strategy.md`. The suites need a running CodeMie installation. |
 | Git Operations | "commit" / "push" / "PR" | Only then; load `.ai-run/guides/standards/git-workflow.md` |
 | Public Content | ANY change to a tracked file | The repository is public: no ticket key, internal host, personal e-mail or customer name. Placeholder form only in `.ai-run/guides/project.md`. |
 | Release | "release" / "publish" | Only when asked; use the release skill and never publish without an explicit yes |
@@ -54,5 +50,5 @@ AGENTS.md has no native import directive. Open the paths below as plain files.
 | Need | Source Guide | Notes |
 |---|---|---|
 | Lint, format, build, licence, internal scan, hook | .ai-run/guides/quality-gates.md | Run from the repository root |
-| Run one test or a suite | .ai-run/guides/testing/qa-strategy.md | "Run one test", "Run suite" |
+| Run one test or a suite | .ai-run/guides/testing/strategy.md | "Run one test", "Run suite" |
 | Git / review workflow | .ai-run/guides/standards/git-workflow.md | Load the guide before git operations |

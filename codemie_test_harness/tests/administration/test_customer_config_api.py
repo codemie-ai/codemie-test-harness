@@ -26,7 +26,7 @@ marketplace_thresholds_save_and_reset``, which carries
 ``xdist_group(name="marketplace_thresholds")`` instead so it serializes with
 the other ``marketplaceThresholds`` tests in test_marketplace_thresholds_api.py
 without blocking the rest of the suite from running in parallel (see that
-file's docstring, and qa-strategy.md for the required ``--dist=loadgroup`` flag).
+file's docstring, and strategy.md for the required ``--dist=loadgroup`` flag).
 """
 
 from __future__ import annotations

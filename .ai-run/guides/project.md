@@ -10,7 +10,7 @@
 
 ## Machine-readable twin
 
-[testing/config.json](testing/config.json) holds the same facts for tools: disciplines, adapters, `git_conventions`, `test_command_templates` and `code_repos`. The `sdk` entry describes the public SDK repository. Its `local_path` is the directory name of a clone of that repository next to this one, and its `setup` and `verify` commands run from the root of that clone. The `consume.*` commands run from this repository. `test_command_templates` is a known copy of the commands in `testing/qa-strategy.md`; the strategy file is the home.
+[testing/config.json](testing/config.json) holds the same facts for tools: disciplines, adapters, `git_conventions`, `test_command_templates` and `code_repos`. The `sdk` entry describes the public SDK repository. Its `local_path` is the directory name of a clone of that repository next to this one, and its `setup` and `verify` commands run from the root of that clone. The `consume.*` commands run from this repository. `test_command_templates` is a known copy of the commands in `testing/strategy.md`; the strategy file is the home.
 
 ## Work Item Tracker
 
