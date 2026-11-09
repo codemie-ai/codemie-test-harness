@@ -78,6 +78,7 @@ class AssistantUtils(BaseUtils):
         conversation_starters=(),
         enabled_builtin_subagents=None,
         tool_permissions: ToolPermissionsConfig | None = None,
+        prompt_variables=None,
     ):
         # Generate a random name if assistant_name is not provided
         assistant_name = assistant_name if assistant_name else get_random_name()
@@ -107,6 +108,7 @@ class AssistantUtils(BaseUtils):
             else [],
             enabled_builtin_subagents=enabled_builtin_subagents,
             tool_permissions=tool_permissions,
+            prompt_variables=list(prompt_variables) if prompt_variables else [],
         )
 
         response = self.client.assistants.create(request)
@@ -132,6 +134,7 @@ class AssistantUtils(BaseUtils):
         conversation_starters=(),
         enabled_builtin_subagents=None,
         tool_permissions: ToolPermissionsConfig | None = None,
+        prompt_variables=None,
     ):
         # Generate a random name if assistant_name is not provided
         assistant_name = assistant_name if assistant_name else get_random_name()
@@ -160,6 +163,7 @@ class AssistantUtils(BaseUtils):
             conversation_starters=conversation_starters,
             enabled_builtin_subagents=enabled_builtin_subagents,
             tool_permissions=tool_permissions,
+            prompt_variables=prompt_variables,
         )
 
         return wait_for_entity(

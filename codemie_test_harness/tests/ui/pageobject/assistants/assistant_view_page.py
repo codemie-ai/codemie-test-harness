@@ -145,6 +145,29 @@ class AssistantViewPage:
             "div.flex.flex-col.gap-2:has(h4:text('Link to start a chat')) button[aria-label='Copy']"
         )
 
+    # --- Owner actions (shown only when the viewer can edit) ---
+    @property
+    def edit_button(self):
+        """'Edit' button, shown on this page only for a viewer with WRITE access."""
+        return self.page.get_by_role("button", name="Edit", exact=True)
+
+    @property
+    def chat_now_button(self):
+        """'Chat Now' button, shown for any viewer who can read the assistant."""
+        return self.page.get_by_role("button", name="Chat Now", exact=True)
+
+    # --- SHARED WITH Block (owner-only; rendered only when sharedWith is non-empty) ---
+    @property
+    def shared_with_section_header(self):
+        return self.page.get_by_role("heading", name="SHARED WITH", level=3)
+
+    @property
+    def shared_with_block(self):
+        return self.shared_with_section_header.locator("xpath=..")
+
+    def shared_with_entry(self, name: str):
+        return self.shared_with_block.get_by_text(name, exact=False)
+
     # --- Configuration ---
     @property
     def configuration_section_header(self):
@@ -502,6 +525,37 @@ class AssistantViewPage:
         expect(self.sub_assistant_items).to_have_count(expected_count)
 
     @step
+    def should_see_chat_now_button(self):
+        """Assert the 'Chat Now' button is visible."""
+        expect(self.chat_now_button).to_be_visible()
+        return self
+
+    @step
+    def should_not_see_edit_button(self):
+        """Assert the 'Edit' button (the single gateway to prompt/tools/KB/model-settings
+        editing on this page) is not visible — the viewer has no WRITE access."""
+        expect(self.edit_button).to_be_hidden()
+        return self
+
+    @step
+    def should_list_shared_with(self, name: str):
+        """Assert the SHARED WITH section lists a grantee by display name."""
+        expect(self.shared_with_section_header).to_be_visible()
+        expect(self.shared_with_entry(name)).to_be_visible()
+        return self
+
+    @step
+    def should_have_no_shared_with_section(self):
+        """Assert the SHARED WITH section is absent.
+
+        It is only rendered while sharedWith is non-empty, so after the last
+        grant is revoked the heading itself disappears rather than the list
+        becoming empty.
+        """
+        expect(self.shared_with_section_header).to_be_hidden()
+        return self
+
+    @step
     def should_have_datasource_attached(self, datasource_name: str):
         """
         Verify that a datasource is attached to the assistant.
@@ -553,3 +607,12 @@ class AssistantViewPage:
         )
         expect(self.status_badge).to_contain_text("\u2713 VERIFIED")
         return self
+
+    @step
+    def click_chat_now(self):
+        """Click 'Chat Now' and return the resulting chat page."""
+        from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
+
+        self.chat_now_button.click()
+        self.page.wait_for_load_state("domcontentloaded")
+        return ChatPage(self.page)
