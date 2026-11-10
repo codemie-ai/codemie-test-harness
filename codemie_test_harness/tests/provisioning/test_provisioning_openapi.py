@@ -26,6 +26,7 @@ from codemie_test_harness.tests.utils.provisioning_utils import (
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 # A configured client login marks a stand prepared for the provisioning API (it is mounted only when enabled).
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api

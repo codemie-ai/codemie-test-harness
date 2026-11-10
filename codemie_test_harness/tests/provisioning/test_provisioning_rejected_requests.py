@@ -34,6 +34,7 @@ from codemie_test_harness.tests.test_data.provisioning_test_data import (
 
 @pytest.mark.parametrize("call", WRITE_CALLS)
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_write_call_without_change_reference_is_rejected_with_422(
@@ -56,6 +57,7 @@ def test_write_call_without_change_reference_is_rejected_with_422(
 
 @pytest.mark.parametrize("names", REJECTED_NAME_ROWS)
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_with_invalid_name_is_rejected_with_400_and_creates_nothing(
@@ -80,6 +82,7 @@ def test_set_budget_with_invalid_name_is_rejected_with_400_and_creates_nothing(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_naming_deleted_cost_center_is_rejected_with_409(
@@ -105,6 +108,7 @@ def test_set_budget_naming_deleted_cost_center_is_rejected_with_409(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_for_personal_project_is_rejected_with_403(
@@ -129,6 +133,7 @@ def test_set_budget_for_personal_project_is_rejected_with_403(
 
 @pytest.mark.parametrize("malformed", MALFORMED_SET_ROWS)
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_with_malformed_request_is_rejected_with_422(

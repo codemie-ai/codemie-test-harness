@@ -227,6 +227,7 @@ class ProvisioningUtils(BaseUtils):
         categories: dict | None = None,
         cost_center_id: UUID | None = None,
         name: str | None = None,
+        display_name: str | None = None,
     ) -> str:
         """Create a project as the admin, with a budget group when ``categories`` is given."""
         name = self.track_project(name) if name else self.new_project_name()
@@ -234,6 +235,7 @@ class ProvisioningUtils(BaseUtils):
             name=name,
             description="Autotest provisioning project",
             cost_center_id=cost_center_id,
+            display_name=display_name,
         )
         if categories:
             self._budget_groups.create(name, categories, name_prefix="autotest-prov")
@@ -274,7 +276,9 @@ class ProvisioningUtils(BaseUtils):
 
     def category_budgets(self, project_name: str) -> dict[str, float]:
         """Category to max budget of the project's active budget group; empty without one."""
-        group = self.active_budget_group(project_name)
+        return self._group_category_budgets(self.active_budget_group(project_name))
+
+    def _group_category_budgets(self, group: dict | None) -> dict[str, float]:
         return (
             self._group_utils.get_category_budgets(group["group_id"]) if group else {}
         )
@@ -332,7 +336,7 @@ class ProvisioningUtils(BaseUtils):
             ),
             member_ids=frozenset(m.user_id for m in detail.members),
             group_id=group["group_id"] if group else None,
-            categories=tuple(sorted(self.category_budgets(project_name).items())),
+            categories=tuple(sorted(self._group_category_budgets(group).items())),
         )
 
     # --- cleanup ---------------------------------------------------------------------
@@ -350,16 +354,19 @@ class ProvisioningUtils(BaseUtils):
             override_users = self._override_users.get(name, [])
             for group in self._admin_budgets.list_budget_groups(name):
                 if group.get("deleted_at") is None:
-                    self._budget_groups.delete(
-                        ProjectBudget(
-                            project_name=name,
-                            group_id=group["group_id"],
-                            budget_ids=AdminProjectBudgetUtils.budget_ids_by_category(
-                                group
-                            ),
+                    budget = ProjectBudget(
+                        project_name=name,
+                        group_id=group["group_id"],
+                        budget_ids=AdminProjectBudgetUtils.budget_ids_by_category(
+                            group
                         ),
-                        override_users[0] if override_users else None,
                     )
+                    self._budget_groups.delete(budget)
+                    for budget_id in budget.budget_ids.values():
+                        for user_id in override_users:
+                            self._lite_llm.delete_project_budget_objects(
+                                budget_id, user_id
+                            )
             for user_id in override_users:
                 self._lite_llm.delete_override_customers_for_project(name, user_id)
             # The project's creator cannot be unassigned (400); deleting the project removes it.

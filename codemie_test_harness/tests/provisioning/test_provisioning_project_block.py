@@ -42,6 +42,7 @@ from codemie_test_harness.tests.utils.cost_center_utils import (
 
 @pytest.mark.parametrize(("linked", "requested", "expected"), COST_CENTER_LINK_ROWS)
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_links_cost_center_once_and_never_changes_an_existing_link(
@@ -95,6 +96,7 @@ def test_set_budget_links_cost_center_once_and_never_changes_an_existing_link(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_only_adds_admins_and_reports_unknown_emails(
@@ -140,6 +142,7 @@ def test_set_budget_only_adds_admins_and_reports_unknown_emails(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_reports_registered_client_email_as_not_assigned(
@@ -182,6 +185,7 @@ def test_set_budget_reports_registered_client_email_as_not_assigned(
     strict=True,
 )
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_resend_assigns_admin_who_did_not_exist_at_the_first_call(

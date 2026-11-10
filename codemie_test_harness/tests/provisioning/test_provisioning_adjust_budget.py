@@ -54,6 +54,7 @@ AMOUNT_TOLERANCE = 0.01
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_adjust_budget_changes_only_the_named_category_and_zero_removes_it(
@@ -87,6 +88,7 @@ def test_adjust_budget_changes_only_the_named_category_and_zero_removes_it(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_adjust_budget_rejects_platform_left_at_zero_and_changes_nothing(
@@ -113,6 +115,7 @@ def test_adjust_budget_rejects_platform_left_at_zero_and_changes_nothing(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_adjust_budget_creates_project_and_budget_and_answers_200(
@@ -138,6 +141,7 @@ def test_adjust_budget_creates_project_and_budget_and_answers_200(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_adjust_budget_below_fixed_member_limits_is_rejected_and_changes_nothing(

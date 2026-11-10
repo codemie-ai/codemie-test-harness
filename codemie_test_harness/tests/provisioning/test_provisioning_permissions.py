@@ -42,6 +42,7 @@ from codemie_test_harness.tests.utils.user_utils import UserUtils
 
 @pytest.mark.parametrize(("call", "expected_status"), BUDGET_ONLY_ALLOWED_ROWS)
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_BUDGETS_CLIENT_KEYS)
 @pytest.mark.api
 def test_budget_only_client_manages_budget_of_existing_project(
@@ -57,6 +58,7 @@ def test_budget_only_client_manages_budget_of_existing_project(
 
 @pytest.mark.parametrize(("setup_project", "call"), BUDGET_ONLY_FORBIDDEN_ROWS)
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_BUDGETS_CLIENT_KEYS)
 @pytest.mark.api
 def test_budget_only_client_cannot_create_project_or_send_cost_center_or_admins(
@@ -87,6 +89,7 @@ def test_budget_only_client_cannot_create_project_or_send_cost_center_or_admins(
     ("service_fixture", "call", "permission"), MISSING_PERMISSION_ROWS
 )
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(
     *PROVISIONING_FULL_CLIENT_KEYS, *PROVISIONING_READ_CLIENT_KEYS
 )
@@ -111,6 +114,7 @@ def test_client_without_the_needed_permission_gets_403(
 
 @pytest.mark.parametrize("call_outside_provisioning", LOCKED_OUT_ROWS)
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_registered_client_is_refused_outside_the_provisioning_api(
@@ -128,6 +132,7 @@ def test_registered_client_is_refused_outside_the_provisioning_api(
 
 @pytest.mark.parametrize(("caller_fixture", "call"), NON_REGISTERED_ROWS)
 @pytest.mark.budget
+@pytest.mark.enterprise
 # A configured client login marks a stand prepared for the provisioning API (it is mounted only when enabled).
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api

@@ -27,6 +27,7 @@ from codemie_test_harness.tests.test_data.provisioning_test_data import (
 
 @pytest.mark.parametrize("setup_project", CANCEL_EXISTING_PROJECT_ROWS)
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_cancel_budget_answers_204_and_leaves_no_budget(
@@ -48,6 +49,7 @@ def test_cancel_budget_answers_204_and_leaves_no_budget(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_cancel_budget_of_missing_project_answers_404_and_creates_nothing(

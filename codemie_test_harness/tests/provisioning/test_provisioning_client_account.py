@@ -25,6 +25,7 @@ from codemie_test_harness.tests.test_data.provisioning_test_data import (
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_registered_client_gets_no_personal_project_from_its_calls(

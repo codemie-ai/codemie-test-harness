@@ -33,7 +33,7 @@ The provisioning tests (`tests/provisioning/`) call `/v1/provisioning` as regist
 | budgets | manage-budgets only | `SEREVICE_NOW_BUDGETS_ID` | `SEREVICE_NOW_BUDGETS_SECRET` |
 | read | read-projects only | `SEREVICE_NOW_READ_ID` | `SEREVICE_NOW_READ_SECRET` |
 
-The names keep their original spelling ("SEREVICE"). A test whose settings are missing is skipped with `missing setting '<NAME>'` in a gated run (`capability_gate.py`).
+The six settings are read from the environment or `.env`; they are not mapped to the AWS Parameter Store yet, because a store lookup needs a parameter name and path per key. The names keep their original spelling ("SEREVICE"). A test whose settings are missing is skipped with `missing setting '<NAME>'` in a gated run (`capability_gate.py`).
 
 Stand prerequisites, none of which the harness can set up:
 

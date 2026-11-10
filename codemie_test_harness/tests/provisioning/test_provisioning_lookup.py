@@ -30,6 +30,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_READ_CLIENT_KEYS)
 @pytest.mark.api
 def test_lookup_returns_union_of_shared_projects_sorted_by_name(
@@ -43,9 +44,13 @@ def test_lookup_returns_union_of_shared_projects_sorted_by_name(
     first_email, first_id, _ = non_admin_user
     second_email, second_id, _ = disposable_user
     base = get_random_name()
-    first_only = provisioning_utils.create_project(name=f"{base}-b")
+    first_only = provisioning_utils.create_project(
+        name=f"{base}-b", display_name=f"Display of {base}-b"
+    )
     second_only = provisioning_utils.create_project(name=f"{base}-a")
-    shared = provisioning_utils.create_project(name=f"{base}-c")
+    shared = provisioning_utils.create_project(
+        name=f"{base}-c", display_name=f"Display of {base}-c"
+    )
     user_utils.assign_user_to_project(first_id, first_only)
     user_utils.assign_user_to_project(second_id, second_only)
     user_utils.assign_user_to_project(first_id, shared)
@@ -61,10 +66,22 @@ def test_lookup_returns_union_of_shared_projects_sorted_by_name(
         "distinct shared projects of both users sorted by name, without their "
         "personal projects and without anything for the unknown email",
     )
+    assert_that(
+        {project.project_name: project.display_name for project in projects},
+        equal_to(
+            {
+                second_only: None,
+                first_only: f"Display of {base}-b",
+                shared: f"Display of {base}-c",
+            }
+        ),
+        "each project carries its display name, null when it has none",
+    )
 
 
 @pytest.mark.parametrize("member_emails", LOOKUP_REJECTED_ROWS)
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_READ_CLIENT_KEYS)
 @pytest.mark.api
 def test_lookup_without_a_valid_member_email_is_rejected_with_422(
@@ -78,6 +95,7 @@ def test_lookup_without_a_valid_member_email_is_rejected_with_422(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_READ_CLIENT_KEYS)
 @pytest.mark.api
 def test_lookup_of_emails_matching_no_user_returns_an_empty_list(provisioning_read):
@@ -88,6 +106,7 @@ def test_lookup_of_emails_matching_no_user_returns_an_empty_list(provisioning_re
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_READ_CLIENT_KEYS)
 @pytest.mark.api
 def test_lookup_matches_member_email_in_any_letter_case(
@@ -108,6 +127,7 @@ def test_lookup_matches_member_email_in_any_letter_case(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(
     *PROVISIONING_READ_CLIENT_KEYS, *PROVISIONING_FULL_CLIENT_KEYS
 )

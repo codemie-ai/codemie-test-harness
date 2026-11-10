@@ -42,6 +42,7 @@ AMOUNT_TOLERANCE = 0.01
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_creates_project_cost_center_admins_and_budget(
@@ -105,6 +106,7 @@ def test_set_budget_creates_project_cost_center_admins_and_budget(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_creates_budget_for_existing_project_without_one_and_adds_no_member(
@@ -144,6 +146,7 @@ def test_set_budget_creates_budget_for_existing_project_without_one_and_adds_no_
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_replaces_amounts_and_removes_categories_not_sent(
@@ -168,6 +171,7 @@ def test_set_budget_replaces_amounts_and_removes_categories_not_sent(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_resend_converges_to_the_same_state(
@@ -201,6 +205,7 @@ def test_set_budget_resend_converges_to_the_same_state(
 
 
 @pytest.mark.budget
+@pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_keeps_soft_budget_of_unchanged_category_and_resets_changed_one(
