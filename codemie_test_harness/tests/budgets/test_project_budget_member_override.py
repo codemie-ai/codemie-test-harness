@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import logging
 from time import sleep
 
@@ -63,7 +62,7 @@ def test_admin_overrides_platform_member_budget_routes_spending(
     admin_project_budget_utils,
     lite_llm_budget_utils,
     lifecycle_project_with_platform_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id, budget_id, platform_alias = (
         lifecycle_project_with_platform_budget
@@ -149,20 +148,19 @@ def test_admin_overrides_platform_member_budget_routes_spending(
         )
         assert_that(float(current_shared_key["spend"]), greater_than(key_spend_phase1))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for platform spend in project_spend_tracking (project=%s)",
-            project_name,
+            "Waiting for platform budget spend in ledger (project=%s)", project_name
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "platform"
+        budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "platform", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            budget, not_none(), "Project platform budget not found in spend ledger"
+        )
+        assert_that(
+            budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project platform key spend.",
+            "Project platform budget current_spending should match project platform key spend.",
         )
     finally:
         admin_project_budget_utils.clear_member_override(budget_id, user2_id)
@@ -179,7 +177,7 @@ def test_admin_overrides_cli_member_budget_routes_spending(
     lite_llm_budget_utils,
     default_llm,
     lifecycle_project_with_cli_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id, budget_id, cli_alias = lifecycle_project_with_cli_budget
     override_customer_id = MEMBER_OVERRIDE_CUSTOMER_ID_TEMPLATE.format(
@@ -271,20 +269,15 @@ def test_admin_overrides_cli_member_budget_routes_spending(
         )
         assert_that(float(current_shared_key["spend"]), greater_than(key_spend_phase1))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
-        logger.info(
-            "Waiting for cli spend in project_spend_tracking (project=%s)",
-            project_name,
+        logger.info("Waiting for cli budget spend in ledger (project=%s)", project_name)
+        budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "cli", float(current_shared_key["spend"]) - 0.0001
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "cli"
-        )
+        assert_that(budget, not_none(), "Project cli budget not found in spend ledger")
         assert_that(
-            spends["total_spend"],
+            budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project cli key spend.",
+            "Project cli budget current_spending should match project cli key spend.",
         )
     finally:
         admin_project_budget_utils.clear_member_override(budget_id, user2_id)
@@ -300,7 +293,7 @@ def test_admin_overrides_premium_member_budget_routes_spending(
     admin_project_budget_utils,
     lite_llm_budget_utils,
     lifecycle_project_with_premium_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id, budget_id, premium_alias = (
         lifecycle_project_with_premium_budget
@@ -394,20 +387,22 @@ def test_admin_overrides_premium_member_budget_routes_spending(
         )
         assert_that(float(current_shared_key["spend"]), greater_than(key_spend_phase1))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for premium_models spend in project_spend_tracking (project=%s)",
+            "Waiting for premium_models budget spend in ledger (project=%s)",
             project_name,
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "premium_models"
+        budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "premium_models", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            budget,
+            not_none(),
+            "Project premium_models budget not found in spend ledger",
+        )
+        assert_that(
+            budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project premium_models key spend.",
+            "Project premium_models budget current_spending should match project premium_models key spend.",
         )
     finally:
         admin_project_budget_utils.clear_member_override(budget_id, user2_id)
@@ -426,7 +421,7 @@ def test_admin_clears_platform_member_override_reverts_spending_to_shared(
     user2_assistant_utils,
     admin_project_budget_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id = lifecycle_project
     platform_alias = project_key_alias(project_name, "platform")
@@ -514,24 +509,21 @@ def test_admin_clears_platform_member_override_reverts_spending_to_shared(
         assert_that(allocations[user2_id]["allocated_max_budget"], equal_to(50.0))
         assert_that(allocations[user1_id]["allocated_max_budget"], equal_to(50.0))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for platform spend in project_spend_tracking (project=%s)",
-            project_name,
+            "Waiting for platform budget spend in ledger (project=%s)", project_name
         )
-
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
-
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "platform"
+        ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "platform", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            ledger_budget,
+            not_none(),
+            "Project platform budget not found in spend ledger",
+        )
+        assert_that(
+            ledger_budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project platform key spend.",
+            "Project platform budget current_spending should match project platform key spend.",
         )
     finally:
         project_budget_groups.delete(budget, user2_id)
@@ -549,7 +541,7 @@ def test_admin_clears_cli_member_override_reverts_spending_to_shared(
     admin_project_budget_utils,
     lite_llm_budget_utils,
     default_llm,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id = lifecycle_project
     cli_alias = project_key_alias(project_name, "cli")
@@ -644,20 +636,17 @@ def test_admin_clears_cli_member_override_reverts_spending_to_shared(
         assert_that(allocations[user2_id]["allocated_max_budget"], equal_to(50.0))
         assert_that(allocations[user1_id]["allocated_max_budget"], equal_to(50.0))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
-        logger.info(
-            "Waiting for cli spend in project_spend_tracking (project=%s)",
-            project_name,
-        )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "cli"
+        logger.info("Waiting for cli budget spend in ledger (project=%s)", project_name)
+        ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "cli", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            ledger_budget, not_none(), "Project cli budget not found in spend ledger"
+        )
+        assert_that(
+            ledger_budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project cli key spend.",
+            "Project cli budget current_spending should match project cli key spend.",
         )
     finally:
         project_budget_groups.delete(budget, user2_id)
@@ -674,7 +663,7 @@ def test_admin_clears_premium_member_override_reverts_spending_to_shared(
     user2_proxy_utils,
     admin_project_budget_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id = lifecycle_project
     premium_alias = project_key_alias(project_name, "premium_models")
@@ -769,20 +758,22 @@ def test_admin_clears_premium_member_override_reverts_spending_to_shared(
         assert_that(allocations[user2_id]["allocated_max_budget"], equal_to(50.0))
         assert_that(allocations[user1_id]["allocated_max_budget"], equal_to(50.0))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for premium_models spend in project_spend_tracking (project=%s)",
+            "Waiting for premium_models budget spend in ledger (project=%s)",
             project_name,
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "premium_models"
+        ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "premium_models", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            ledger_budget,
+            not_none(),
+            "Project premium_models budget not found in spend ledger",
+        )
+        assert_that(
+            ledger_budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project premium_models key spend.",
+            "Project premium_models budget current_spending should match project premium_models key spend.",
         )
     finally:
         project_budget_groups.delete(budget, user2_id)
@@ -799,7 +790,7 @@ def test_cli_spending_falls_back_to_platform_member_override_when_no_cli_overrid
     admin_project_budget_utils,
     lite_llm_budget_utils,
     default_llm,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id = lifecycle_project
     platform_alias = project_key_alias(project_name, "platform")
@@ -887,20 +878,21 @@ def test_cli_spending_falls_back_to_platform_member_override_when_no_cli_overrid
             lite_llm_budget_utils.get_customer_info(cli_override_customer_id), none()
         )
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for platform spend in project_spend_tracking (project=%s)",
-            project_name,
+            "Waiting for platform budget spend in ledger (project=%s)", project_name
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "platform"
+        ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "platform", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            ledger_budget,
+            not_none(),
+            "Project platform budget not found in spend ledger",
+        )
+        assert_that(
+            ledger_budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project platform key spend.",
+            "Project platform budget current_spending should match project platform key spend.",
         )
     finally:
         admin_project_budget_utils.clear_member_override(budget_id, user2_id)
@@ -917,7 +909,7 @@ def test_premium_spending_falls_back_to_platform_member_override_when_no_premium
     user2_proxy_utils,
     admin_project_budget_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id = lifecycle_project
     platform_alias = project_key_alias(project_name, "platform")
@@ -1007,20 +999,21 @@ def test_premium_spending_falls_back_to_platform_member_override_when_no_premium
             none(),
         )
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for platform spend in project_spend_tracking (project=%s)",
-            project_name,
+            "Waiting for platform budget spend in ledger (project=%s)", project_name
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "platform"
+        ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "platform", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            ledger_budget,
+            not_none(),
+            "Project platform budget not found in spend ledger",
+        )
+        assert_that(
+            ledger_budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project platform key spend.",
+            "Project platform budget current_spending should match project platform key spend.",
         )
     finally:
         admin_project_budget_utils.clear_member_override(budget_id, user2_id)
@@ -1038,7 +1031,7 @@ def test_platform_spending_routes_to_platform_member_override_when_all_overridde
     user2_assistant_utils,
     admin_project_budget_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id = lifecycle_project
     platform_alias = project_key_alias(project_name, "platform")
@@ -1127,20 +1120,21 @@ def test_platform_spending_routes_to_platform_member_override_when_all_overridde
         premium_override = lite_llm_budget_utils.get_customer_info(premium_override_id)
         assert_that(float(premium_override["spend"]), equal_to(0))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for platform spend in project_spend_tracking (project=%s)",
-            project_name,
+            "Waiting for platform budget spend in ledger (project=%s)", project_name
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "platform"
+        ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "platform", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            ledger_budget,
+            not_none(),
+            "Project platform budget not found in spend ledger",
+        )
+        assert_that(
+            ledger_budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project platform key spend.",
+            "Project platform budget current_spending should match project platform key spend.",
         )
     finally:
         for budget_id in (platform_budget_id, cli_budget_id, premium_budget_id):
@@ -1159,7 +1153,7 @@ def test_cli_spending_routes_to_cli_member_override_when_all_overridden(
     admin_project_budget_utils,
     lite_llm_budget_utils,
     default_llm,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id = lifecycle_project
     cli_alias = project_key_alias(project_name, "cli")
@@ -1252,20 +1246,17 @@ def test_cli_spending_routes_to_cli_member_override_when_all_overridden(
         premium_override = lite_llm_budget_utils.get_customer_info(premium_override_id)
         assert_that(float(premium_override["spend"]), equal_to(0))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
-        logger.info(
-            "Waiting for cli spend in project_spend_tracking (project=%s)",
-            project_name,
-        )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "cli"
+        logger.info("Waiting for cli budget spend in ledger (project=%s)", project_name)
+        ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "cli", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            ledger_budget, not_none(), "Project cli budget not found in spend ledger"
+        )
+        assert_that(
+            ledger_budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project cli key spend.",
+            "Project cli budget current_spending should match project cli key spend.",
         )
     finally:
         for budget_id in (platform_budget_id, cli_budget_id, premium_budget_id):
@@ -1283,7 +1274,7 @@ def test_premium_spending_routes_to_premium_member_override_when_all_overridden(
     user2_proxy_utils,
     admin_project_budget_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id = lifecycle_project
     premium_alias = project_key_alias(project_name, "premium_models")
@@ -1382,20 +1373,22 @@ def test_premium_spending_routes_to_premium_member_override_when_all_overridden(
         cli_override = lite_llm_budget_utils.get_customer_info(cli_override_id)
         assert_that(float(cli_override["spend"]), equal_to(0))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for premium_models spend in project_spend_tracking (project=%s)",
+            "Waiting for premium_models budget spend in ledger (project=%s)",
             project_name,
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "premium_models"
+        ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "premium_models", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            ledger_budget,
+            not_none(),
+            "Project premium_models budget not found in spend ledger",
+        )
+        assert_that(
+            ledger_budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project premium_models key spend.",
+            "Project premium_models budget current_spending should match project premium_models key spend.",
         )
     finally:
         for budget_id in (platform_budget_id, cli_budget_id, premium_budget_id):
@@ -1558,7 +1551,7 @@ def test_admin_overrides_premium_member_budget_routes_spending_via_chat(
     admin_project_budget_utils,
     lite_llm_budget_utils,
     lifecycle_project_with_premium_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id, budget_id, premium_alias = (
         lifecycle_project_with_premium_budget
@@ -1644,20 +1637,22 @@ def test_admin_overrides_premium_member_budget_routes_spending_via_chat(
         )
         assert_that(float(current_shared_key["spend"]), greater_than(key_spend_phase1))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for premium_models spend in project_spend_tracking (project=%s)",
+            "Waiting for premium_models budget spend in ledger (project=%s)",
             project_name,
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "premium_models"
+        budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "premium_models", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            budget,
+            not_none(),
+            "Project premium_models budget not found in spend ledger",
+        )
+        assert_that(
+            budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project premium_models key spend.",
+            "Project premium_models budget current_spending should match project premium_models key spend.",
         )
     finally:
         admin_project_budget_utils.clear_member_override(budget_id, user2_id)
@@ -1676,7 +1671,7 @@ def test_admin_clears_premium_member_override_reverts_spending_to_shared_via_cha
     user2_assistant_utils,
     admin_project_budget_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id = lifecycle_project
     premium_alias = project_key_alias(project_name, "premium_models")
@@ -1766,20 +1761,22 @@ def test_admin_clears_premium_member_override_reverts_spending_to_shared_via_cha
         assert_that(allocations[user2_id]["allocated_max_budget"], equal_to(50.0))
         assert_that(allocations[user1_id]["allocated_max_budget"], equal_to(50.0))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for premium_models spend in project_spend_tracking (project=%s)",
+            "Waiting for premium_models budget spend in ledger (project=%s)",
             project_name,
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "premium_models"
+        ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "premium_models", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            ledger_budget,
+            not_none(),
+            "Project premium_models budget not found in spend ledger",
+        )
+        assert_that(
+            ledger_budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project premium_models key spend.",
+            "Project premium_models budget current_spending should match project premium_models key spend.",
         )
     finally:
         project_budget_groups.delete(budget, user2_id)
@@ -1796,7 +1793,7 @@ def test_premium_spending_falls_back_to_platform_member_override_via_chat(
     user2_assistant_utils,
     admin_project_budget_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id = lifecycle_project
     platform_alias = project_key_alias(project_name, "platform")
@@ -1882,20 +1879,21 @@ def test_premium_spending_falls_back_to_platform_member_override_via_chat(
             none(),
         )
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for platform spend in project_spend_tracking (project=%s)",
-            project_name,
+            "Waiting for platform budget spend in ledger (project=%s)", project_name
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "platform"
+        ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "platform", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            ledger_budget,
+            not_none(),
+            "Project platform budget not found in spend ledger",
+        )
+        assert_that(
+            ledger_budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project platform key spend.",
+            "Project platform budget current_spending should match project platform key spend.",
         )
     finally:
         admin_project_budget_utils.clear_member_override(budget_id, user2_id)
@@ -1913,7 +1911,7 @@ def test_premium_spending_routes_to_premium_member_override_when_all_overridden_
     user2_assistant_utils,
     admin_project_budget_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, user2_id = lifecycle_project
     premium_alias = project_key_alias(project_name, "premium_models")
@@ -2004,20 +2002,22 @@ def test_premium_spending_routes_to_premium_member_override_when_all_overridden_
         cli_override = lite_llm_budget_utils.get_customer_info(cli_override_id)
         assert_that(float(cli_override["spend"]), equal_to(0))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends()
         logger.info(
-            "Waiting for premium_models spend in project_spend_tracking (project=%s)",
+            "Waiting for premium_models budget spend in ledger (project=%s)",
             project_name,
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "premium_models"
+        ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "premium_models", float(current_shared_key["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            ledger_budget,
+            not_none(),
+            "Project premium_models budget not found in spend ledger",
+        )
+        assert_that(
+            ledger_budget.current_spending,
             close_to(float(current_shared_key["spend"]), 0.0001),
-            "project_spend_tracking total_spend should match project premium_models key spend.",
+            "Project premium_models budget current_spending should match project premium_models key spend.",
         )
     finally:
         for budget_id in (platform_budget_id, cli_budget_id, premium_budget_id):

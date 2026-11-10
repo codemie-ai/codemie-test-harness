@@ -23,7 +23,6 @@ Behavioural changes covered:
 - Toggling the flag immediately re-syncs all already-synced member allocations in LiteLLM
 """
 
-import datetime
 import logging
 import secrets
 
@@ -192,7 +191,7 @@ def test_member_customer_created_in_litellm_when_enforce_limits_disabled(
     lite_llm_budget_utils,
     default_llm,
     project_no_enforce_with_platform_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     """Member customer IS created in LiteLLM even when enforce_member_spend_limits=False.
 
@@ -232,20 +231,17 @@ def test_member_customer_created_in_litellm_when_enforce_limits_disabled(
         equal_to(_PROJECT_BUDGET_MAX),
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", float(customer.get("spend", 0)) - 0.0001
     )
+    assert_that(budget, not_none(), "Project platform budget not found in spend ledger")
     assert_that(
-        spends["total_spend"],
+        budget.current_spending,
         close_to(float(customer.get("spend", 0)), 0.0001),
-        "project_spend_tracking total_spend should match project platform spend.",
+        "Project platform budget current_spending should match project platform spend.",
     )
 
 
@@ -259,7 +255,7 @@ def test_enabling_enforce_limits_resyncs_member_max_budget_to_individual(
     lite_llm_budget_utils,
     default_llm,
     project_no_enforce_with_platform_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     """Enabling enforce_member_spend_limits immediately re-syncs member max_budget.
 
@@ -323,20 +319,17 @@ def test_enabling_enforce_limits_resyncs_member_max_budget_to_individual(
         "LiteLLM customer spend must not be reset after enabling enforce_member_spend_limits.",
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", phase1_spend - 0.0001
     )
+    assert_that(budget, not_none(), "Project platform budget not found in spend ledger")
     assert_that(
-        spends["total_spend"],
+        budget.current_spending,
         close_to(phase1_spend, 0.0001),
-        "project_spend_tracking total_spend should match project platform spend.",
+        "Project platform budget current_spending should match project platform spend.",
     )
 
 
@@ -350,7 +343,7 @@ def test_disabling_enforce_limits_resyncs_member_max_budget_to_project_total(
     lite_llm_budget_utils,
     default_llm,
     project_enforce_enabled_with_platform_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     """Disabling enforce_member_spend_limits immediately re-syncs member max_budget.
 
@@ -417,18 +410,15 @@ def test_disabling_enforce_limits_resyncs_member_max_budget_to_project_total(
         "LiteLLM customer spend must not be reset after disabling enforce_member_spend_limits.",
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", phase1_spend - 0.0001
     )
+    assert_that(budget, not_none(), "Project platform budget not found in spend ledger")
     assert_that(
-        spends["total_spend"],
+        budget.current_spending,
         close_to(phase1_spend, 0.0001),
-        "project_spend_tracking total_spend should match project platform spend.",
+        "Project platform budget current_spending should match project platform spend.",
     )

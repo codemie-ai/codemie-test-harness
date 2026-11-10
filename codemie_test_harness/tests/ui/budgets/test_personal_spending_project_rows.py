@@ -24,8 +24,6 @@ cli categories, because the panel draws a table only for two or more rows. The b
 column is hidden in the table by design, so limit values are asserted in the API tests.
 """
 
-import datetime
-
 import pytest
 
 from codemie_test_harness.tests.ui.budgets.personal_spending_steps import (
@@ -124,7 +122,6 @@ def test_personal_spending_shows_combined_project_total_for_user_who_has_not_spe
     admin_project_utils,
     lite_llm_budget_utils,
     default_llm,
-    admin_spend_tracking_utils,
 ):
     switch_enforcement_off(admin_project_utils, scaled_spent_category_budget)
 
@@ -136,10 +133,8 @@ def test_personal_spending_shows_combined_project_total_for_user_who_has_not_spe
         lite_llm_budget_utils,
     )
     project_name, _ = scaled_spent_category_budget
-    admin_spend_tracking_utils.collect_spends()
-    today = datetime.date.today()
-    admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, SPENT_CATEGORY
+    admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, SPENT_CATEGORY, spend.project_total - 0.0001
     )
     assert_other_member_spend_is_recorded(spend)
     viewer_row = wait_for_viewer_row_with_combined_total(

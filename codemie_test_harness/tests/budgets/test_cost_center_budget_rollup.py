@@ -27,7 +27,6 @@ Covered cases:
     TC-011  Cost center spend equals the sum of its projects' spend after real spend
 """
 
-import datetime
 import logging
 
 import pytest
@@ -68,10 +67,11 @@ _SPENDING_PROPAGATION_WAIT = 600
 
 
 def _collect_platform_budget_items(
-    admin_project_utils, lite_llm_budget_utils, admin_spend_tracking_utils, *budgets
+    admin_project_utils, lite_llm_budget_utils, *budgets
 ):
     """Wait for each project's platform key spend, collect it, and return the projects' own
     platform budget items (in the order of ``budgets``) as the projects API reports them."""
+    key_spends = []
     for budget in budgets:
         logger.info(
             "Waiting for platform key spend (alias=%s)", budget.alias("platform")
@@ -85,18 +85,15 @@ def _collect_platform_budget_items(
             f"LiteLLM platform key spend not recorded for {budget.project_name}.",
         )
         assert_that(float(key_info["spend"]), greater_than(0))
+        key_spends.append(float(key_info["spend"]))
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends()
-
-    today = datetime.date.today()
     items = []
-    for budget in budgets:
-        admin_spend_tracking_utils.wait_for_project_spends(
-            budget.project_name, today, today
-        )
-        item = admin_project_utils.wait_for_project_budget_spending(
-            budget.project_name, "platform", timeout=_SPENDING_PROPAGATION_WAIT
+    for budget, key_spend in zip(budgets, key_spends):
+        item = admin_project_utils.wait_for_project_budget_spending_above(
+            budget.project_name,
+            "platform",
+            key_spend - 0.0001,
+            timeout=_SPENDING_PROPAGATION_WAIT,
         )
         assert_that(
             item,
@@ -231,16 +228,16 @@ def test_rollup_reflects_project_budget_change_on_next_request(
 @pytest.mark.budget
 @pytest.mark.enterprise
 @pytest.mark.api
-def test_rollup_of_cost_center_without_linked_projects_returns_zero_totals(
+def test_rollup_of_cost_center_without_linked_projects_returns_no_totals(
     cost_center, cost_center_utils
 ):
     cc_id = cost_center()
 
     summary = cost_center_utils.get_budget_rollup(cc_id)
 
-    assert_that(summary.current_spending, equal_to(0.0))
+    assert_that(summary.current_spending, is_(none()))
     assert_that(summary.budget_limit, is_(none()))
-    assert_that(summary.total_percent, equal_to(0.0))
+    assert_that(summary.total_percent, is_(none()))
     assert_that(summary.budgets, is_(empty()))
 
 
@@ -302,7 +299,6 @@ def test_rollup_counts_member_of_two_projects_once_and_sums_both_projects_spend(
     cost_center_utils,
     admin_project_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
 ):
     # The user creates both projects, so each has this user as its only member. A project
     # delete removes the assistants in it, so only the last assistant needs fixture cleanup.
@@ -332,7 +328,6 @@ def test_rollup_counts_member_of_two_projects_once_and_sums_both_projects_spend(
     item_a, item_b = _collect_platform_budget_items(
         admin_project_utils,
         lite_llm_budget_utils,
-        admin_spend_tracking_utils,
         budget_a,
         budget_b,
     )
@@ -384,7 +379,6 @@ def test_rollup_spend_equals_sum_of_project_spend_after_real_spend_and_collectio
     cost_center_utils,
     admin_project_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
 ):
     # The test uses no API keys, so the rollup's key spend share is zero and its overall
     # spend is the sum of the category spend.
@@ -413,7 +407,6 @@ def test_rollup_spend_equals_sum_of_project_spend_after_real_spend_and_collectio
     item_a, item_b = _collect_platform_budget_items(
         admin_project_utils,
         lite_llm_budget_utils,
-        admin_spend_tracking_utils,
         budget_a,
         budget_b,
     )
