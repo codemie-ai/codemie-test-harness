@@ -117,6 +117,11 @@ def test_set_budget_for_personal_project_is_rejected_with_403(
     # @case provisioning-api-for-third-party_TC_009
     personal_project, _, _ = non_admin_user
     state_before = provisioning_utils.state(personal_project)
+    assert_that(
+        state_before.exists,
+        is_(True),
+        "the personal project is visible to the state check, so the comparison below can fail",
+    )
 
     with pytest.raises(HTTPError) as error:
         provisioning_full.set_budget(
