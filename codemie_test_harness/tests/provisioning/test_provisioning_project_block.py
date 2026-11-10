@@ -23,6 +23,7 @@ from hamcrest import (
     is_not,
     has_item,
 )
+from requests import HTTPError
 
 from codemie_sdk.models.provisioning import ProvisioningProjectBlock
 from codemie_test_harness.cli.constants import PROVISIONING_FULL_CLIENT_KEYS
@@ -31,6 +32,7 @@ from codemie_test_harness.tests.test_data.provisioning_test_data import (
     INVALID_COST_CENTER_NAME,
     budget_request,
     change_reference,
+    late_user_email,
     unknown_email,
 )
 from codemie_test_harness.tests.utils.cost_center_utils import (
@@ -168,4 +170,44 @@ def test_set_budget_reports_registered_client_email_as_not_assigned(
         provisioning_utils.admin_ids(project_name),
         equal_to(admins_before),
         "no project admin was added",
+    )
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Adding the first member to a project created via the provisioning API "
+        "returns 500 (FK violation on fk_pmba_shared_budget_id)"
+    ),
+    raises=HTTPError,
+    strict=True,
+)
+@pytest.mark.budget
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
+@pytest.mark.api
+def test_set_budget_resend_assigns_admin_who_did_not_exist_at_the_first_call(
+    provisioning_full, late_user, provisioning_utils
+):
+    # @case provisioning-api-for-third-party_TC_014
+    admin_email = late_user_email()
+    project_name = provisioning_utils.new_project_name()
+    request = budget_request(
+        {"platform": 100.0}, ProvisioningProjectBlock(admin_emails=[admin_email])
+    )
+
+    first = provisioning_full.set_budget(project_name, change_reference(), request)
+    assert_that(first.budget.admins_not_assigned, equal_to([admin_email]))
+    assert_that(first.budget.admins_assigned, equal_to([]))
+    admin_id = late_user(admin_email)
+    second = provisioning_full.set_budget(project_name, change_reference(), request)
+
+    assert_that(
+        second.budget.admins_assigned,
+        equal_to([admin_email]),
+        "the same request assigns the admin once the user exists",
+    )
+    assert_that(second.budget.admins_not_assigned, equal_to([]))
+    assert_that(
+        provisioning_utils.admin_ids(project_name),
+        has_item(admin_id),
+        "the user is a project admin",
     )

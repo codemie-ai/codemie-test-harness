@@ -46,6 +46,7 @@ TOKEN_REFRESH_MARGIN_SECONDS = 60
 TOKEN_REQUEST_TIMEOUT_SECONDS = 30
 # The registry caps a client name so that "<name> <reference>" fits a budget name.
 MAX_CLIENT_NAME_LENGTH = 35
+PERSONAL_PROJECT_TYPE = "personal"
 
 
 class ClientCredentialsTokenSource:
@@ -182,11 +183,16 @@ class ProvisioningUtils(BaseUtils):
         project_utils,
         cost_center_utils,
         project_budget_groups,
+        user_utils,
+        lite_llm_budget_utils,
     ):
         super().__init__(client)
         self._projects = project_utils
         self._cost_centers = cost_center_utils
         self._budget_groups = project_budget_groups
+        self._users = user_utils
+        self._lite_llm = lite_llm_budget_utils
+        self._override_users: dict[str, list[str]] = {}
         self._admin_budgets = AdminProjectBudgetUtils(client)
         self._group_utils = AdminProjectBudgetGroupUtils(client)
         self._project_names: list[str] = []
@@ -233,6 +239,16 @@ class ProvisioningUtils(BaseUtils):
             self._budget_groups.create(name, categories, name_prefix="autotest-prov")
         return name
 
+    def create_budget(self, project_name: str, categories: dict) -> ProjectBudget:
+        """Give an existing project a budget group as the admin."""
+        return self._budget_groups.create(
+            project_name, categories, name_prefix="autotest-prov"
+        )
+
+    def track_override_user(self, project_name: str, user_id: str) -> None:
+        """Remove the member's fixed-limit LiteLLM objects of the project's budget on cleanup."""
+        self._override_users.setdefault(project_name, []).append(user_id)
+
     # --- reads -----------------------------------------------------------------------
 
     def project_exists(self, name: str) -> bool:
@@ -272,6 +288,29 @@ class ProvisioningUtils(BaseUtils):
             else {}
         )
 
+    def member_ids(self, project_name: str) -> frozenset[str]:
+        detail = self._projects.get_project_detail(project_name)
+        return frozenset(m.user_id for m in detail.members)
+
+    def personal_projects(self, user_id: str, email: str) -> list[str]:
+        """Names of the personal projects of a user, as the admin sees them.
+
+        Looks at the user's project memberships and at the projects named after the user's
+        e-mail, and keeps those whose type is personal.
+        """
+        names = set(self._users.get_user_project_names(user_id))
+        names.update(
+            project.name
+            for project in self._projects.list_projects(search=email, per_page=100).data
+            if project.name.lower() == email.lower()
+        )
+        return sorted(
+            name
+            for name in names
+            if self._projects.get_project_detail(name).project_type
+            == PERSONAL_PROJECT_TYPE
+        )
+
     def admin_ids(self, project_name: str) -> frozenset[str]:
         detail = self._projects.get_project_detail(project_name)
         return frozenset(m.user_id for m in detail.members if m.is_project_admin)
@@ -308,6 +347,7 @@ class ProvisioningUtils(BaseUtils):
         try:
             if not self.project_exists(name):
                 return
+            override_users = self._override_users.get(name, [])
             for group in self._admin_budgets.list_budget_groups(name):
                 if group.get("deleted_at") is None:
                     self._budget_groups.delete(
@@ -317,9 +357,14 @@ class ProvisioningUtils(BaseUtils):
                             budget_ids=AdminProjectBudgetUtils.budget_ids_by_category(
                                 group
                             ),
-                        )
+                        ),
+                        override_users[0] if override_users else None,
                     )
-            self._projects.delete_project_with_all_members(name)
+            for user_id in override_users:
+                self._lite_llm.delete_override_customers_for_project(name, user_id)
+            # The project's creator cannot be unassigned (400); deleting the project removes it.
+            self._projects.remove_all_project_members(name)
+            self._projects.delete_project(name)
         except Exception as e:
             logger.warning(f"Failed to remove provisioning project {name}: {e}")
 

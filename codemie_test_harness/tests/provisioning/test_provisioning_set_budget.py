@@ -24,6 +24,7 @@ from hamcrest import (
     is_,
     is_in,
     is_not,
+    none,
 )
 
 from codemie_sdk.models.provisioning import ProvisioningProjectBlock
@@ -46,6 +47,7 @@ AMOUNT_TOLERANCE = 0.01
 def test_set_budget_creates_project_cost_center_admins_and_budget(
     provisioning_full,
     provisioning_client_names,
+    provisioning_client_user_id,
     non_admin_user,
     provisioning_utils,
 ):
@@ -85,6 +87,11 @@ def test_set_budget_creates_project_cost_center_admins_and_budget(
         has_item(member_id),
         "the active user is a project admin",
     )
+    assert_that(
+        provisioning_utils.member_ids(project_name),
+        is_not(has_item(provisioning_client_user_id)),
+        "the calling client did not become a member of the project it created",
+    )
     group = provisioning_utils.active_budget_group(project_name)
     provisioning_client_names.observe(group["name"], reference)
     assert_that(group["budget_duration"], equal_to("30d"))
@@ -94,6 +101,45 @@ def test_set_budget_creates_project_cost_center_admins_and_budget(
             platform=close_to(100.0, AMOUNT_TOLERANCE),
             cli=close_to(40.0, AMOUNT_TOLERANCE),
         ),
+    )
+
+
+@pytest.mark.budget
+@pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
+@pytest.mark.api
+def test_set_budget_creates_budget_for_existing_project_without_one_and_adds_no_member(
+    provisioning_full,
+    provisioning_client_names,
+    provisioning_client_user_id,
+    provisioning_utils,
+):
+    # @case provisioning-api-for-third-party_TC_001
+    project_name = provisioning_utils.create_project()
+    members_before = provisioning_utils.member_ids(project_name)
+    assert_that(
+        provisioning_utils.active_budget_group(project_name),
+        none(),
+        "the project starts without a budget",
+    )
+    reference = change_reference()
+
+    result = provisioning_full.set_budget(
+        project_name, reference, budget_request({"platform": 100.0})
+    )
+
+    assert_that(result.status_code, equal_to(201), "creating a budget answers 201")
+    assert_that(result.budget.created_budget, is_(True))
+    assert_that(
+        result.budget.created_project, is_(False), "the project existed already"
+    )
+    group = provisioning_utils.active_budget_group(project_name)
+    provisioning_client_names.observe(group["name"], reference)
+    members_after = provisioning_utils.member_ids(project_name)
+    assert_that(members_after, equal_to(members_before), "no member was added")
+    assert_that(
+        members_after,
+        is_not(has_item(provisioning_client_user_id)),
+        "the calling client is not a member of the project",
     )
 
 

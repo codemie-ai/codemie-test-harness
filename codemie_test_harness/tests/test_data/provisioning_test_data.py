@@ -35,6 +35,13 @@ from codemie_test_harness.tests.utils.provisioning_utils import ProvisioningUtil
 MANAGE_BUDGETS = "provisioning:manage-budgets"
 READ_PROJECTS = "provisioning:read-projects"
 PLATFORM_MUST_BE_POSITIVE = "Platform budget must be greater than 0"
+# A platform amount under the fixed limit given to a member (MEMBER_OVERRIDE_MAX).
+AMOUNT_BELOW_MEMBER_LIMIT = 30.0
+# What the backend says when an adjust would leave a category's limit under the fixed limits
+# already given to members (the hard limit is the one a lowered platform amount breaks).
+MEMBER_LIMITS_EXCEED_MESSAGE = (
+    "Personal hard limits of project members cannot exceed the project hard limit."
+)
 CLIENT_LOCKED_MESSAGE = "A provisioning client may only call the provisioning API"
 # Worded in terms of CodeMie, not of any caller; the OpenAPI document must not name these.
 VENDOR_NAMES = ("servicenow", "service_now", "service-now")
@@ -59,6 +66,11 @@ def change_reference() -> str:
 def unknown_email() -> str:
     """An email no CodeMie user has."""
     return f"autotest_unknown_{secrets.token_hex(4)}@email.com"
+
+
+def late_user_email() -> str:
+    """An email of a user the test creates only after the first call that names it."""
+    return f"autotest_late_{secrets.token_hex(4)}@email.com"
 
 
 def budget_request(
@@ -124,6 +136,14 @@ def project_without_budget(utils: ProvisioningUtils) -> str:
 CANCEL_EXISTING_PROJECT_ROWS = [
     pytest.param(project_with_budget, id="project_with_budget"),
     pytest.param(project_without_budget, id="project_without_budget"),
+]
+
+# --- TC-006: lookup requests the backend refuses ------------------------------------
+
+# member_email values sent: none at all, and one that is not an e-mail address.
+LOOKUP_REJECTED_ROWS = [
+    pytest.param([], id="missing_member_email"),
+    pytest.param(["not-an-email"], id="invalid_member_email"),
 ]
 
 # --- TC-009: rejected business checks ------------------------------------------------
