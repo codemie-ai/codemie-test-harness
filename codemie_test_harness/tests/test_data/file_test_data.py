@@ -91,11 +91,10 @@ file_test_data = [
         """
             The content of the file is:
 
-            1918: 1922, track A: track B
-
-            1918: 1944, track A: track C
-
-            1918: 1991, track A: track D
+            1918, track A
+            1922, track B
+            1944, track C
+            1991, track D
         """,
         Default.CSV_TOOL,
         marks=[pytest.mark.smoke, pytest.mark.sanity],
