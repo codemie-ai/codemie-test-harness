@@ -414,6 +414,23 @@ class UserManagementPage(BasePage):
         expect(dialog.get_by_text("Projects", exact=False)).to_be_visible(timeout=5000)
         return self
 
+    def _identity_value(self, label: str):
+        """Value span that follows a label ('ID:' / 'Email:') in the User Details identity block."""
+        return self.user_details_dialog.get_by_text(label, exact=True).locator(
+            "xpath=following-sibling::span[1]"
+        )
+
+    @step
+    def should_see_user_identity(self, user_id: str, email: str):
+        """Assert the open User Details dialog shows the opened user's ID and email.
+
+        The identity block under the name heading has no test id: each field is a label span
+        ('ID:' / 'Email:') followed by a value span.
+        """
+        expect(self._identity_value("ID:")).to_have_text(user_id, timeout=10000)
+        expect(self._identity_value("Email:")).to_have_text(email, timeout=10000)
+        return self
+
     @step
     def should_not_see_write_controls(self):
         """Assert no user write controls are exposed for the auditor role.

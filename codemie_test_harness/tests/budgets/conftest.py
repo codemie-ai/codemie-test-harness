@@ -24,6 +24,9 @@ from requests.exceptions import HTTPError
 from codemie_sdk.models.integration import CredentialTypes, CredentialValues
 from codemie_sdk.models.workflow import WorkflowMode
 
+from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
+    build_marketplace_submission,
+)
 from codemie_test_harness.tests.test_data.budget_member_override_test_data import (
     MEMBER_OVERRIDE_MAX,
     MEMBER_OVERRIDE_SOFT,
@@ -96,6 +99,11 @@ def user_assistant_utils(user_client):
 @pytest.fixture(scope="function")
 def user_budget_utils(user_client):
     return BudgetUtils(user_client)
+
+
+@pytest.fixture(scope="function")
+def admin_budget_usage_utils(client):
+    return BudgetUtils(client)
 
 
 @pytest.fixture(scope="function")
@@ -237,11 +245,12 @@ def user_assistant(default_llm, user_assistant_utils):
 def user1_assistant(default_llm, user1_assistant_utils):
     created_assistant = None
 
-    def _create(project_name: str):
+    def _create(project_name: str, **content):
         nonlocal created_assistant
         created_assistant = user1_assistant_utils.create_assistant(
             llm_model_type=default_llm.base_name,
             project_name=project_name,
+            **content,
         )
         return created_assistant
 
@@ -470,7 +479,7 @@ def user2_litellm_integration(
     )
     yield integration
     if integration:
-        user2_integration_utils.delete_integration(integration)
+        user2_integration_utils.delete_integration_if_exists(integration)
 
 
 @pytest.fixture(scope="function")
@@ -1054,12 +1063,20 @@ def budget_project_factory(
 
 
 @pytest.fixture(scope="function")
-def user1_published_assistant(user1_assistant, user1_assistant_utils):
+def user1_published_assistant(
+    user1_assistant, user1_assistant_utils, marketplace_core_gates
+):
     published_assistant = None
 
     def _create(project_name: str):
         nonlocal published_assistant
-        published_assistant = user1_assistant(project_name=project_name)
+        # Publishing runs the core gates, so the content reaches the stand's thresholds.
+        content = build_marketplace_submission(marketplace_core_gates)
+        published_assistant = user1_assistant(
+            project_name=project_name,
+            description=content.description,
+            system_prompt=content.system_prompt,
+        )
         user1_assistant_utils.publish_assistant_to_marketplace(
             published_assistant.id,
             categories=["quality-assurance"],

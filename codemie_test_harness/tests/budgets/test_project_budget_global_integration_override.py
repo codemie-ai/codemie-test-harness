@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import logging
 import secrets
 from time import sleep
 
 import pytest
-from hamcrest import assert_that, equal_to, greater_than, has_length, not_none
+from hamcrest import assert_that, close_to, equal_to, greater_than, not_, not_none
 
 from codemie_sdk.models.integration import CredentialTypes, CredentialValues
 
@@ -26,10 +25,105 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
     ALL_BUDGET_CATEGORIES,
     budget_chat_prompt,
     BUDGET_CACHE_DELAY,
+    DEFAULT_PLATFORM_BUDGET_ID,
     project_key_alias,
 )
+from codemie_test_harness.tests.utils.budget_usage_utils import wait_for_settled_spend
 
 logger = logging.getLogger(__name__)
+
+MONEY_TOLERANCE = 0.0001
+
+
+def assert_ledger_matches_litellm_once_the_global_integration_is_removed(
+    *,
+    global_key_spend,
+    integration,
+    user2_integration_utils,
+    assistants,
+    user2_assistant_utils,
+    user2_email,
+    user2_id,
+    project1_name,
+    project2_name,
+    lite_llm_budget_utils,
+    admin_project_utils,
+):
+    """Spend made without the global key reaches the ledger exactly as LiteLLM recorded it.
+
+    The global key paid for everything chatted before, so the platform must not know about it.
+    After the integration is removed the same chats are paid by the project keys and the
+    personal customer. The ledger of each must then equal that LiteLLM spend, and neither may
+    equal the spend of the global key, which would mean the earlier chats were counted too.
+    """
+    logger.info("Removing the global integration and chatting again in every context")
+    user2_integration_utils.delete_integration_if_exists(integration)
+    for assistant in assistants:
+        user2_assistant_utils.ask_assistant(assistant, budget_chat_prompt())
+
+    litellm_spends = {
+        "project1": wait_for_settled_spend(
+            lambda: lite_llm_budget_utils.get_key_spend_by_alias(
+                project_key_alias(project1_name, "platform")
+            )
+        ),
+        "project2": wait_for_settled_spend(
+            lambda: lite_llm_budget_utils.get_key_spend_by_alias(
+                project_key_alias(project2_name, "platform")
+            )
+        ),
+        "personal": wait_for_settled_spend(
+            lambda: float(
+                (lite_llm_budget_utils.get_customer_info(user2_email) or {}).get(
+                    "spend", 0
+                )
+            )
+        ),
+    }
+    for context, spend in litellm_spends.items():
+        assert_that(spend, greater_than(0), f"LiteLLM shows no {context} spend")
+
+    ledger_project1 = admin_project_utils.wait_for_project_budget_spending_above(
+        project1_name, "platform", litellm_spends["project1"] - MONEY_TOLERANCE
+    )
+    ledger_project2 = admin_project_utils.wait_for_project_budget_spending_above(
+        project2_name, "platform", litellm_spends["project2"] - MONEY_TOLERANCE
+    )
+    ledger_personal = admin_project_utils.wait_for_member_budget_spending_above(
+        DEFAULT_PLATFORM_BUDGET_ID,
+        "platform",
+        litellm_spends["personal"] - MONEY_TOLERANCE,
+        user_id=user2_id,
+    )
+    ledger_spends = {
+        "project1": None
+        if ledger_project1 is None
+        else ledger_project1.current_spending,
+        "project2": None
+        if ledger_project2 is None
+        else ledger_project2.current_spending,
+        "personal": None
+        if ledger_personal is None
+        else ledger_personal.current_spending,
+    }
+    for context, litellm_spend in litellm_spends.items():
+        assert_that(ledger_spends[context], not_none(), f"No {context} ledger figure")
+        assert_that(
+            ledger_spends[context],
+            close_to(litellm_spend, MONEY_TOLERANCE),
+            f"The {context} ledger spend must equal the LiteLLM spend made without the "
+            "global key; it differs, so spend of the global key was tracked on the platform",
+        )
+        assert_that(
+            litellm_spend,
+            not_(close_to(global_key_spend, MONEY_TOLERANCE)),
+            f"The {context} LiteLLM spend must differ from the global key's spend",
+        )
+        assert_that(
+            ledger_spends[context],
+            not_(close_to(global_key_spend, MONEY_TOLERANCE)),
+            f"The {context} ledger spend must differ from the global key's spend",
+        )
 
 
 @pytest.fixture(scope="function")
@@ -78,7 +172,7 @@ def user2_global_integration_project1(
     )
     yield integration
     if integration:
-        user2_integration_utils.delete_integration(integration)
+        user2_integration_utils.delete_integration_if_exists(integration)
 
 
 @pytest.fixture(scope="function")
@@ -112,12 +206,12 @@ def test_global_integration_owned_by_regular_project_overrides_all_chat_contexts
     user2_assistants,
     user2_assistant_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
+    admin_project_utils,
+    user2_integration_utils,
 ):
     user2_email, _ = keycloak_user_2
     project1_name = user2_project1_with_platform_budget
-    project2_name, _ = lifecycle_project2_with_all_three_budgets
-    today = datetime.date.today()
+    project2_name, user2_id = lifecycle_project2_with_all_three_budgets
 
     logger.info(
         "Global integration (id=%s) owned by regular project '%s' (platform budget) — "
@@ -179,53 +273,21 @@ def test_global_integration_owned_by_regular_project_overrides_all_chat_contexts
         "Project2's premium_models budget key must remain unused when a global key overrides it.",
     )
 
-    logger.info("Running blocking collect to confirm no DB rows are produced")
-    admin_spend_tracking_utils.collect_spends()
-
-    # spend_subject_type="key" collection was removed (commit
-    # 9c86cc862), so a global integration's raw LiteLLM key spend is currently
-    # invisible to project_spend_tracking for every project involved — we assert
-    # absence here rather than checking key spend values in our DB.
-    spends_project1 = admin_spend_tracking_utils.get_project_spends(
-        project1_name, today, today
+    global_key_spend = wait_for_settled_spend(
+        lambda: float(lite_llm_budget_utils.get_key_info(user2_litellm_key)["spend"])
     )
-    assert_that(
-        spends_project1["total_spend"],
-        equal_to(0),
-        "Expected no tracked spend for the owning project via global integration key.",
-    )
-    assert_that(
-        spends_project1["rows"],
-        has_length(0),
-        "Expected zero spend rows for the owning project via global integration key.",
-    )
-
-    spends_project2 = admin_spend_tracking_utils.get_project_spends(
-        project2_name, today, today
-    )
-    assert_that(
-        spends_project2["total_spend"],
-        equal_to(0),
-        "Expected no tracked spend for the other regular project via global integration key.",
-    )
-    assert_that(
-        spends_project2["rows"],
-        has_length(0),
-        "Expected zero spend rows for the other regular project via global integration key.",
-    )
-
-    spends_personal = admin_spend_tracking_utils.get_project_spends(
-        user2_email, today, today
-    )
-    assert_that(
-        spends_personal["total_spend"],
-        equal_to(0),
-        "Expected no tracked spend for the personal project via global integration key.",
-    )
-    assert_that(
-        spends_personal["rows"],
-        has_length(0),
-        "Expected zero spend rows for the personal project via global integration key.",
+    assert_ledger_matches_litellm_once_the_global_integration_is_removed(
+        global_key_spend=global_key_spend,
+        integration=user2_global_integration_project1,
+        user2_integration_utils=user2_integration_utils,
+        assistants=[assistant_project1, assistant_project2, assistant_personal],
+        user2_assistant_utils=user2_assistant_utils,
+        user2_email=user2_email,
+        user2_id=user2_id,
+        project1_name=project1_name,
+        project2_name=project2_name,
+        lite_llm_budget_utils=lite_llm_budget_utils,
+        admin_project_utils=admin_project_utils,
     )
 
 
@@ -242,12 +304,12 @@ def test_global_integration_owned_by_personal_project_overrides_all_chat_context
     user2_assistants,
     user2_assistant_utils,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
+    admin_project_utils,
+    user2_integration_utils,
 ):
     user2_email, _ = keycloak_user_2
     project1_name = user2_project1_with_platform_budget
-    project2_name, _ = lifecycle_project2_with_all_three_budgets
-    today = datetime.date.today()
+    project2_name, user2_id = lifecycle_project2_with_all_three_budgets
 
     logger.info(
         "Global integration (id=%s) owned by personal project '%s' — chatting under "
@@ -310,51 +372,19 @@ def test_global_integration_owned_by_personal_project_overrides_all_chat_context
         "Project2's premium_models budget key must remain unused when a global key overrides it.",
     )
 
-    logger.info("Running blocking collect to confirm no DB rows are produced")
-    admin_spend_tracking_utils.collect_spends()
-
-    # spend_subject_type="key" collection was removed (commit
-    # 9c86cc862), so a global integration's raw LiteLLM key spend is currently
-    # invisible to project_spend_tracking for every project involved — we assert
-    # absence here rather than checking key spend values in our DB.
-    spends_project1 = admin_spend_tracking_utils.get_project_spends(
-        project1_name, today, today
+    global_key_spend = wait_for_settled_spend(
+        lambda: float(lite_llm_budget_utils.get_key_info(user2_litellm_key)["spend"])
     )
-    assert_that(
-        spends_project1["total_spend"],
-        equal_to(0),
-        "Expected no tracked spend for a regular project via global integration key.",
-    )
-    assert_that(
-        spends_project1["rows"],
-        has_length(0),
-        "Expected zero spend rows for a regular project via global integration key.",
-    )
-
-    spends_project2 = admin_spend_tracking_utils.get_project_spends(
-        project2_name, today, today
-    )
-    assert_that(
-        spends_project2["total_spend"],
-        equal_to(0),
-        "Expected no tracked spend for the other regular project via global integration key.",
-    )
-    assert_that(
-        spends_project2["rows"],
-        has_length(0),
-        "Expected zero spend rows for the other regular project via global integration key.",
-    )
-
-    spends_personal = admin_spend_tracking_utils.get_project_spends(
-        user2_email, today, today
-    )
-    assert_that(
-        spends_personal["total_spend"],
-        equal_to(0),
-        "Expected no tracked spend for the owning personal project via global integration key.",
-    )
-    assert_that(
-        spends_personal["rows"],
-        has_length(0),
-        "Expected zero spend rows for the owning personal project via global integration key.",
+    assert_ledger_matches_litellm_once_the_global_integration_is_removed(
+        global_key_spend=global_key_spend,
+        integration=user2_litellm_integration,
+        user2_integration_utils=user2_integration_utils,
+        assistants=[assistant_project1, assistant_project2, assistant_personal],
+        user2_assistant_utils=user2_assistant_utils,
+        user2_email=user2_email,
+        user2_id=user2_id,
+        project1_name=project1_name,
+        project2_name=project2_name,
+        lite_llm_budget_utils=lite_llm_budget_utils,
+        admin_project_utils=admin_project_utils,
     )

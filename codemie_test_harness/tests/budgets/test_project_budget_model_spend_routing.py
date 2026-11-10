@@ -30,12 +30,21 @@ controls rather than something derivable from ``ModelTypes``:
     models and routes through the ``premium_models`` budget category.
 """
 
-import datetime
+import functools
 import logging
 from time import sleep
+from typing import Optional
 
 import pytest
-from hamcrest import assert_that, close_to, greater_than, has_item, none, not_none
+from hamcrest import (
+    assert_that,
+    close_to,
+    equal_to,
+    greater_than,
+    has_item,
+    none,
+    not_none,
+)
 
 from codemie_test_harness.tests.test_data.budget_test_data import (
     budget_chat_prompt,
@@ -46,25 +55,62 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
     project_key_alias,
 )
 from codemie_test_harness.tests.test_data.llm_test_data import MODEL_RESPONSES
+from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.env_resolver import get_environment
 
 logger = logging.getLogger(__name__)
 
 
+_PREMIUM_TEST = "test_premium_model_budget_routes_spending_from_personal"
+
+
+@functools.cache
+def _premium_flags() -> Optional[dict]:
+    """Premium flag of every model the backend lists, read once per process while pytest collects.
+
+    None when the backend cannot be reached, so collecting (``--collect-only``, no credentials)
+    still works; the models are then collected for both tests.
+    """
+    try:
+        return {row.base_name: row.is_premium for row in get_client().llms.list()}
+    except Exception as error:
+        logger.warning(
+            "Premium flags unavailable while collecting, models are not split: %s",
+            error,
+        )
+        return None
+
+
 def pytest_generate_tests(metafunc):
-    if "model_type" in metafunc.fixturenames:
-        env = get_environment()
-        test_data = [
-            pytest.param(
-                model_data.model_type,
-                marks=pytest.mark.skipif(
-                    env not in model_data.environments,
-                    reason=f"Skip on non {'/'.join(str(e) for e in model_data.environments)} envs",
-                ),
-            )
-            for model_data in MODEL_RESPONSES
-        ]
-        metafunc.parametrize("model_type", test_data)
+    """Give each test only the models it covers, so no case is skipped for being the other kind.
+
+    Premium status is a billing-tier attribute the backend owns, so it is read from the backend.
+    A model the backend does not list goes to the platform test, which reports it as missing.
+    """
+    if "model_type" not in metafunc.fixturenames:
+        return
+    env = get_environment()
+    models = list(MODEL_RESPONSES)
+    if any(env in model_data.environments for model_data in models):
+        premium = _premium_flags()
+        wants_premium = metafunc.function.__name__ == _PREMIUM_TEST
+        if premium is not None:
+            models = [
+                model_data
+                for model_data in models
+                if bool(premium.get(model_data.model_type, False)) == wants_premium
+            ]
+    test_data = [
+        pytest.param(
+            model_data.model_type,
+            marks=pytest.mark.skipif(
+                env not in model_data.environments,
+                reason=f"Skip on non {'/'.join(str(e) for e in model_data.environments)} envs",
+            ),
+        )
+        for model_data in models
+    ]
+    metafunc.parametrize("model_type", test_data)
 
 
 def _is_premium(llm_utils, model_type) -> bool:
@@ -87,7 +133,7 @@ def _assert_model_routes_spending_to_project_budget(
     user_assistant_utils,
     project_budget_groups,
     lite_llm_budget_utils,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     alias = project_key_alias(project_name, budget_category)
 
@@ -132,16 +178,23 @@ def _assert_model_routes_spending_to_project_budget(
         assert_that(project_key_info, not_none())
         assert_that(float(project_key_info["spend"]), greater_than(0))
 
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends_nowait()
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, budget_category
+        logger.info(
+            "Waiting for %s budget spend in ledger (project=%s)",
+            budget_category,
+            project_name,
+        )
+        budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, budget_category, float(project_key_info["spend"]) - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            budget,
+            not_none(),
+            f"Project {budget_category} budget not found in spend ledger",
+        )
+        assert_that(
+            budget.current_spending,
             close_to(float(project_key_info["spend"]), 0.0001),
-            f"project_spend_tracking total_spend should match project {budget_category} key spend.",
+            f"Project {budget_category} budget current_spending should match project {budget_category} key spend.",
         )
     finally:
         user_assistant_utils.delete_assistant(assistant)
@@ -159,13 +212,14 @@ def test_model_platform_budget_routes_spending_from_personal(
     lite_llm_budget_utils,
     project_setup,
     project_budget_groups,
-    admin_spend_tracking_utils,
+    admin_project_utils,
     model_type,
 ):
-    if _is_premium(llm_utils, model_type):
-        pytest.skip(
-            f"{model_type} is a premium model — covered by the premium budget test"
-        )
+    assert_that(
+        _is_premium(llm_utils, model_type),
+        equal_to(False),
+        f"{model_type} is a premium model — it belongs to the premium budget test",
+    )
 
     email, _ = keycloak_user
     _assert_model_routes_spending_to_project_budget(
@@ -177,7 +231,7 @@ def test_model_platform_budget_routes_spending_from_personal(
         user_assistant_utils=user_assistant_utils,
         project_budget_groups=project_budget_groups,
         lite_llm_budget_utils=lite_llm_budget_utils,
-        admin_spend_tracking_utils=admin_spend_tracking_utils,
+        admin_project_utils=admin_project_utils,
     )
 
 
@@ -193,13 +247,14 @@ def test_premium_model_budget_routes_spending_from_personal(
     lite_llm_budget_utils,
     project_setup,
     project_budget_groups,
-    admin_spend_tracking_utils,
+    admin_project_utils,
     model_type,
 ):
-    if not _is_premium(llm_utils, model_type):
-        pytest.skip(
-            f"{model_type} is not a premium model — covered by the platform budget test"
-        )
+    assert_that(
+        _is_premium(llm_utils, model_type),
+        equal_to(True),
+        f"{model_type} is not a premium model — it belongs to the platform budget test",
+    )
 
     email, _ = keycloak_user
     premium_customer_id = f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}"
@@ -212,5 +267,5 @@ def test_premium_model_budget_routes_spending_from_personal(
         user_assistant_utils=user_assistant_utils,
         project_budget_groups=project_budget_groups,
         lite_llm_budget_utils=lite_llm_budget_utils,
-        admin_spend_tracking_utils=admin_spend_tracking_utils,
+        admin_project_utils=admin_project_utils,
     )

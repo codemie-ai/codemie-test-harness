@@ -49,6 +49,7 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
 from codemie_test_harness.tests.test_data.budget_usage_project_rows_test_data import (
     BUDGET_USAGE_COLUMN_IDS,
     BUDGET_USAGE_ROW_KEYS,
+    BUDGET_USAGE_SPEND_ANNOTATION_KEYS,
     CLI_ROW_SUFFIX,
     DISTINCT_SPEND_GAP,
     MIN_VISIBLE_SPEND,
@@ -68,6 +69,7 @@ from codemie_test_harness.tests.test_data.budget_usage_project_rows_test_data im
     SPEND_PARITY_TOLERANCE,
     USER_PROJECT_SPENDING_COLUMN_IDS,
     USER_PROJECT_SPENDING_ROW_KEYS,
+    USER_PROJECT_SPENDING_SPEND_ANNOTATION_KEYS,
     VISIBLE_AT_TWO_DECIMALS,
 )
 from codemie_test_harness.tests.utils.base_utils import poll_until
@@ -249,10 +251,19 @@ def assert_every_row_carries_is_default_outside_the_columns(
 ):
     """Every row has the six column keys plus a boolean is_default, which is not a column."""
     all_rows = [*rows_without_default, *rows_with_default]
+    row_keys = [set(row.keys()) for row in all_rows]
     assert_that(
-        [set(row.keys()) for row in all_rows],
-        only_contains(BUDGET_USAGE_ROW_KEYS),
+        [BUDGET_USAGE_ROW_KEYS - keys for keys in row_keys],
+        only_contains(set()),
         "Every row must carry the six column keys plus is_default",
+    )
+    assert_that(
+        [
+            keys - BUDGET_USAGE_ROW_KEYS - BUDGET_USAGE_SPEND_ANNOTATION_KEYS
+            for keys in row_keys
+        ],
+        only_contains(set()),
+        "A row carries a key that is neither a column, is_default nor a spend annotation",
     )
     assert_that(
         [type(row["is_default"]) for row in all_rows],
@@ -415,7 +426,7 @@ def assert_personal_page_spend_and_total_equal_admin_table(
     assert_that(expected_total_value, greater_than(0))
     assert_that(
         member_row["current_spending"],
-        close_to(round(admin_row["platform"], 2), SPEND_PARITY_TOLERANCE),
+        close_to(admin_row["platform"], SPEND_PARITY_TOLERANCE),
         "current_spending differs between the personal page and the admin table",
     )
     assert_that(
@@ -467,7 +478,15 @@ def assert_admin_user_project_spending_keeps_response_shape(
         "Each project must appear in exactly one row",
     )
     row = admin_usage.get_user_project_spending_row(project.member_email, project.name)
-    assert_that(set(row.keys()), equal_to(USER_PROJECT_SPENDING_ROW_KEYS))
+    keys = set(row.keys())
+    assert_that(USER_PROJECT_SPENDING_ROW_KEYS - keys, equal_to(set()))
+    assert_that(
+        keys
+        - USER_PROJECT_SPENDING_ROW_KEYS
+        - USER_PROJECT_SPENDING_SPEND_ANNOTATION_KEYS,
+        equal_to(set()),
+        "A row carries a key that is neither a spend, a limit nor a spend annotation",
+    )
     assert_that(row["platform_limit"], greater_than(0))
     assert_that(
         row["cli_limit"], none(), "No CLI budget exists, so no CLI limit is expected"

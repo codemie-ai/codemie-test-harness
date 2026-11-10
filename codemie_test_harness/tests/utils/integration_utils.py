@@ -14,6 +14,8 @@
 
 from typing import Any, Optional, Dict
 
+import requests
+
 from codemie_sdk.models.integration import (
     Integration,
     CredentialTypes,
@@ -140,6 +142,14 @@ class IntegrationUtils(BaseUtils):
         return self.client.integrations.delete(
             setting_id=integration.id, setting_type=integration.setting_type
         )
+
+    def delete_integration_if_exists(self, integration: Integration):
+        """Delete the integration unless a test already removed it."""
+        try:
+            return self.delete_integration(integration)
+        except requests.exceptions.HTTPError as error:
+            if error.response is None or error.response.status_code != 404:
+                raise
 
     def delete_integrations_by_type(
         self,

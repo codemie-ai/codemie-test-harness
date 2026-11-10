@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import logging
 from time import sleep
 
 import pytest
 from hamcrest import assert_that, close_to, greater_than, none, not_none
 
+from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
+    publish_ready_content,
+)
 from codemie_test_harness.tests.test_data.budget_test_data import (
     budget_chat_prompt,
     BUDGET_CACHE_DELAY,
@@ -26,13 +28,76 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
     CLI_CLIENT_HEADER,
     CLI_PROJECT_HEADER,
     DEFAULT_CLI_BUDGET_ID,
+    DEFAULT_PLATFORM_BUDGET_ID,
     DEFAULT_PREMIUM_BUDGET_ID,
     PREMIUM_BUDGET_CATEGORIES,
     PREMIUM_MODEL,
     project_key_alias,
+    budget_chat_prompt_bigger,
 )
 
 logger = logging.getLogger(__name__)
+
+
+MONEY_TOLERANCE = 0.0001
+
+
+def assert_removed_member_spend_stays_personal_and_project_unchanged(
+    *,
+    admin_project_utils,
+    user_id,
+    project_name,
+    category,
+    personal_budget_id,
+    personal_spend,
+    project_spend_before_removal,
+):
+    """After the removal the member's spend is on their personal budget and the project is untouched.
+
+    The personal figure is read first: once the ledger holds the personal spend made after the
+    removal, it has collected that request, so the project figure read next is a real check and
+    not a read taken before the ledger caught up.
+    """
+    logger.info(
+        "Waiting for the personal %s spend made after the removal in the ledger (user=%s)",
+        category,
+        user_id,
+    )
+    personal = admin_project_utils.wait_for_member_budget_spending_above(
+        personal_budget_id,
+        category,
+        personal_spend - MONEY_TOLERANCE,
+        user_id=user_id,
+    )
+    assert_that(
+        personal,
+        not_none(),
+        f"Personal {category} budget assignment not found in spend ledger",
+    )
+    assert_that(
+        personal.current_spending,
+        close_to(personal_spend, MONEY_TOLERANCE),
+        f"The spend made after the removal must be recorded on the personal {category} "
+        "budget, matching the LiteLLM customer spend.",
+    )
+
+    logger.info(
+        "Checking the project %s budget did not change (project=%s)",
+        category,
+        project_name,
+    )
+    project = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, category, project_spend_before_removal - MONEY_TOLERANCE
+    )
+    assert_that(
+        project, not_none(), f"Project {category} budget not found in spend ledger"
+    )
+    assert_that(
+        project.current_spending,
+        close_to(project_spend_before_removal, MONEY_TOLERANCE),
+        f"Project {category} current_spending must stay as it was before the user was "
+        "removed: the spend made afterwards belongs to the user's personal budget.",
+    )
 
 
 @pytest.mark.budget
@@ -49,7 +114,8 @@ def test_project_member_spending_follows_budget_and_membership_lifecycle(
     lite_llm_budget_utils,
     lifecycle_project,
     project_budget_groups,
-    admin_spend_tracking_utils,
+    marketplace_core_gates,
+    admin_project_utils,
 ):
     user2_email, _ = keycloak_user_2
     project_name, user2_id = lifecycle_project
@@ -58,7 +124,10 @@ def test_project_member_spending_follows_budget_and_membership_lifecycle(
     premium_alias = project_key_alias(project_name, "premium_models")
 
     logger.info("Creating assistant in project '%s'", project_name)
-    assistant = user1_assistant(project_name=project_name)
+    # Phase 3 publishes this assistant, so its content reaches the core gate thresholds.
+    assistant = user1_assistant(
+        project_name=project_name, **publish_ready_content(marketplace_core_gates)
+    )
 
     try:
         # Phase 1 — member, no project budget: spending goes to User 2 personal
@@ -97,25 +166,19 @@ def test_project_member_spending_follows_budget_and_membership_lifecycle(
         project_spend_after_phase2 = float(project_key_info["spend"])
         current_personal = lite_llm_budget_utils.get_customer_info(user2_email)
 
-        # if spend collect will be triggered after user unassignment, DB will not contain record
-        # with spend_subject_type as member_budget only project_budget. By default,
-        # admin_spend_tracking_utils.wait_for_project_spends returns records excluding project_budget,
-        # to not duplicate total spends.
-
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends_nowait()
         logger.info(
-            "Waiting for platform spend in project_spend_tracking (project=%s)",
-            project_name,
+            "Waiting for platform budget spend in ledger (project=%s)", project_name
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "platform"
+        budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "platform", project_spend_after_phase2 - 0.0001
         )
         assert_that(
-            spends["total_spend"],
+            budget, not_none(), "Project platform budget not found in spend ledger"
+        )
+        assert_that(
+            budget.current_spending,
             close_to(project_spend_after_phase2, 0.0001),
-            "project_spend_tracking total_spend should match project platform key spend.",
+            "Project platform budget current_spending should match project platform key spend.",
         )
 
         assert_that(
@@ -156,28 +219,49 @@ def test_project_member_spending_follows_budget_and_membership_lifecycle(
             user2_email, personal_spend_after_phase1
         )
         assert_that(float(customer["spend"]), greater_than(personal_spend_after_phase1))
+        personal_spend_after_phase3 = float(customer["spend"])
         final_project_key = lite_llm_budget_utils.get_key_info_by_alias(platform_alias)
         assert_that(
             float(final_project_key["spend"]),
             close_to(project_spend_after_phase2, 0.0001),
         )
 
-        # Checking that project budget remains same as in Phase 2
-
-        logger.info("Triggering spend collection")
-        admin_spend_tracking_utils.collect_spends_nowait()
+        # Checking that project budget remains same as in Phase 2. The ledger is collected in
+        # one pass, so once User 2's personal spend after the removal is in it, the project
+        # figure read next already reflects that pass.
         logger.info(
-            "Waiting for platform spend in project_spend_tracking (project=%s)",
-            project_name,
+            "Waiting for User 2's personal spend after removal in ledger (user=%s)",
+            user2_email,
         )
-        today = datetime.date.today()
-        spends = admin_spend_tracking_utils.wait_for_project_spends(
-            project_name, today, today, "platform"
+        personal_assignment = admin_project_utils.wait_for_member_budget_spending_above(
+            DEFAULT_PLATFORM_BUDGET_ID,
+            "platform",
+            personal_spend_after_phase3 - 0.0001,
+            user_id=user2_id,
         )
         assert_that(
-            spends["total_spend"],
+            personal_assignment,
+            not_none(),
+            "Personal platform budget assignment not found in spend ledger",
+        )
+        assert_that(
+            personal_assignment.current_spending,
+            greater_than(personal_spend_after_phase3 - 0.0001),
+            "The ledger has not collected User 2's spend after the removal",
+        )
+        logger.info(
+            "Waiting for platform budget spend in ledger (project=%s)", project_name
+        )
+        budget = admin_project_utils.wait_for_project_budget_spending_above(
+            project_name, "platform", project_spend_after_phase2 - 0.0001
+        )
+        assert_that(
+            budget, not_none(), "Project platform budget not found in spend ledger"
+        )
+        assert_that(
+            budget.current_spending,
             close_to(project_spend_after_phase2, 0.0001),
-            "project_spend_tracking total_spend should match project platform key spend.",
+            "Project platform budget current_spending should match project platform key spend.",
         )
 
     finally:
@@ -196,7 +280,7 @@ def test_cli_spending_reverts_to_personal_after_project_unassignment(
     lifecycle_project,
     project_budget_groups,
     default_llm,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     user2_email, _ = keycloak_user_2
     project_name, user2_id = lifecycle_project
@@ -231,7 +315,9 @@ def test_cli_spending_reverts_to_personal_after_project_unassignment(
     logger.info("Sending CLI request as User 2 (project budget active)")
     user2_proxy_utils.send_messages_request(
         model=default_llm.base_name,
-        messages=[{"role": "user", "content": budget_chat_prompt()}],
+        messages=[
+            {"role": "user", "content": budget_chat_prompt_bigger()}
+        ],  # budget_chat_prompt_bigger
         extra_headers=request_headers,
     ).raise_for_status()
     logger.info("Waiting for project CLI key alias spending (alias=%s)", cli_alias)
@@ -240,11 +326,6 @@ def test_cli_spending_reverts_to_personal_after_project_unassignment(
     assert_that(float(project_key_info["spend"]), greater_than(0))
     project_spend_before_unassign = float(project_key_info["spend"])
 
-    # Regression: User 2 is removed here with spend still uncollected
-    # (no collect_spends() call before removal). The flush-before-delete fix must
-    # capture this member's terminal spend as a member_budget row inline during
-    # removal, otherwise the nightly collector's later join would silently lose it
-    # once the allocation is soft-deleted.
     logger.info(
         "Phase 3: removing User 2 from project with spend still uncollected — expecting CLI spending to revert to personal"
     )
@@ -263,29 +344,24 @@ def test_cli_spending_reverts_to_personal_after_project_unassignment(
     customer = lite_llm_budget_utils.wait_for_spending_above(
         cli_customer_id, personal_cli_spend_after_phase1
     )
-    assert_that(float(customer["spend"]), greater_than(personal_cli_spend_after_phase1))
+    personal_cli_spend_after_phase3 = float(customer["spend"])
+    assert_that(
+        personal_cli_spend_after_phase3, greater_than(personal_cli_spend_after_phase1)
+    )
     final_project_key = lite_llm_budget_utils.get_key_info_by_alias(cli_alias)
     assert_that(
         float(final_project_key["spend"]),
         close_to(project_spend_before_unassign, 0.0001),
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends()
-    logger.info(
-        "Waiting for cli member_budget spend in project_spend_tracking (project=%s)",
-        project_name,
-    )
-    today = datetime.date.today()
-    member_spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "cli", spend_subject_type="member_budget"
-    )
-    assert_that(
-        member_spends["total_spend"],
-        close_to(project_spend_before_unassign, 0.0001),
-        "member_budget total_spend should still match the CLI spend "
-        "captured before removal, even though it was collected only after the user "
-        "was removed from the project.",
+    assert_removed_member_spend_stays_personal_and_project_unchanged(
+        admin_project_utils=admin_project_utils,
+        user_id=user2_id,
+        project_name=project_name,
+        category="cli",
+        personal_budget_id=DEFAULT_CLI_BUDGET_ID,
+        personal_spend=personal_cli_spend_after_phase3,
+        project_spend_before_removal=project_spend_before_unassign,
     )
 
 
@@ -300,7 +376,7 @@ def test_premium_spending_reverts_to_personal_after_project_unassignment(
     lite_llm_budget_utils,
     lifecycle_project,
     project_budget_groups,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     user2_email, _ = keycloak_user_2
     project_name, user2_id = lifecycle_project
@@ -344,30 +420,24 @@ def test_premium_spending_reverts_to_personal_after_project_unassignment(
         "Waiting for project premium key alias spending (alias=%s)", premium_alias
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
-
     project_key_info = lite_llm_budget_utils.wait_for_key_alias_spending(premium_alias)
     assert_that(project_key_info, not_none())
     assert_that(float(project_key_info["spend"]), greater_than(0))
     project_spend_before_unassign = float(project_key_info["spend"])
 
-    # if spend collect will be triggered after user unassignment, DB will not contain record
-    # with spend_subject_type as member_budget only project_budget. By default,
-    # admin_spend_tracking_utils.wait_for_project_spends returns records excluding project_budget,
-    # to not duplicate total spends.
     logger.info(
-        "Waiting for premium_models spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for premium_models budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "premium_models"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "premium_models", project_spend_before_unassign - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        budget, not_none(), "Project premium_models budget not found in spend ledger"
+    )
+    assert_that(
+        budget.current_spending,
         close_to(project_spend_before_unassign, 0.0001),
-        "project_spend_tracking total_spend should match project premium_models key spend.",
+        "Project premium_models budget current_spending should match project premium_models key spend.",
     )
 
     # Unassign User 2: spending reverts to personal premium customer (project header still sent)
@@ -392,8 +462,9 @@ def test_premium_spending_reverts_to_personal_after_project_unassignment(
     customer = lite_llm_budget_utils.wait_for_spending_above(
         premium_customer_id, personal_premium_spend_after_phase1
     )
+    personal_premium_spend_after_phase3 = float(customer["spend"])
     assert_that(
-        float(customer["spend"]),
+        personal_premium_spend_after_phase3,
         greater_than(personal_premium_spend_after_phase1),
     )
     final_project_key = lite_llm_budget_utils.get_key_info_by_alias(premium_alias)
@@ -402,18 +473,12 @@ def test_premium_spending_reverts_to_personal_after_project_unassignment(
         close_to(project_spend_before_unassign, 0.0001),
     )
 
-    # Checking that project budget remains same as in Phase 2
-
-    logger.info(
-        "Waiting for premium_models spend in project_spend_tracking (project=%s)",
-        project_name,
-    )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "premium_models"
-    )
-    assert_that(
-        spends["total_spend"],
-        close_to(project_spend_before_unassign, 0.0001),
-        "project_spend_tracking total_spend should match project premium_models key spend.",
+    assert_removed_member_spend_stays_personal_and_project_unchanged(
+        admin_project_utils=admin_project_utils,
+        user_id=user2_id,
+        project_name=project_name,
+        category="premium_models",
+        personal_budget_id=DEFAULT_PREMIUM_BUDGET_ID,
+        personal_spend=personal_premium_spend_after_phase3,
+        project_spend_before_removal=project_spend_before_unassign,
     )

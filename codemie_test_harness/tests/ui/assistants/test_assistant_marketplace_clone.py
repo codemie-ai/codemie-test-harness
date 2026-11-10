@@ -29,6 +29,9 @@ import pytest
 
 from codemie_sdk.models.assistant import ReactionType
 
+from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
+    publish_ready_content,
+)
 from codemie_test_harness.tests.ui.pageobject.assistants.assistants_marketplace_page import (
     AssistantsMarketplacePage,
 )
@@ -82,7 +85,11 @@ def test_clone_count_badge_visible_on_marketplace_card(page):
 @pytest.mark.ui
 @pytest.mark.prod_regression
 def test_clone_count_badge_updates_after_ui_clone(
-    page, assistant, assistant_utils, cleanup_cloned_assistants
+    page,
+    assistant,
+    assistant_utils,
+    cleanup_cloned_assistants,
+    marketplace_core_gates,
 ):
     """TC-03: Badge on marketplace card increments by 1 after cloning via 3-dot menu.
 
@@ -97,14 +104,14 @@ def test_clone_count_badge_updates_after_ui_clone(
     8. Assert badge shows initial_count + 1.
     """
     # Arrange — create and publish source assistant via API
-    source = assistant()
+    source = assistant(**publish_ready_content(marketplace_core_gates))
     assistant_utils.publish_assistant_to_marketplace(
         source.id, categories=["quality-assurance"], ignore_recommendations=True
     )
 
     marketplace_page = AssistantsMarketplacePage(page)
     marketplace_page.navigate_to()
-    marketplace_page.search_assistants(source.name)
+    marketplace_page.search_until_listed(source.name)
 
     # Record initial clone count from badge
     initial_badge_value = marketplace_page.get_clone_count_value(source.name)
@@ -146,7 +153,11 @@ class SeededMarketplaceAssistant:
 
 @pytest.fixture
 def seeded_marketplace_assistant(
-    request, assistant_factory, assistant_utils, cleanup_cloned_assistants
+    request,
+    assistant_factory,
+    assistant_utils,
+    cleanup_cloned_assistants,
+    marketplace_core_gates,
 ):
     """Publish an assistant, seed its usage and clone counters and like it, all via API.
 
@@ -156,7 +167,7 @@ def seeded_marketplace_assistant(
     ``assistant_factory`` and API clones by ``cleanup_cloned_assistants``.
     """
     scenario: FavoritesMetricsScenario = request.param
-    source = assistant_factory.create()
+    source = assistant_factory.create(**publish_ready_content(marketplace_core_gates))
     assistant_utils.publish_assistant_to_marketplace(
         source.id, categories=["quality-assurance"], ignore_recommendations=True
     )
@@ -200,7 +211,7 @@ def test_favorites_card_metrics_match_marketplace_card(
 
     # Marketplace card carries the seeded metrics
     marketplace_page.navigate_to()
-    marketplace_page.search_assistants(seeded.name)
+    marketplace_page.search_until_listed(seeded.name)
     marketplace_page.should_have_usage_label(seeded.name, seeded.usage_label)
     marketplace_page.should_have_clone_label(seeded.name, seeded.clone_label)
 

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import logging
 import secrets
 from time import sleep
@@ -87,12 +86,13 @@ def two_user_project_with_platform_budget(
 @pytest.mark.timeout(1000)
 def test_platform_spending_reflected_in_project_list_budgets(
     keycloak_user,
+    user_id,
+    admin_budget_usage_utils,
     user_assistant,
     user_assistant_utils,
     admin_project_utils,
     lite_llm_budget_utils,
     project_with_platform_budget,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name, budget_id, alias = project_with_platform_budget
@@ -107,12 +107,9 @@ def test_platform_spending_reflected_in_project_list_budgets(
     key_spend = float(key_info["spend"])
     assert_that(key_spend, greater_than(0))
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
-
     logger.info("Waiting for current_spending to propagate to projects API (platform)")
-    platform_budget = admin_project_utils.wait_for_project_budget_spending(
-        project_name, "platform", timeout=_SPENDING_PROPAGATION_WAIT
+    platform_budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", key_spend - 0.0001, timeout=_SPENDING_PROPAGATION_WAIT
     )
     assert_that(
         platform_budget,
@@ -126,17 +123,20 @@ def test_platform_spending_reflected_in_project_list_budgets(
     )
 
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for the member's platform spend in the project (user=%s)", user_id
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    member_spend = admin_budget_usage_utils.wait_for_members_project_spending_above(
+        [user_id], project_name, "platform", key_spend - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        member_spend,
+        not_none(),
+        "Member platform spend row not found in the budget usage.",
+    )
+    assert_that(
+        member_spend,
         close_to(key_spend, 0.0001),
-        "project_spend_tracking total_spend should match LiteLLM platform key spend.",
+        "Member platform spend in the project should match LiteLLM platform key spend.",
     )
 
 
@@ -146,12 +146,13 @@ def test_platform_spending_reflected_in_project_list_budgets(
 @pytest.mark.timeout(1000)
 def test_cli_spending_reflected_in_project_list_budgets(
     keycloak_user,
+    user_id,
+    admin_budget_usage_utils,
     default_llm,
     user_proxy_utils,
     admin_project_utils,
     lite_llm_budget_utils,
     project_with_cli_budget,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name, budget_id, alias = project_with_cli_budget
@@ -170,12 +171,9 @@ def test_cli_spending_reflected_in_project_list_budgets(
     key_spend = float(key_info["spend"])
     assert_that(key_spend, greater_than(0))
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
-
     logger.info("Waiting for current_spending to propagate to projects API (cli)")
-    cli_budget = admin_project_utils.wait_for_project_budget_spending(
-        project_name, "cli", timeout=_SPENDING_PROPAGATION_WAIT
+    cli_budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "cli", key_spend - 0.0001, timeout=_SPENDING_PROPAGATION_WAIT
     )
     assert_that(
         cli_budget,
@@ -188,17 +186,17 @@ def test_cli_spending_reflected_in_project_list_budgets(
         "CLI budget current_spending should match LiteLLM key spend.",
     )
 
-    logger.info(
-        "Waiting for CLI spend in project_spend_tracking (project=%s)", project_name
-    )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "cli"
+    logger.info("Waiting for the member's CLI spend in the project (user=%s)", user_id)
+    member_spend = admin_budget_usage_utils.wait_for_members_project_spending_above(
+        [user_id], project_name, "cli", key_spend - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        member_spend, not_none(), "Member CLI spend row not found in the budget usage."
+    )
+    assert_that(
+        member_spend,
         close_to(key_spend, 0.0001),
-        "project_spend_tracking total_spend should match LiteLLM CLI key spend.",
+        "Member CLI spend in the project should match LiteLLM CLI key spend.",
     )
 
 
@@ -208,11 +206,12 @@ def test_cli_spending_reflected_in_project_list_budgets(
 @pytest.mark.timeout(1000)
 def test_premium_spending_reflected_in_project_list_budgets(
     keycloak_user,
+    user_id,
+    admin_budget_usage_utils,
     user_proxy_utils,
     admin_project_utils,
     lite_llm_budget_utils,
     project_with_premium_budget,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name, budget_id, alias = project_with_premium_budget
@@ -233,14 +232,14 @@ def test_premium_spending_reflected_in_project_list_budgets(
     key_spend = float(key_info["spend"])
     assert_that(key_spend, greater_than(0))
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
-
     logger.info(
         "Waiting for current_spending to propagate to projects API (premium_models)"
     )
-    premium_budget = admin_project_utils.wait_for_project_budget_spending(
-        project_name, "premium_models", timeout=_SPENDING_PROPAGATION_WAIT
+    premium_budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name,
+        "premium_models",
+        key_spend - 0.0001,
+        timeout=_SPENDING_PROPAGATION_WAIT,
     )
     assert_that(
         premium_budget,
@@ -254,17 +253,21 @@ def test_premium_spending_reflected_in_project_list_budgets(
     )
 
     logger.info(
-        "Waiting for premium_models spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for the member's premium_models spend in the project (user=%s)",
+        user_id,
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "premium_models"
+    member_spend = admin_budget_usage_utils.wait_for_members_project_spending_above(
+        [user_id], project_name, "premium_models", key_spend - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        member_spend,
+        not_none(),
+        "Member premium_models spend row not found in the budget usage.",
+    )
+    assert_that(
+        member_spend,
         close_to(key_spend, 0.0001),
-        "project_spend_tracking total_spend should match LiteLLM premium key spend.",
+        "Member premium_models spend in the project should match LiteLLM premium_models key spend.",
     )
 
 
@@ -274,6 +277,7 @@ def test_premium_spending_reflected_in_project_list_budgets(
 @pytest.mark.timeout(1000)
 def test_two_user_platform_spending_sums_in_project_list_budgets(
     keycloak_user_1,
+    admin_budget_usage_utils,
     keycloak_user_2,
     user1_assistant,
     user2_assistant,
@@ -282,7 +286,6 @@ def test_two_user_platform_spending_sums_in_project_list_budgets(
     admin_project_utils,
     lite_llm_budget_utils,
     two_user_project_with_platform_budget,
-    admin_spend_tracking_utils,
 ):
     project_name, budget_id, alias, user1_id, user2_id = (
         two_user_project_with_platform_budget
@@ -322,14 +325,14 @@ def test_two_user_platform_spending_sums_in_project_list_budgets(
     total_key_spend = float(key_info_final["spend"])
     assert_that(total_key_spend, greater_than(spend_after_user1))
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends()
-
     logger.info(
         "Waiting for current_spending to propagate to projects API (platform, 2 users)"
     )
-    platform_budget = admin_project_utils.wait_for_project_budget_spending(
-        project_name, "platform", timeout=_SPENDING_PROPAGATION_WAIT
+    platform_budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name,
+        "platform",
+        total_key_spend - 0.0001,
+        timeout=_SPENDING_PROPAGATION_WAIT,
     )
     assert_that(
         platform_budget,
@@ -342,16 +345,17 @@ def test_two_user_platform_spending_sums_in_project_list_budgets(
         "Platform budget current_spending should match the sum of both users' spending.",
     )
 
-    logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s, 2 users)",
-        project_name,
-    )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    logger.info("Waiting for both members' platform spend in the project")
+    members_spend = admin_budget_usage_utils.wait_for_members_project_spending_above(
+        [user1_id, user2_id], project_name, "platform", total_key_spend - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        members_spend,
+        not_none(),
+        "Member platform spend rows not found in the budget usage.",
+    )
+    assert_that(
+        members_spend,
         close_to(total_key_spend, 0.0001),
-        "project_spend_tracking total_spend should match sum of both users' platform spending.",
+        "Sum of both members' platform spend should match the sum of both users' spending.",
     )
