@@ -19,6 +19,9 @@ This class encapsulates all interactions with the Assistants Marketplace page.
 """
 
 import re
+import time
+from typing import Callable, Optional
+
 from playwright.sync_api import expect, Locator
 from reportportal_client import step
 
@@ -202,6 +205,39 @@ class AssistantsMarketplacePage(BasePage):
         self.page.wait_for_timeout(2000)
         return self
 
+    @step("Search until the assistant is listed")
+    def search_until_listed(
+        self,
+        assistant_name: str,
+        timeout_s: float = 60,
+        reapply_filters: Optional[Callable[[], object]] = None,
+    ):
+        """Search for an assistant that was just published, reloading until its card shows.
+
+        A search sent right after a publish can be answered by an instance that does not
+        see the new assistant yet, or answered late; the page then keeps the unfiltered
+        list and never asks again. Reloading and searching again is what a user does. The
+        wait is bounded, and the last attempt still fails if the card never appears.
+
+        A reload clears the filters, so a caller that filtered before the search passes
+        `reapply_filters`; it runs after every reload, and the card can only show with the
+        filters on.
+        """
+        deadline = time.monotonic() + timeout_s
+        while True:
+            self.search_assistants(assistant_name)
+            try:
+                expect(self.assistant_card_heading(assistant_name)).to_be_visible(
+                    timeout=5000
+                )
+                return self
+            except AssertionError:
+                if time.monotonic() >= deadline:
+                    raise
+                self.navigate_to()
+                if reapply_filters is not None:
+                    reapply_filters()
+
     @step("Filter by category")
     def filter_by_category(self, category: str = "Quality Assurance"):
         """Filter marketplace assistants by category."""
@@ -295,6 +331,16 @@ class AssistantsMarketplacePage(BasePage):
     def should_see_assistant_in_marketplace(self, assistant_name: str):
         """Verify that an assistant is visible in the marketplace."""
         expect(self.assistant_card_heading(assistant_name)).to_be_visible()
+        return self
+
+    @step("Verify verified badge on assistant card")
+    def should_see_verified_badge_on_card(self, assistant_name: str):
+        """The marketplace card of the assistant shows the VERIFIED badge."""
+        badge = self.assistant_card(assistant_name).get_by_test_id(
+            "assistant-status-badge"
+        )
+        expect(badge).to_have_attribute("data-status", "verified", timeout=15000)
+        expect(badge).to_contain_text("\u2713 VERIFIED")
         return self
 
     @step("Verify filters are visible")

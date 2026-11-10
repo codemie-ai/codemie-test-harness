@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import logging
 import secrets
 
@@ -34,7 +33,7 @@ def test_updating_budget_description_does_not_reset_spending(
     admin_project_budget_utils,
     lite_llm_budget_utils,
     project_with_platform_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, budget_id, platform_alias = project_with_platform_budget
     created_assistant = user_assistant(project_name=project_name)
@@ -58,20 +57,17 @@ def test_updating_budget_description_does_not_reset_spending(
         "Spending was reset after updating budget description.",
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", spend_before - 0.0001
     )
+    assert_that(budget, not_none(), "Project platform budget not found in spend ledger")
     assert_that(
-        spends["total_spend"],
+        budget.current_spending,
         close_to(spend_before, 0.0001),
-        "project_spend_tracking total_spend should match platform key spend.",
+        "Project platform budget current_spending should match platform key spend.",
     )
 
 
@@ -85,7 +81,7 @@ def test_updating_budget_name_does_not_reset_spending(
     admin_project_budget_utils,
     lite_llm_budget_utils,
     project_with_platform_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, budget_id, platform_alias = project_with_platform_budget
     created_assistant = user_assistant(project_name=project_name)
@@ -109,20 +105,17 @@ def test_updating_budget_name_does_not_reset_spending(
         "Spending was reset after updating budget name.",
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", spend_before - 0.0001
     )
+    assert_that(budget, not_none(), "Project platform budget not found in spend ledger")
     assert_that(
-        spends["total_spend"],
+        budget.current_spending,
         close_to(spend_before, 0.0001),
-        "project_spend_tracking total_spend should match platform key spend.",
+        "Project platform budget current_spending should match platform key spend.",
     )
 
 
@@ -136,7 +129,7 @@ def test_updating_budget_soft_limit_does_not_reset_spending(
     admin_project_budget_utils,
     lite_llm_budget_utils,
     project_with_platform_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, budget_id, platform_alias = project_with_platform_budget
     created_assistant = user_assistant(project_name=project_name)
@@ -160,20 +153,17 @@ def test_updating_budget_soft_limit_does_not_reset_spending(
         "Spending was reset after updating budget soft limit.",
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", spend_before - 0.0001
     )
+    assert_that(budget, not_none(), "Project platform budget not found in spend ledger")
     assert_that(
-        spends["total_spend"],
+        budget.current_spending,
         close_to(spend_before, 0.0001),
-        "project_spend_tracking total_spend should match platform key spend.",
+        "Project platform budget current_spending should match platform key spend.",
     )
 
 
@@ -187,7 +177,7 @@ def test_updating_budget_hard_limit_does_not_reset_spending(
     admin_project_budget_utils,
     lite_llm_budget_utils,
     project_with_platform_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, budget_id, platform_alias = project_with_platform_budget
     created_assistant = user_assistant(project_name=project_name)
@@ -211,20 +201,17 @@ def test_updating_budget_hard_limit_does_not_reset_spending(
         "Spending was reset after updating budget hard limit.",
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", spend_before - 0.0001
     )
+    assert_that(budget, not_none(), "Project platform budget not found in spend ledger")
     assert_that(
-        spends["total_spend"],
+        budget.current_spending,
         close_to(spend_before, 0.0001),
-        "project_spend_tracking total_spend should match platform key spend.",
+        "Project platform budget current_spending should match platform key spend.",
     )
 
 
@@ -238,7 +225,7 @@ def test_updating_budget_reset_period_does_not_reset_spending(
     admin_project_budget_utils,
     lite_llm_budget_utils,
     project_with_platform_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     project_name, budget_id, platform_alias = project_with_platform_budget
     created_assistant = user_assistant(project_name=project_name)
@@ -262,18 +249,15 @@ def test_updating_budget_reset_period_does_not_reset_spending(
         "Spending was reset after updating budget reset period.",
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", spend_before - 0.0001
     )
+    assert_that(budget, not_none(), "Project platform budget not found in spend ledger")
     assert_that(
-        spends["total_spend"],
+        budget.current_spending,
         close_to(spend_before, 0.0001),
-        "project_spend_tracking total_spend should match platform key spend.",
+        "Project platform budget current_spending should match platform key spend.",
     )

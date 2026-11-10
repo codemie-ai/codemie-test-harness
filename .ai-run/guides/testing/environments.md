@@ -23,6 +23,24 @@ Settings come from the environment, the config file or `.env`. The AWS Parameter
 - **Reset mechanism:** none. No automated flow may attempt to reset the shared environment, the shared default project or any seed. Session-level cleanup is gated by `CLEANUP_DATA` (default `true`) and may be switched off on the shared stand, so orphaned autotest entities there are a known, accepted condition, not something a flow should try to fix by writing a reset.
 - **Notes:** preview is a shared, long-lived stand (not reset between runs). Tests must own and clean up their own records and must not depend on the absence of other tests' data; the only data they may rely on already existing is a seed.
 
+## Provisioning API clients
+
+The provisioning tests (`tests/provisioning/`) call `/v1/provisioning` as registered third-party clients. They are Keycloak service accounts: the harness mints a token for each with the client-credentials grant against `AUTH_SERVER_URL` and `AUTH_REALM_NAME`, and renews it before it expires. Settings (names only; the client id is an e-mail address):
+
+| Client | Permissions | Client id | Client secret |
+|---|---|---|---|
+| full | manage-budgets and manage-projects | `SEREVICE_NOW_FULL_ID` | `SEREVICE_NOW_FULL_SECRET` |
+| budgets | manage-budgets only | `SEREVICE_NOW_BUDGETS_ID` | `SEREVICE_NOW_BUDGETS_SECRET` |
+| read | read-projects only | `SEREVICE_NOW_READ_ID` | `SEREVICE_NOW_READ_SECRET` |
+
+The six settings are read from the environment or `.env`. With the Parameter Store enabled they can also be rows (`NAME=value`) of the `.env` text stored in the parameter that `AWS_PS_DOTENV_PATH` names; the run applies that text to the environment at start, and a value already set in the environment wins. They need no per-key mapping in `credentials_manager.py`. The names keep their original spelling ("SEREVICE"). A test whose settings are missing is skipped with `missing setting '<NAME>'` in a gated run (`capability_gate.py`).
+
+Stand prerequisites, none of which the harness can set up:
+
+- `PROVISIONING_API_ENABLED` and `ENABLE_USER_MANAGEMENT` are on, otherwise the provisioning routes do not exist.
+- The three service accounts are registered in the backend's provisioning client registry with the permissions above (full: manage-budgets and manage-projects; budgets: manage-budgets; read: read-projects only).
+- The registry is read at start-up, so a change is applied by a rollout restart of every workload that runs the API.
+
 ## Safety
 
 - Environments not marked as permitting destructive testing (production, and any domain not listed above) must be treated as unsafe — read-only use.

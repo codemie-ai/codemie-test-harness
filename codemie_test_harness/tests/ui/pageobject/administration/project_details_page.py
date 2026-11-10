@@ -119,11 +119,6 @@ class ProjectDetailsPage(BasePage):
         )
 
     @property
-    def integrations_table_rows(self):
-        """Body rows of the integrations table on the Integrations tab."""
-        return self.page.get_by_role("table").locator("tbody tr")
-
-    @property
     def view_analytics_button(self):
         """'View analytics' button in the Overview tab's Financial summary card."""
         return self.page.get_by_role("button", name="View analytics")
@@ -177,48 +172,6 @@ class ProjectDetailsPage(BasePage):
         return self.active_budget_card(category_label).get_by_text(
             "not assigned", exact=False
         )
-
-    @property
-    def model_availability_heading(self):
-        """'Model availability' heading in the Overview tab's Models card."""
-        return self.page.get_by_text("Model availability", exact=True)
-
-    @property
-    def model_availability_configure_button(self):
-        """'Configure' button in the Overview tab's Model availability card."""
-        return self.page.get_by_role("button", name="Configure")
-
-    @property
-    def model_availability_count_value(self):
-        """The '<N> of <M> models' text shown in the Model availability card."""
-        return self.model_availability_heading.locator(
-            "xpath=../following-sibling::div[1]"
-        )
-
-    @property
-    def integrations_count_label(self):
-        """'Project-level integrations' label under the Overview tab's Integrations card."""
-        return self.page.get_by_text("Project-level integrations", exact=True)
-
-    @property
-    def integrations_count_value(self):
-        """The integrations count shown in the Overview tab's Integrations card.
-
-        DOM order places the count/"View" button row *before* the label
-        ("Project-level integrations"), so the value is reached from the label
-        by walking up to the card and back down to its first child, rather than
-        via the following-sibling pattern used by the other summary fields.
-        """
-        return self.integrations_count_label.locator("xpath=../div[1]/div[1]")
-
-    @property
-    def view_integrations_button(self):
-        """'View' button in the Overview tab's Integrations card.
-
-        Must be matched with exact=True — a fuzzy match also picks up the
-        unrelated "View analytics" button in the Financial summary card.
-        """
-        return self.page.get_by_role("button", name="View", exact=True)
 
     @property
     def chargeback_label(self):
@@ -372,24 +325,6 @@ class ProjectDetailsPage(BasePage):
         return ProjectModelsSection(self.page)
 
     @step
-    def click_configure_models(self) -> "ProjectModelsSection":
-        """Click the Model availability card's 'Configure' button; navigates to
-        the project's Models tab.
-        """
-        expect(self.model_availability_configure_button).to_be_visible(timeout=15000)
-        self.model_availability_configure_button.click()
-        models = ProjectModelsSection(self.page)
-        models.should_be_visible()
-        return models
-
-    @step
-    def click_view_integrations(self):
-        """Click the Integrations card's 'View' button; navigates to the Integrations tab."""
-        expect(self.view_integrations_button).to_be_visible(timeout=15000)
-        self.view_integrations_button.click()
-        return self
-
-    @step
     def click_view_analytics(self) -> "AnalyticsPage":
         """Click 'View analytics'; navigates to the separate /analytics page."""
         expect(self.view_analytics_button).to_be_visible(timeout=15000)
@@ -463,40 +398,6 @@ class ProjectDetailsPage(BasePage):
         return self
 
     @step
-    def should_be_on_integrations_tab(self, project_name: str):
-        """Verify the browser navigated to the project's Integrations tab."""
-        expect(self.page).to_have_url(
-            re.compile(
-                re.escape(f"{self.BASE_PATH}/{project_name}/integrations") + r"/?$"
-            ),
-            timeout=10000,
-        )
-        expect(self.integrations_tab).to_have_attribute(
-            "aria-selected", "true", timeout=10000
-        )
-        return self
-
-    @step
-    def should_be_on_models_tab(self, project_name: str):
-        """Verify the browser navigated to the project's Models tab."""
-        expect(self.page).to_have_url(
-            re.compile(re.escape(f"{self.BASE_PATH}/{project_name}/models") + r"/?$"),
-            timeout=10000,
-        )
-        expect(self.models_tab).to_have_attribute(
-            "aria-selected", "true", timeout=10000
-        )
-        return self
-
-    @step
-    def should_have_selected_models_count(self, selected: int, total: int):
-        """Verify the Model availability card shows '<selected> of <total> models'."""
-        expect(self.model_availability_count_value).to_have_text(
-            re.compile(rf"^{selected} of {total} models$"), timeout=15000
-        )
-        return self
-
-    @step
     def should_have_active_budget_hard_limit(self, category_label: str, value: float):
         """Verify an assigned category's card shows '<spend> / $<value>' hard limit."""
         expect(self.active_budget_hard_limit_value(category_label)).to_have_text(
@@ -535,18 +436,6 @@ class ProjectDetailsPage(BasePage):
         return self
 
     @step
-    def should_have_integrations_count(self, count: int):
-        """Verify the Overview tab's Integrations card shows the given count."""
-        expect(self.integrations_count_value).to_have_text(str(count), timeout=15000)
-        return self
-
-    @step
-    def should_have_integrations_table_row_count(self, count: int):
-        """Verify the Integrations tab's table lists exactly `count` rows."""
-        expect(self.integrations_table_rows).to_have_count(count, timeout=15000)
-        return self
-
-    @step
     def should_have_chargeback_value(self, value: str):
         """Verify the Overview tab's Chargeback field shows 'Enabled' or 'Disabled'."""
         expect(self.chargeback_value).to_have_text(value, timeout=15000)
@@ -570,7 +459,7 @@ class ProjectDetailsPage(BasePage):
 
     @step
     def should_show_overview_sections(self):
-        """Verify the Overview tab renders its Project information, Financial summary and Active budgets sections."""
+        """Verify the Overview tab renders its Project information, Financial summary and Active budgets sections, and no longer renders the Models and usage section."""
         expect(self.overview_tab).to_have_attribute(
             "aria-selected", "true", timeout=15000
         )
@@ -583,6 +472,13 @@ class ProjectDetailsPage(BasePage):
         expect(self.page.get_by_text("Active budgets", exact=True)).to_be_visible(
             timeout=15000
         )
+        for removed_text in (
+            "Models and usage",
+            "Model availability",
+            "Model usage",
+            "Project-level integrations",
+        ):
+            expect(self.page.get_by_text(removed_text, exact=True)).to_have_count(0)
         return self
 
     @step

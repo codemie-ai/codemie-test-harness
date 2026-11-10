@@ -97,6 +97,28 @@ KEY_AZURE_DEVOPS_WORK_ITEMS_WIQL = "AZURE_DEVOPS_WORK_ITEMS_WIQL"
 # ServiceNow
 KEY_SERVICENOW_URL = "SERVICENOW_URL"
 KEY_SERVICENOW_TOKEN = "SERVICENOW_TOKEN"
+# Provisioning API clients: Keycloak service accounts registered with the backend (client id
+# and client secret of the client with manage-budgets + manage-projects, with manage-budgets
+# only, and with read-projects only). The variable names are as the stand's .env spells them.
+KEY_PROVISIONING_FULL_ID = "SEREVICE_NOW_FULL_ID"
+KEY_PROVISIONING_FULL_SECRET = "SEREVICE_NOW_FULL_SECRET"
+KEY_PROVISIONING_BUDGETS_ID = "SEREVICE_NOW_BUDGETS_ID"
+KEY_PROVISIONING_BUDGETS_SECRET = "SEREVICE_NOW_BUDGETS_SECRET"
+KEY_PROVISIONING_READ_ID = "SEREVICE_NOW_READ_ID"
+KEY_PROVISIONING_READ_SECRET = "SEREVICE_NOW_READ_SECRET"
+# The settings a test needs to act as each client.
+PROVISIONING_FULL_CLIENT_KEYS = (
+    KEY_PROVISIONING_FULL_ID,
+    KEY_PROVISIONING_FULL_SECRET,
+)
+PROVISIONING_BUDGETS_CLIENT_KEYS = (
+    KEY_PROVISIONING_BUDGETS_ID,
+    KEY_PROVISIONING_BUDGETS_SECRET,
+)
+PROVISIONING_READ_CLIENT_KEYS = (
+    KEY_PROVISIONING_READ_ID,
+    KEY_PROVISIONING_READ_SECRET,
+)
 # Keycloak
 KEY_KEYCLOAK_URL = "KEYCLOAK_URL"
 KEY_KEYCLOAK_REALM = "KEYCLOAK_REALM"
@@ -416,6 +438,12 @@ DATA_MANAGEMENT_KEYS = [
     KEY_MSSQL_PASSWORD,
 ]
 
+PROVISIONING_KEYS = [
+    *PROVISIONING_FULL_CLIENT_KEYS,
+    *PROVISIONING_BUDGETS_CLIENT_KEYS,
+    *PROVISIONING_READ_CLIENT_KEYS,
+]
+
 SECRET_STORE_KEYS = [
     KEY_HARNESS_SECRET_STORE,
     KEY_AWS_PS_REGION,
@@ -438,6 +466,7 @@ INTEGRATION_KEYS = (
     + NOTIFICATIONS_KEYS
     + RESEARCH_TOOLS_KEYS
     + DATA_MANAGEMENT_KEYS
+    + PROVISIONING_KEYS
     + SECRET_STORE_KEYS
 )
 
@@ -533,6 +562,12 @@ CREDENTIAL_CATEGORIES = {
             KEY_SERVICENOW_TOKEN,
         ],
     },
+    "provisioning-api": {
+        "name": "Provisioning API",
+        "description": "Registered provisioning clients (Keycloak service accounts): client id and secret of the client "
+        "with manage-budgets and manage-projects, manage-budgets only, and read-projects only",
+        "keys": PROVISIONING_KEYS,
+    },
     "secret-store": {
         "name": "Secret Store",
         "description": "Opt-in AWS Parameter Store (HARNESS_SECRET_STORE=aws-parameter-store)",
@@ -567,6 +602,9 @@ SENSITIVE_KEYS = {
     KEY_GCP_SA_KEY_BASE64,
     KEY_AZURE_DEVOPS_TOKEN,
     KEY_SERVICENOW_TOKEN,
+    KEY_PROVISIONING_FULL_SECRET,
+    KEY_PROVISIONING_BUDGETS_SECRET,
+    KEY_PROVISIONING_READ_SECRET,
     KEY_KEYCLOAK_CLIENT_SECRET,
     KEY_SONAR_TOKEN,
     KEY_SONAR_CLOUD_TOKEN,

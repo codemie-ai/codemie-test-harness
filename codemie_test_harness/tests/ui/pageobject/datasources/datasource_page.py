@@ -142,8 +142,7 @@ class DataSourcePage(BasePage):
         expect(search).to_be_visible(timeout=15000)
         search.clear()
         search.fill(name)
-        # Wait briefly for the filter to apply
-        self.page.wait_for_timeout(500)
+        self.page.wait_for_load_state("networkidle", timeout=15000)
         return self
 
     # -----------------
