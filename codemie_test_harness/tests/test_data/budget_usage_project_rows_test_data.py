@@ -26,6 +26,13 @@ BUDGET_USAGE_ROW_KEYS = {
     "is_default",
 }
 
+# Spend annotations the backend adds to a row when the ledger figure is partial or unavailable.
+BUDGET_USAGE_SPEND_ANNOTATION_KEYS = {
+    "spend_partial",
+    "spend_unavailable",
+    "spend_missing_amount",
+}
+
 # Column ids of GET /v1/analytics/budget_usage, in response order.
 BUDGET_USAGE_COLUMN_IDS = [
     "project_name",
@@ -53,6 +60,13 @@ USER_PROJECT_SPENDING_ROW_KEYS = {
     "platform_limit",
     "cli_limit",
     "premium_models_limit",
+}
+
+# The same spend annotations, one set per budget category.
+USER_PROJECT_SPENDING_SPEND_ANNOTATION_KEYS = {
+    f"{category}_{annotation}"
+    for category in ("platform", "cli", "premium_models")
+    for annotation in ("spend_partial", "spend_unavailable", "spend_missing_amount")
 }
 
 # Suffixes of the row label per budget category (the platform row carries the bare label).
@@ -120,13 +134,10 @@ KEY_SPEND_SETTLE_TIMEOUT = 120.0
 # staleness window, so spend is settled before that first read and polled only for propagation.
 USAGE_WAIT_TIMEOUT = 120.0
 
-# The spend is collected on request right after it settles (the admin collect endpoint runs the
-# collection the system runs every 10 minutes), which stores fresh rows that the page then serves.
-# collect_spends gives up quietly after COLLECT_RETRY_WINDOW seconds of 409 (another collection is
-# running), and that other collection covers the pending spend, so a row can still need that long
-# plus propagation to show it. The wait for a row to catch up with the measured spend is only a
-# safety net behind the collection: it covers one such window plus a margin of the same size, not
-# the 10 minute staleness threshold (BUDGET_USAGE_STALENESS_THRESHOLD_MS, 600000 ms by default).
-COLLECT_RETRY_WINDOW = 120.0
-STORED_ROW_WAIT_TIMEOUT = COLLECT_RETRY_WINDOW * 2
+# A row catches up with the measured spend only after the ledger has collected it, which a
+# periodic job does about every one or two minutes. The wait for a row to catch up covers
+# one such window plus a margin of the same size, not the 10 minute staleness threshold
+# (BUDGET_USAGE_STALENESS_THRESHOLD_MS, 600000 ms by default).
+ROW_CATCH_UP_WINDOW = 120.0
+STORED_ROW_WAIT_TIMEOUT = ROW_CATCH_UP_WINDOW * 2
 STORED_ROW_POLL_INTERVAL = 10.0

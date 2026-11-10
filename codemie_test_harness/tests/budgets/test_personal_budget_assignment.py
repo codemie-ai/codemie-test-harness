@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import logging
 
 import pytest
@@ -42,7 +41,7 @@ def test_admin_assigns_platform_budget_to_user(
     admin_budget_utils,
     lite_llm_budget_utils,
     assigned_platform_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     email, _ = keycloak_user
     budget_id, initial_spend = assigned_platform_budget
@@ -69,6 +68,23 @@ def test_admin_assigns_platform_budget_to_user(
     customer = lite_llm_budget_utils.wait_for_spending_above(email, initial_spend)
     spend_after_assigned = float(customer.get("spend", 0))
     assert_that(spend_after_assigned, greater_than(initial_spend))
+
+    logger.info(
+        "Waiting for custom platform budget spend in ledger (budget=%s, user=%s)",
+        budget_id,
+        user_id,
+    )
+    assignment = admin_project_utils.wait_for_member_budget_spending_above(
+        budget_id, "platform", spend_after_assigned - 0.0001, user_id=user_id
+    )
+    assert_that(
+        assignment, not_none(), "Platform budget assignment not found in spend ledger"
+    )
+    assert_that(
+        assignment.current_spending,
+        close_to(spend_after_assigned, 0.0001),
+        "Platform budget current_spending should match user platform spend.",
+    )
 
     logger.info("Unassigning platform budget from user %s", email)
     admin_budget_utils.unassign_user_budget(user_id, "platform")
@@ -99,19 +115,17 @@ def test_admin_assigns_platform_budget_to_user(
         equal_to(DEFAULT_PLATFORM_BUDGET_ID),
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends()
-    logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)", email
-    )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        email, today, today, "platform"
+    logger.info("Waiting for platform budget spend in ledger (user=%s)", email)
+    assignment = admin_project_utils.wait_for_member_budget_spending_above(
+        DEFAULT_PLATFORM_BUDGET_ID, "platform", final_spend - 0.0001, user_id=user_id
     )
     assert_that(
-        spends["total_spend"],
+        assignment, not_none(), "Platform budget assignment not found in spend ledger"
+    )
+    assert_that(
+        assignment.current_spending,
         close_to(final_spend, 0.0001),
-        "project_spend_tracking total_spend should match user platform spend.",
+        "Platform budget current_spending should match user platform spend.",
     )
 
 
@@ -127,7 +141,7 @@ def test_admin_assigns_cli_budget_to_user(
     admin_budget_utils,
     lite_llm_budget_utils,
     assigned_cli_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     email, _ = keycloak_user
     budget_id, initial_spend = assigned_cli_budget
@@ -196,17 +210,17 @@ def test_admin_assigns_cli_budget_to_user(
         equal_to(DEFAULT_CLI_BUDGET_ID),
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends()
-    logger.info("Waiting for cli spend in project_spend_tracking (project=%s)", email)
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        email, today, today, "cli"
+    logger.info("Waiting for cli budget spend in ledger (user=%s)", email)
+    assignment = admin_project_utils.wait_for_member_budget_spending_above(
+        DEFAULT_CLI_BUDGET_ID, "cli", final_spend - 0.0001, user_id=user_id
     )
     assert_that(
-        spends["total_spend"],
+        assignment, not_none(), "CLI budget assignment not found in spend ledger"
+    )
+    assert_that(
+        assignment.current_spending,
         close_to(final_spend, 0.0001),
-        "project_spend_tracking total_spend should match user cli spend.",
+        "CLI budget current_spending should match user cli spend.",
     )
 
 
@@ -221,7 +235,7 @@ def test_admin_assigns_premium_budget_to_user(
     admin_budget_utils,
     lite_llm_budget_utils,
     assigned_premium_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     email, _ = keycloak_user
     budget_id, initial_spend = assigned_premium_budget
@@ -291,19 +305,22 @@ def test_admin_assigns_premium_budget_to_user(
         equal_to(DEFAULT_PREMIUM_BUDGET_ID),
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends()
-    logger.info(
-        "Waiting for premium_models spend in project_spend_tracking (project=%s)", email
-    )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        email, today, today, "premium_models"
+    logger.info("Waiting for premium_models budget spend in ledger (user=%s)", email)
+    assignment = admin_project_utils.wait_for_member_budget_spending_above(
+        DEFAULT_PREMIUM_BUDGET_ID,
+        "premium_models",
+        final_spend - 0.0001,
+        user_id=user_id,
     )
     assert_that(
-        spends["total_spend"],
+        assignment,
+        not_none(),
+        "Premium models budget assignment not found in spend ledger",
+    )
+    assert_that(
+        assignment.current_spending,
         close_to(final_spend, 0.0001),
-        "project_spend_tracking total_spend should match user premium_models spend.",
+        "Premium models budget current_spending should match user premium_models spend.",
     )
 
 
@@ -319,7 +336,7 @@ def test_admin_assigns_premium_budget_to_user_via_chat(
     admin_budget_utils,
     lite_llm_budget_utils,
     assigned_premium_budget,
-    admin_spend_tracking_utils,
+    admin_project_utils,
 ):
     email, _ = keycloak_user
     budget_id, initial_spend = assigned_premium_budget
@@ -383,17 +400,20 @@ def test_admin_assigns_premium_budget_to_user_via_chat(
         equal_to(DEFAULT_PREMIUM_BUDGET_ID),
     )
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends()
-    logger.info(
-        "Waiting for premium_models spend in project_spend_tracking (project=%s)", email
-    )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        email, today, today, "premium_models"
+    logger.info("Waiting for premium_models budget spend in ledger (user=%s)", email)
+    assignment = admin_project_utils.wait_for_member_budget_spending_above(
+        DEFAULT_PREMIUM_BUDGET_ID,
+        "premium_models",
+        final_spend - 0.0001,
+        user_id=user_id,
     )
     assert_that(
-        spends["total_spend"],
+        assignment,
+        not_none(),
+        "Premium models budget assignment not found in spend ledger",
+    )
+    assert_that(
+        assignment.current_spending,
         close_to(final_spend, 0.0001),
-        "project_spend_tracking total_spend should match user premium_models spend.",
+        "Premium models budget current_spending should match user premium_models spend.",
     )

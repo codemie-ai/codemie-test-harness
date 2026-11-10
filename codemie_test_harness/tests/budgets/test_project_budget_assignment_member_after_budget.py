@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import logging
 from time import sleep
 
@@ -48,7 +47,6 @@ def test_platform_budget_created_before_member_assigned_routes_spending_to_proje
     lite_llm_budget_utils,
     project_no_member,
     project_budget_groups,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name = project_no_member
@@ -89,20 +87,19 @@ def test_platform_budget_created_before_member_assigned_routes_spending_to_proje
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(cli_alias), none())
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(premium_alias), none())
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", float(project_key_info["spend"]) - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        ledger_budget, not_none(), "Project platform budget not found in spend ledger"
+    )
+    assert_that(
+        ledger_budget.current_spending,
         close_to(float(project_key_info["spend"]), 0.0001),
-        "project_spend_tracking total_spend should match project platform key spend.",
+        "Project platform budget current_spending should match project platform key spend.",
     )
 
     # Phase 2 — project budget deleted: spending reverts to personal
@@ -132,7 +129,6 @@ def test_cli_budget_created_before_member_assigned_routes_cli_spending_to_projec
     project_no_member,
     project_budget_groups,
     default_llm,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name = project_no_member
@@ -177,19 +173,17 @@ def test_cli_budget_created_before_member_assigned_routes_cli_spending_to_projec
     )
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(premium_alias), none())
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
-    logger.info(
-        "Waiting for cli spend in project_spend_tracking (project=%s)", project_name
-    )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "cli"
+    logger.info("Waiting for cli budget spend in ledger (project=%s)", project_name)
+    ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "cli", float(project_key_info["spend"]) - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        ledger_budget, not_none(), "Project cli budget not found in spend ledger"
+    )
+    assert_that(
+        ledger_budget.current_spending,
         close_to(float(project_key_info["spend"]), 0.0001),
-        "project_spend_tracking total_spend should match project cli key spend.",
+        "Project cli budget current_spending should match project cli key spend.",
     )
 
     # Phase 2 — project budget deleted: spending reverts to personal CLI customer
@@ -222,7 +216,6 @@ def test_premium_budget_created_before_member_assigned_routes_premium_spending_t
     lite_llm_budget_utils,
     project_no_member,
     project_budget_groups,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name = project_no_member
@@ -269,20 +262,21 @@ def test_premium_budget_created_before_member_assigned_routes_premium_spending_t
     )
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(cli_alias), none())
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for premium_models spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for premium_models budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "premium_models"
+    ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "premium_models", float(project_key_info["spend"]) - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        ledger_budget,
+        not_none(),
+        "Project premium_models budget not found in spend ledger",
+    )
+    assert_that(
+        ledger_budget.current_spending,
         close_to(float(project_key_info["spend"]), 0.0001),
-        "project_spend_tracking total_spend should match project premium_models key spend.",
+        "Project premium_models budget current_spending should match project premium_models key spend.",
     )
 
     # Phase 2 — project budget deleted: spending reverts to personal premium customer
@@ -317,7 +311,6 @@ def test_all_budgets_created_before_member_assigned_platform_request_routes_to_p
     admin_project_utils,
     lite_llm_budget_utils,
     project_no_member_with_all_three_budgets,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name, _, _, _, platform_alias, cli_alias, premium_alias = (
@@ -351,20 +344,17 @@ def test_all_budgets_created_before_member_assigned_platform_request_routes_to_p
 
     assert_that(lite_llm_budget_utils.get_customer_info(email), none())
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", float(project_key_info["spend"]) - 0.0001
     )
+    assert_that(budget, not_none(), "Project platform budget not found in spend ledger")
     assert_that(
-        spends["total_spend"],
+        budget.current_spending,
         close_to(float(project_key_info["spend"]), 0.0001),
-        "project_spend_tracking total_spend should match project platform key spend.",
+        "Project platform budget current_spending should match project platform key spend.",
     )
 
 
@@ -380,7 +370,6 @@ def test_all_budgets_created_before_member_assigned_cli_request_routes_to_cli_ke
     lite_llm_budget_utils,
     default_llm,
     project_no_member_with_all_three_budgets,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name, _, _, _, platform_alias, cli_alias, premium_alias = (
@@ -417,19 +406,15 @@ def test_all_budgets_created_before_member_assigned_cli_request_routes_to_cli_ke
 
     assert_that(lite_llm_budget_utils.get_customer_info(cli_customer_id), none())
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
-    logger.info(
-        "Waiting for cli spend in project_spend_tracking (project=%s)", project_name
+    logger.info("Waiting for cli budget spend in ledger (project=%s)", project_name)
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "cli", float(project_key_info["spend"]) - 0.0001
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "cli"
-    )
+    assert_that(budget, not_none(), "Project cli budget not found in spend ledger")
     assert_that(
-        spends["total_spend"],
+        budget.current_spending,
         close_to(float(project_key_info["spend"]), 0.0001),
-        "project_spend_tracking total_spend should match project cli key spend.",
+        "Project cli budget current_spending should match project cli key spend.",
     )
 
 
@@ -444,7 +429,6 @@ def test_all_budgets_created_before_member_assigned_premium_request_routes_to_pr
     admin_project_utils,
     lite_llm_budget_utils,
     project_no_member_with_all_three_budgets,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name, _, _, _, platform_alias, cli_alias, premium_alias = (
@@ -481,20 +465,19 @@ def test_all_budgets_created_before_member_assigned_premium_request_routes_to_pr
 
     assert_that(lite_llm_budget_utils.get_customer_info(premium_customer_id), none())
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for premium_models spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for premium_models budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "premium_models"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "premium_models", float(project_key_info["spend"]) - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        budget, not_none(), "Project premium_models budget not found in spend ledger"
+    )
+    assert_that(
+        budget.current_spending,
         close_to(float(project_key_info["spend"]), 0.0001),
-        "project_spend_tracking total_spend should match project premium_models key spend.",
+        "Project premium_models budget current_spending should match project premium_models key spend.",
     )
 
 
@@ -511,7 +494,6 @@ def test_platform_budget_created_before_member_assigned_routes_cli_spending_to_p
     project_no_member,
     project_budget_groups,
     default_llm,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name = project_no_member
@@ -557,20 +539,19 @@ def test_platform_budget_created_before_member_assigned_routes_cli_spending_to_p
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(cli_alias), none())
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(premium_alias), none())
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", float(project_key_info["spend"]) - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        ledger_budget, not_none(), "Project platform budget not found in spend ledger"
+    )
+    assert_that(
+        ledger_budget.current_spending,
         close_to(float(project_key_info["spend"]), 0.0001),
-        "project_spend_tracking total_spend should match project platform key spend.",
+        "Project platform budget current_spending should match project platform key spend.",
     )
 
     # Phase 2 — project budget deleted: spending reverts to personal CLI customer
@@ -603,7 +584,6 @@ def test_platform_budget_created_before_member_assigned_routes_premium_spending_
     lite_llm_budget_utils,
     project_no_member,
     project_budget_groups,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name = project_no_member
@@ -649,20 +629,19 @@ def test_platform_budget_created_before_member_assigned_routes_premium_spending_
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(cli_alias), none())
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(premium_alias), none())
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for platform spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for platform budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "platform"
+    ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "platform", float(project_key_info["spend"]) - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        ledger_budget, not_none(), "Project platform budget not found in spend ledger"
+    )
+    assert_that(
+        ledger_budget.current_spending,
         close_to(float(project_key_info["spend"]), 0.0001),
-        "project_spend_tracking total_spend should match project platform key spend.",
+        "Project platform budget current_spending should match project platform key spend.",
     )
 
     # Phase 2 — project budget deleted: spending reverts to personal premium customer
@@ -697,7 +676,6 @@ def test_cli_budget_created_before_member_assigned_routes_premium_spending_to_cl
     lite_llm_budget_utils,
     project_no_member,
     project_budget_groups,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name = project_no_member
@@ -745,19 +723,17 @@ def test_cli_budget_created_before_member_assigned_routes_premium_spending_to_cl
     )
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(premium_alias), none())
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
-    logger.info(
-        "Waiting for cli spend in project_spend_tracking (project=%s)", project_name
-    )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "cli"
+    logger.info("Waiting for cli budget spend in ledger (project=%s)", project_name)
+    ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "cli", float(project_key_info["spend"]) - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        ledger_budget, not_none(), "Project cli budget not found in spend ledger"
+    )
+    assert_that(
+        ledger_budget.current_spending,
         close_to(float(project_key_info["spend"]), 0.0001),
-        "project_spend_tracking total_spend should match project cli key spend.",
+        "Project cli budget current_spending should match project cli key spend.",
     )
 
     # Phase 2 — project budget deleted: spending reverts to personal premium customer
@@ -793,7 +769,6 @@ def test_premium_budget_created_before_member_assigned_routes_chat_premium_spend
     lite_llm_budget_utils,
     project_no_member,
     project_budget_groups,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name = project_no_member
@@ -836,20 +811,21 @@ def test_premium_budget_created_before_member_assigned_routes_chat_premium_spend
     )
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(cli_alias), none())
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for premium_models spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for premium_models budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "premium_models"
+    ledger_budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "premium_models", float(project_key_info["spend"]) - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        ledger_budget,
+        not_none(),
+        "Project premium_models budget not found in spend ledger",
+    )
+    assert_that(
+        ledger_budget.current_spending,
         close_to(float(project_key_info["spend"]), 0.0001),
-        "project_spend_tracking total_spend should match project premium_models key spend.",
+        "Project premium_models budget current_spending should match project premium_models key spend.",
     )
 
     # Phase 2 — project budget deleted: spending reverts to personal premium customer
@@ -880,7 +856,6 @@ def test_all_budgets_created_before_member_assigned_chat_premium_request_routes_
     admin_project_utils,
     lite_llm_budget_utils,
     project_no_member_with_all_three_budgets,
-    admin_spend_tracking_utils,
 ):
     email, _ = keycloak_user
     project_name, _, _, _, platform_alias, cli_alias, premium_alias = (
@@ -913,18 +888,17 @@ def test_all_budgets_created_before_member_assigned_chat_premium_request_routes_
 
     assert_that(lite_llm_budget_utils.get_customer_info(premium_customer_id), none())
 
-    logger.info("Triggering spend collection")
-    admin_spend_tracking_utils.collect_spends_nowait()
     logger.info(
-        "Waiting for premium_models spend in project_spend_tracking (project=%s)",
-        project_name,
+        "Waiting for premium_models budget spend in ledger (project=%s)", project_name
     )
-    today = datetime.date.today()
-    spends = admin_spend_tracking_utils.wait_for_project_spends(
-        project_name, today, today, "premium_models"
+    budget = admin_project_utils.wait_for_project_budget_spending_above(
+        project_name, "premium_models", float(project_key_info["spend"]) - 0.0001
     )
     assert_that(
-        spends["total_spend"],
+        budget, not_none(), "Project premium_models budget not found in spend ledger"
+    )
+    assert_that(
+        budget.current_spending,
         close_to(float(project_key_info["spend"]), 0.0001),
-        "project_spend_tracking total_spend should match project premium_models key spend.",
+        "Project premium_models budget current_spending should match project premium_models key spend.",
     )

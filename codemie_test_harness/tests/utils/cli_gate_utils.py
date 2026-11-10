@@ -44,10 +44,12 @@ from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     E7,
     PRESENCE_POLL_S,
     PRESENCE_TIMEOUT_S,
+    REQUIRED,
     STABLE_SESSION_FIELDS,
     Combo,
     ContextCase,
 )
+from codemie_test_harness.tests.utils.analytics_utils import CLI_PROJECT_CONTEXT_TIMEOUT
 from codemie_test_harness.tests.utils.base_utils import get_random_name, poll_until
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     CT_PROTOBUF,
@@ -308,6 +310,36 @@ def send_tracked(client, project, combo: Combo, sender="raw", batch=None) -> Sen
         response = post_batch(client, combo, batch, project)
         discard = parse_discard_response(response, combo.signal, combo.ct)
     return SentBatch(batch, discard)
+
+
+def wait_until_ingest_ready(
+    client, expected: dict, consecutive=3, timeout=2 * CLI_PROJECT_CONTEXT_TIMEOUT
+) -> None:
+    """Wait until the ingest gate answers the client's hook batch for every project with the
+    expected discard reason ({project: reason}, "" for accepted), `consecutive` times in a row.
+
+    The ingest gate caches projects and memberships apart from GET /v1/projects/{name}, so
+    after wait_until_accessible a fresh grant can still get project_context_required. Only that
+    reason is waited out; any other unexpected reply fails at once. The timeout is the cache
+    window plus room for the confirming probes. An accepted probe stores a
+    session under its own repository, which no check of the gate tests reads."""
+    streak = [0]
+
+    def _probe() -> dict:
+        got = {p: send_tracked(client, p, E7).discard.reason for p in expected}
+        streak[0] = streak[0] + 1 if got == expected else 0
+        return got
+
+    def _settled(got: dict) -> bool:
+        unexpected = any(got[p] not in (expected[p], REQUIRED) for p in expected)
+        return unexpected or streak[0] >= consecutive
+
+    got = poll_until(_probe, _settled, timeout=timeout, interval=2)
+    assert_that(
+        got,
+        equal_to(expected),
+        f"the ingest gate is not ready for {sorted(expected)} after {timeout}s",
+    )
 
 
 def assert_sent_accepted(sent: SentBatch, what: str) -> None:

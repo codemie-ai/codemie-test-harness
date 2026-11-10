@@ -109,6 +109,31 @@ class DataSourceUtils(BaseUtils):
 
         return self.wait_for_indexing(datasource.id)
 
+    def create_git_faq_datasource_without_waiting_for_indexing(self, **kwargs):
+        """Create a git-FAQ datasource and return as soon as it is listed, skipping the
+        indexing wait. Use when ``link`` is not expected to resolve (e.g. it carries a
+        credential for a redaction test) so setup does not fail on an unrelated clone error.
+        """
+        create_request_params = {
+            "project_name": kwargs.get("project_name", PROJECT),
+            "link": kwargs.get("link"),
+            "branch": kwargs.get("branch"),
+            "files_filter": kwargs.get("files_filter"),
+            "setting_id": kwargs.get("setting_id"),
+            "description": kwargs.get("description", get_random_name()),
+            "project_space_visible": kwargs.get("project_space_visible", False),
+            "name": kwargs.get("name", get_random_name()),
+        }
+
+        create_datasource_request = GitFaqDataSourceRequest(**create_request_params)
+
+        self.client.datasources.create(create_datasource_request)
+
+        return wait_for_entity(
+            lambda: self.client.datasources.list(per_page=200),
+            entity_name=create_datasource_request.name,
+        )
+
     def update_code_datasource(self, datasource_id, **kwargs):
         datasource = self.get_datasource(datasource_id)
 
