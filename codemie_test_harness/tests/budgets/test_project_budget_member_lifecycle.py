@@ -18,6 +18,9 @@ from time import sleep
 import pytest
 from hamcrest import assert_that, close_to, greater_than, none, not_none
 
+from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
+    publish_ready_content,
+)
 from codemie_test_harness.tests.test_data.budget_test_data import (
     budget_chat_prompt,
     BUDGET_CACHE_DELAY,
@@ -111,6 +114,7 @@ def test_project_member_spending_follows_budget_and_membership_lifecycle(
     lite_llm_budget_utils,
     lifecycle_project,
     project_budget_groups,
+    marketplace_core_gates,
     admin_project_utils,
 ):
     user2_email, _ = keycloak_user_2
@@ -120,7 +124,10 @@ def test_project_member_spending_follows_budget_and_membership_lifecycle(
     premium_alias = project_key_alias(project_name, "premium_models")
 
     logger.info("Creating assistant in project '%s'", project_name)
-    assistant = user1_assistant(project_name=project_name)
+    # Phase 3 publishes this assistant, so its content reaches the core gate thresholds.
+    assistant = user1_assistant(
+        project_name=project_name, **publish_ready_content(marketplace_core_gates)
+    )
 
     try:
         # Phase 1 — member, no project budget: spending goes to User 2 personal

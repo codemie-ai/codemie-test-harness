@@ -27,6 +27,10 @@ from hamcrest import assert_that, equal_to, greater_than
 
 from codemie_sdk.models.assistant import ReactionType
 
+from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
+    publish_ready_content,
+)
+
 
 # ---------------------------------------------------------------------------
 # Module-scoped helper fixture: cloned assistants accumulated across a test
@@ -43,11 +47,11 @@ from codemie_sdk.models.assistant import ReactionType
 @pytest.mark.assistant
 @pytest.mark.api
 def test_clone_count_starts_at_zero_and_increments_to_one(
-    assistant, assistant_utils, cleanup_cloned_assistants
+    assistant, assistant_utils, cleanup_cloned_assistants, marketplace_core_gates
 ):
     """TC-01: Clone count default is 0; first clone increments it to 1."""
     # Arrange
-    source = assistant()
+    source = assistant(**publish_ready_content(marketplace_core_gates))
     assistant_utils.publish_assistant_to_marketplace(
         source.id, categories=["quality-assurance"], ignore_recommendations=True
     )
@@ -93,11 +97,11 @@ def test_clone_count_starts_at_zero_and_increments_to_one(
 @pytest.mark.api
 @pytest.mark.parametrize("n", [2, 5])
 def test_sequential_clones_each_increment_clone_count(
-    n, assistant, assistant_utils, cleanup_cloned_assistants
+    n, assistant, assistant_utils, cleanup_cloned_assistants, marketplace_core_gates
 ):
     """TC-04: After N sequential clones, clone_count equals N."""
     # Arrange
-    source = assistant()
+    source = assistant(**publish_ready_content(marketplace_core_gates))
     assistant_utils.publish_assistant_to_marketplace(
         source.id, categories=["quality-assurance"], ignore_recommendations=True
     )
@@ -130,11 +134,11 @@ def test_sequential_clones_each_increment_clone_count(
 @pytest.mark.assistant
 @pytest.mark.api
 def test_clone_updates_assistant_usage_metric(
-    assistant, assistant_utils, cleanup_cloned_assistants
+    assistant, assistant_utils, cleanup_cloned_assistants, marketplace_core_gates
 ):
     """TC-05: Clone action updates the clone_count usage metric (increments it)."""
     # Arrange
-    source = assistant()
+    source = assistant(**publish_ready_content(marketplace_core_gates))
     assistant_utils.publish_assistant_to_marketplace(
         source.id, categories=["quality-assurance"], ignore_recommendations=True
     )
@@ -171,11 +175,11 @@ def test_clone_updates_assistant_usage_metric(
 @pytest.mark.assistant
 @pytest.mark.api
 def test_clone_does_not_alter_reaction_counts(
-    assistant, assistant_utils, cleanup_cloned_assistants
+    assistant, assistant_utils, cleanup_cloned_assistants, marketplace_core_gates
 ):
     """TC-06: After cloning, unique_likes_count and unique_dislikes_count are unchanged."""
     # Arrange — publish and add a LIKE reaction to establish a baseline
-    source = assistant()
+    source = assistant(**publish_ready_content(marketplace_core_gates))
     assistant_utils.publish_assistant_to_marketplace(
         source.id, categories=["quality-assurance"], ignore_recommendations=True
     )

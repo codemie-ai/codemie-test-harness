@@ -23,6 +23,7 @@ from hamcrest import assert_that, empty
 
 from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     CLI_ANALYTICS_USERS,
+    DISABLED,
     E7,
     FLAG_OFF_DOMAIN,
     CliSessionSeed,
@@ -42,6 +43,7 @@ from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
 from codemie_test_harness.tests.utils.cli_gate_utils import (
     assert_sent_accepted,
     send_tracked,
+    wait_until_ingest_ready,
     wait_until_listed,
 )
 from codemie_test_harness.tests.utils.client_factory import get_client
@@ -118,6 +120,7 @@ def gate_projects(
         for name in names:
             user_utils.assign_user_to_project(member_id, name)
         wait_until_accessible(gate_member_client, names)
+        wait_until_ingest_ready(gate_member_client, {names[0]: "", names[1]: DISABLED})
         yield GateProjects(p_on=names[0], p_off=names[1])
     finally:
         delete_projects_strict(project_utils, names)
@@ -195,6 +198,7 @@ def lifecycle_projects(
             admin.update_project(name, cli_analytics_enabled=True)
             user_utils.assign_user_to_project(member_id, name)
         wait_until_accessible(gate_member_client, names)
+        wait_until_ingest_ready(gate_member_client, dict.fromkeys(names, ""))
         yield LifecycleProjects(names[0], names[1], admin)
     finally:
         delete_projects_strict(project_utils, names)
@@ -238,6 +242,7 @@ def project_world(
         )
         wait_until_accessible(gate_member_client, [name])
         wait_until_accessible(project_admin, [name])
+        wait_until_ingest_ready(gate_member_client, {name: ""})
         yield ProjectWorld(
             name,
             {

@@ -21,6 +21,9 @@ from codemie_test_harness.tests.ui.pageobject.assistants.assistants_marketplace_
 from codemie_test_harness.tests.ui.pageobject.assistants.create_edit_assistant_page import (
     CreateEditAssistantPage,
 )
+from codemie_test_harness.tests.ui.pageobject.assistants.share_assistant_popup import (
+    ShareAssistantPopup,
+)
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, expect
 from reportportal_client import step
@@ -115,6 +118,11 @@ class AssistantsPage(BasePage):
     def action_copy_link(self):
         """Dropdown 'Copy Link' button."""
         return self.page.locator("button").filter(has_text="Copy Link")
+
+    @property
+    def action_share(self):
+        """Dropdown 'Share' button (owner-only)."""
+        return self.page.locator("button").filter(has_text="Share")
 
     @property
     def action_edit(self):
@@ -329,6 +337,14 @@ class AssistantsPage(BasePage):
         return CreateEditAssistantPage(self.page)
 
     @step
+    def open_share_popup(self, name: str):
+        """Open the 'Share assistant' dialog from the card's 3-dot menu (owner-only)."""
+        self.close_new_release_popup()
+        self.open_action_menu(name, self.action_share)
+        self.action_share.click()
+        return ShareAssistantPopup(self.page)
+
+    @step
     def open_assistant_details(self, name: str):
         """Open assistant details page by clicking on the assistant card and return the view page."""
         self.click_assistant_card(name)
@@ -388,6 +404,28 @@ class AssistantsPage(BasePage):
     def should_not_see_assistant_with_name(self, name: str):
         """Verify that an assistant with specific name is not visible."""
         expect(self.get_assistant_card_by_name(name)).to_be_hidden()
+        return self
+
+    def assistant_status_badge(self, name: str):
+        """Marketplace review badge (REVIEW, REJECTED or VERIFIED) of an assistant card."""
+        return self.get_assistant_card_by_name(name).get_by_test_id(
+            "assistant-status-badge"
+        )
+
+    @step
+    def should_see_status_badge(self, name: str, status: str, text: str):
+        """The card shows the badge with the given data-status and label."""
+        badge = self.assistant_status_badge(name)
+        expect(badge).to_have_attribute("data-status", status, timeout=15000)
+        expect(badge).to_contain_text(text)
+        return self
+
+    @step
+    def should_see_rejection_reason_on_badge(self, name: str, reason: str):
+        """The rejected badge carries the rejection reason as its tooltip text."""
+        expect(self.assistant_status_badge(name)).to_have_attribute(
+            "data-pr-tooltip", reason
+        )
         return self
 
     @step
