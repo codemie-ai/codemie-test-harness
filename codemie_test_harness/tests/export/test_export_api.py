@@ -1120,6 +1120,30 @@ def test_export_refuses_bare_mcp_catalog_link(
 # ---------------------------------------------------------------------------------------------
 
 
+def _testable_github_credentials():
+    """GitHub credentials that the ``/v1/settings/test/`` endpoint can actually verify.
+
+    ``CredentialsManager.github_credentials()`` points ``url`` at the bare GitHub host (used
+    for tool-config-style GIT integrations elsewhere in the suite), which the test-connection
+    endpoint rejects with 400 ("Testing the connection requires the full repository URL") --
+    confirmed against the live environment. Pointing ``url`` at a real repository's clone URL
+    (``GITHUB_PROJECT`` + ``.git``, the same repo already relied on by the datasource tests,
+    e.g. datasource_utils.py) is what the endpoint expects. Mirrors
+    ``test_settings_transfer.py``'s ``_testable_gitlab_credentials``.
+    """
+    return [
+        CredentialValues(
+            key="url",
+            value=f"{CredentialsManager.get_parameter('GITHUB_PROJECT')}.git",
+        ),
+        CredentialValues(key="auth_type", value="pat"),
+        CredentialValues(key="name", value=""),
+        CredentialValues(
+            key="token", value=CredentialsManager.get_parameter("GITHUB_TOKEN")
+        ),
+    ]
+
+
 @pytest.mark.export
 @pytest.mark.github
 @pytest.mark.api
@@ -1131,10 +1155,15 @@ def test_export_integration_round_trip_leaves_entity_unchanged(
 ):
     """@case public-export-rest-endpoint_TC_022"""
     # Real, working GitHub credentials, not a placeholder: the round trip below sends
-    # CREDENTIAL_MASK for every credential key (export never reveals the stored value), and
-    # the only way to prove the update didn't clobber the real secret with that mask literal
-    # is to use the credential for real afterwards.
-    credentials = CredentialsManager.github_credentials()
+    # CREDENTIAL_MASK for the secret ("token") only (export never reveals the stored value),
+    # and the only way to prove the update didn't clobber the real secret with that mask
+    # literal is to use the credential for real afterwards. The non-secret keys (auth_type,
+    # name, url) must travel as real values: the backend's mask placeholder means "keep the
+    # stored secret" for sensitive fields only, and the GIT request validator rejects a
+    # non-"pat"/"github_app"/"oauth" auth_type outright, so masking it would 422 before the
+    # mask is ever considered.
+    credentials = _testable_github_credentials()
+    credential_lookup = {cred.key: cred.value for cred in credentials}
     if scope == "project":
         integration = integration_utils.create_project_integration(
             credential_type=CredentialTypes.GIT, credentials=credentials
@@ -1153,7 +1182,12 @@ def test_export_integration_round_trip_leaves_entity_unchanged(
             alias=spec["alias"],
             credential_type=CredentialTypes(spec["credential_type"]),
             credential_values=[
-                CredentialValues(key=e["key"], value=CREDENTIAL_MASK)
+                CredentialValues(
+                    key=e["key"],
+                    value=CREDENTIAL_MASK
+                    if e["key"] == "token"
+                    else credential_lookup[e["key"]],
+                )
                 for e in spec["credential_values"]
             ],
             setting_type=IntegrationType(spec["setting_type"]),
