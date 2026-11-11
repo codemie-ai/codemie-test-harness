@@ -93,8 +93,13 @@ class ResponseReadyTab(BasePage):
 
     @property
     def announcer(self) -> Locator:
-        """Polite sr-only live region at app level: 'AI response ready' while the signal is pending, empty otherwise."""
-        return self.page.locator("output.sr-only")
+        """App-level live region of the response-ready signal: 'AI response ready' while pending, empty otherwise.
+
+        The component renders a bare ``<output class="sr-only">``; the many other
+        sr-only outputs on the page (the generic Announcement component) carry
+        ``aria-live``, which is what tells them apart.
+        """
+        return self.page.locator("output.sr-only:not([aria-live])")
 
     # ==================== SETUP (before navigation) ====================
 
@@ -203,6 +208,16 @@ class ResponseReadyTab(BasePage):
     def should_have_empty_announcer(self):
         """Verify the live region is empty."""
         expect(self.announcer).to_have_text("")
+        return self
+
+    @step
+    def should_see_notification_permission(self, expected: str):
+        """Verify the page reports ``Notification.permission`` as ``expected`` (setup check)."""
+        assert_that(
+            self.page.evaluate("Notification.permission"),
+            equal_to(expected),
+            "Notification permission seen by the page differs from the test setup",
+        )
         return self
 
     @step

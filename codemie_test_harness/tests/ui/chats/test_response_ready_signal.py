@@ -61,9 +61,14 @@ def response_ready_tab(page):
 
 @pytest.fixture
 def granted_notifications(context, response_ready_tab):
-    """Grant the notifications permission on the browser context and record Notification calls."""
+    """Grant the notifications permission on the browser context and record Notification calls.
+
+    The recorder reports 'granted' explicitly: headless Chromium does not reliably
+    surface the context grant through Notification.permission, and the app only
+    constructs a Notification when it sees 'granted'.
+    """
     context.grant_permissions(["notifications"])
-    response_ready_tab.record_notifications()
+    response_ready_tab.record_notifications(permission="granted")
 
 
 # @case notify-users-llm-response-completed_TC_001
@@ -106,6 +111,7 @@ def test_granted_permission_shows_one_notification_when_reply_finishes_hidden(
     one Notification titled 'CodeMie' with the body 'AI response is ready'."""
     chat_page = navigate_to_new_chat_page_with_assistant(page)
     response_ready_tab.remember_plain_title()
+    response_ready_tab.should_see_notification_permission("granted")
 
     response_ready_tab.mark_page_hidden()
     chat_page.send_message(SHORT_PROMPT)
@@ -130,6 +136,7 @@ def test_reply_finished_while_visible_changes_nothing(
     region empty and constructs no Notification."""
     chat_page = navigate_to_new_chat_page_with_assistant(page)
     response_ready_tab.remember_plain_title()
+    response_ready_tab.should_see_notification_permission("granted")
 
     chat_page.send_message(SHORT_PROMPT)
     chat_page.wait_for_assistant_response()
@@ -180,12 +187,17 @@ def test_no_signal_when_generation_is_stopped_while_hidden(
     chat_page.navigate_to(slow_response_conversation)
     chat_page.should_have_chat_input_visible()
     response_ready_tab.remember_plain_title()
+    response_ready_tab.should_see_notification_permission("granted")
 
     response_ready_tab.mark_page_hidden()
     chat_page.send_message(LONG_PROMPT)
     chat_page.wait_for_generation_to_start()
     chat_page.click_stop_generation()
-    chat_page.should_have_continue_button_visible()
+    # An assistant chat has no step to resume after Stop, so "Send" comes back
+    # (the "Continue" button exists only in workflow chats).
+    chat_page.wait_for_idle_state()
+    chat_page.should_have_send_button_visible()
+    chat_page.should_not_have_stop_button_visible()
 
     response_ready_tab.should_have_plain_title()
     response_ready_tab.should_have_constructed_notifications(0)
