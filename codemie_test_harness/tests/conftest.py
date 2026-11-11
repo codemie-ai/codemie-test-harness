@@ -2091,6 +2091,7 @@ def skill(skill_utils):
         content=None,
         visibility=None,
         categories=None,
+        mcp_servers=None,
     ):
         nonlocal created_skill
         from codemie_sdk.models.skill import SkillVisibility
@@ -2101,6 +2102,7 @@ def skill(skill_utils):
             content=content,
             visibility=visibility or SkillVisibility.PROJECT,
             categories=categories,
+            mcp_servers=mcp_servers,
         )
         return created_skill
 
