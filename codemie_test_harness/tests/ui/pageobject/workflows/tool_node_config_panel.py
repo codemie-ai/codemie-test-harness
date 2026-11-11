@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+
 from playwright.sync_api import Locator, Page, expect
 from reportportal_client import step
 
@@ -102,6 +104,47 @@ class ToolNodeConfigPanel(BasePage):
         return self.config_panel.get_by_role("region", name="Tool Configuration")
 
     @property
+    def to_argument_label(self) -> Locator:
+        """Label of the "To" free-entry list tool argument (InputArray).
+
+        Matched on exact text ("To" or "To*") so it never matches a different field
+        whose label merely starts with the same letters (e.g. "Tool Result JSON Pointer").
+        """
+        return self.tool_configuration_region.locator("label").filter(
+            has_text=re.compile(r"^To\*?$")
+        )
+
+    @property
+    def to_argument_required_marker(self) -> Locator:
+        """Persistent red asterisk span in the "To" field's label, rendered only while
+        the field is required (InputArray.tsx)."""
+        return self.to_argument_label.locator("span.input-label-required")
+
+    @property
+    def to_argument_empty_required_input(self) -> Locator:
+        """Visually-hidden placeholder input InputArray renders for the "To" field while
+        it is required and has no rows yet (aria-label "To required", aria-required
+        "true") — this is what announces the requirement with zero rows present."""
+        return self.tool_configuration_region.get_by_label("To required", exact=True)
+
+    @property
+    def to_argument_add_button(self) -> Locator:
+        """Button that appends an empty row to the "To" list argument."""
+        return self.tool_configuration_region.get_by_role("button", name="Add to")
+
+    @property
+    def to_argument_row_input(self) -> Locator:
+        """First row's input for the "To" list argument, once at least one row exists
+        (aria-label "To 1")."""
+        return self.tool_configuration_region.get_by_label("To 1", exact=True)
+
+    @property
+    def to_argument_error(self) -> Locator:
+        """Inline validation message InputArray renders under the "To" field when Save
+        is refused because it is still empty."""
+        return self.tool_configuration_region.get_by_text("Field is required")
+
+    @property
     def integration_dropdown_trigger(self) -> Locator:
         """Toolkit-level integration dropdown trigger.
 
@@ -133,6 +176,29 @@ class ToolNodeConfigPanel(BasePage):
         """Verify that the tool node config panel is visible."""
         expect(self.config_panel).to_be_visible()
         expect(self.panel_heading).to_be_visible()
+        return self
+
+    @step
+    def should_be_hidden(self):
+        """Verify the tool node config panel has closed (e.g. after a successful save)."""
+        expect(self.config_panel).to_be_hidden()
+        return self
+
+    @step
+    def should_have_to_argument_required(self):
+        """Assert the "To" free-entry list argument shows the persistent required
+        marker on its label and aria-required="true" on its (empty) row placeholder."""
+        expect(self.to_argument_label).to_be_visible()
+        expect(self.to_argument_required_marker).to_be_visible()
+        expect(self.to_argument_empty_required_input).to_have_attribute(
+            "aria-required", "true"
+        )
+        return self
+
+    @step
+    def should_have_to_argument_error(self):
+        """Assert Save was refused with the "To" field's inline required-value error."""
+        expect(self.to_argument_error).to_be_visible()
         return self
 
     @step
@@ -280,15 +346,33 @@ class ToolNodeConfigPanel(BasePage):
         # does not auto-wait like Playwright actions do, so wait for it explicitly first
         # to avoid an intermittent zero-count read that would silently skip filling.
         self.tool_configuration_region.wait_for(state="visible")
+        # Tool Arguments fetches its schema asynchronously and shows a "Loading" spinner
+        # meanwhile; scanning for required fields before that resolves would silently
+        # find and fill nothing, since the fields do not exist in the DOM yet. This is a
+        # no-op wait when the schema is already loaded (the locator is simply absent).
+        self.tool_configuration_region.locator('[aria-label="Loading"]').wait_for(
+            state="hidden"
+        )
         # Inputs are not nested inside their <label> (linked via for/id), so match on the
-        # input's own aria-required attribute rather than via the label.
+        # input's own aria-required attribute rather than via the label. Readonly inputs
+        # are excluded: InputArray renders a readonly sr-only placeholder (aria-required
+        # "true") for an empty required list field, which is not fillable and must be
+        # populated via its own "Add" button instead (see fill_to_argument()).
         required_fields = self.tool_configuration_region.locator(
-            'input[aria-required="true"], textarea[aria-required="true"]'
+            'input[aria-required="true"]:not([readonly]), '
+            'textarea[aria-required="true"]:not([readonly])'
         )
         for i in range(required_fields.count()):
             field = required_fields.nth(i)
             if field.input_value() == "":
                 field.fill(value)
+        return self
+
+    @step
+    def fill_to_argument(self, value: str):
+        """Append one row to the "To" list argument and fill it with the given value."""
+        self.to_argument_add_button.click()
+        self.to_argument_row_input.fill(value)
         return self
 
     @step

@@ -155,3 +155,14 @@ CLONE_PAGE_TITLE = "Clone Data Source"
 CLONE_SIDEBAR_TITLE = "Clone DataSource"
 CLONE_SIDEBAR_SUBTITLE = "Create a new data source based on an existing one"
 CLONE_DATA_SOURCE_NOT_FOUND = "Data source not found"
+
+# ==================== GIT FILES FILTER PLACEHOLDER ====================
+
+# Each example must sit in the Git "Files Filter" placeholder as its own line.
+GIT_FILES_FILTER_PLACEHOLDER_EXAMPLES = [
+    "*.py",
+    "*.txt",
+    "debug.log*",
+    "/<folder_name>/*",
+    "/<folder_name>/*/*.cs",
+]

@@ -1218,6 +1218,21 @@ def invalid_gitlab_integration(integration_utils):
 
 
 @pytest.fixture(scope="session")
+def ms_exchange_integration(integration_utils):
+    """MS Exchange integration for workflow Tool-node tests (exchange_forward, exchange_send).
+
+    Dummy NTLM-path credentials — integration creation does not validate them live.
+    """
+    integration = integration_utils.create_integration(
+        credential_type=CredentialTypes.MS_EXCHANGE,
+        credential_values=CredentialsManager.ms_exchange_credentials(),
+    )
+    yield integration
+    if integration:
+        integration_utils.delete_integration(integration)
+
+
+@pytest.fixture(scope="session")
 def github_integration(integration_utils, github_seed_issue, github_seed_file):
     integration = integration_utils.create_integration(
         credential_type=CredentialTypes.GIT,
@@ -2100,6 +2115,7 @@ def skill(skill_utils):
         content=None,
         visibility=None,
         categories=None,
+        mcp_servers=None,
     ):
         nonlocal created_skill
         from codemie_sdk.models.skill import SkillVisibility
@@ -2110,6 +2126,7 @@ def skill(skill_utils):
             content=content,
             visibility=visibility or SkillVisibility.PROJECT,
             categories=categories,
+            mcp_servers=mcp_servers,
         )
         return created_skill
 
