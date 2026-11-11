@@ -212,7 +212,6 @@ def _make_test_params():
 
 
 @pytest.mark.smoke
-@pytest.mark.sanity
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.api

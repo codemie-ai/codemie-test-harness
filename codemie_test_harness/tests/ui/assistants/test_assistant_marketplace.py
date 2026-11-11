@@ -216,7 +216,6 @@ def test_marketplace_filter_by_category(
     marketplace_page.should_see_assistant_in_marketplace(created_assistant.name)
 
 
-@pytest.mark.sanity
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.prod_regression
