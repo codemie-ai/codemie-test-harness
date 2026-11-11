@@ -33,6 +33,8 @@ ID_PATTERN = r'\{\s*"?ID"?\s*:\s*"?(\d+)"?\s*\}'
 
 WORK_ITEM_ID_PATTERN = r"workItems/(\d+)"
 
+ADO_FIELD_REFERENCE_SKILL_NAME = "azure-devops-work-item-fields"
+
 vcs_integrations = {
     VcsTool.GITHUB: "github_integration",
     VcsTool.GITLAB: "gitlab_integration",
