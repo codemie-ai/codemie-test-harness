@@ -14,8 +14,9 @@
 
 """Test data for MCP server-side instructions tests.
 
-Builds a real stdio MCP server (via ``uv run ... python -c "<source>"``, the same
-``uv``/``mcp<2.0.0`` tooling the other MCP server fixtures in this module use) whose
+Builds a real stdio MCP server (via ``uvx --with mcp<2.0.0 python -c "<source>"`` — the
+backend only permits a fixed set of MCP server commands, and ``uvx`` is the permitted one
+the other local MCP server fixtures in this module already use) whose
 ``FastMCP(..., instructions=...)`` declares server-side instructions at handshake. The
 instructions ask the model to relay a predefined, deterministic sentence whenever its one
 tool is called, so a chat response can be checked for literal compliance instead of judged
@@ -54,9 +55,12 @@ INSTRUCTIONS_MCP_SERVER = MCPServerDetails(
     description="Fixture MCP server declaring server-side instructions at handshake",
     enabled=True,
     config=MCPServerConfig(
-        command="uv",
+        # "uvx" is the only permitted command that can run arbitrary Python: it
+        # provisions an ephemeral env with the "--with" deps and then execs the
+        # given command ("python -c <source>") inside it, the same way the other
+        # fixtures here use "uvx --with mcp<2.0.0 <package>" for a published server.
+        command="uvx",
         args=[
-            "run",
             "--with",
             "mcp<2.0.0",
             "python",
