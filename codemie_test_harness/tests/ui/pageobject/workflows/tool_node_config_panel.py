@@ -346,6 +346,13 @@ class ToolNodeConfigPanel(BasePage):
         # does not auto-wait like Playwright actions do, so wait for it explicitly first
         # to avoid an intermittent zero-count read that would silently skip filling.
         self.tool_configuration_region.wait_for(state="visible")
+        # Tool Arguments fetches its schema asynchronously and shows a "Loading" spinner
+        # meanwhile; scanning for required fields before that resolves would silently
+        # find and fill nothing, since the fields do not exist in the DOM yet. This is a
+        # no-op wait when the schema is already loaded (the locator is simply absent).
+        self.tool_configuration_region.locator('[aria-label="Loading"]').wait_for(
+            state="hidden"
+        )
         # Inputs are not nested inside their <label> (linked via for/id), so match on the
         # input's own aria-required attribute rather than via the label. Readonly inputs
         # are excluded: InputArray renders a readonly sr-only placeholder (aria-required
