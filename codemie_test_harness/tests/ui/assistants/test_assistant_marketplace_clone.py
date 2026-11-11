@@ -79,7 +79,6 @@ def test_clone_count_badge_visible_on_marketplace_card(page):
 
 
 @pytest.mark.not_for_parallel_run
-@pytest.mark.sanity
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
