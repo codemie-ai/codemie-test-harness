@@ -45,6 +45,7 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
     project_key_alias,
 )
 from codemie_test_harness.tests.utils.activity_utils import ActivityUtils
+from codemie_test_harness.tests.utils.admin_budget_utils import AdminBudgetUtils
 from codemie_test_harness.tests.utils.admin_project_budget_group_utils import (
     AdminProjectBudgetGroupUtils,
 )
@@ -52,6 +53,7 @@ from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
 from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
+from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.budget_utils import BudgetUtils
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
@@ -59,6 +61,7 @@ from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
 from codemie_test_harness.tests.utils.proxy_utils import ProxyUtils
 from codemie_test_harness.tests.utils.skill_utils import SkillsUtils
+from codemie_test_harness.tests.utils.user_utils import UserUtils
 from codemie_test_harness.tests.utils.workflow_utils import WorkflowUtils
 from codemie_test_harness.tests.utils.yaml_utils import (
     AssistantModel,
@@ -83,6 +86,63 @@ def keycloak_user(keycloak_utils, lite_llm_budget_utils):
         f"{email}_{DEFAULT_CLI_BUDGET_ID}",
     ):
         lite_llm_budget_utils.delete_customer(customer_id)
+
+
+@pytest.fixture(scope="function")
+def budget_creator(keycloak_utils, user_utils):
+    """Factory ``(name) -> (user_client, expected_created_by_name)``.
+
+    Creates a maintainer-role user (admin budgets require ``maintainer_access_only`` —
+    a plain admin test user gets 403, confirmed live) and sets its backend ``name`` field
+    to exactly ``name``; an empty string clears it, forcing the created_by_name username
+    fallback (AC-5, ``budget_service.py:342``: ``user.name or user.username``). Returns
+    the display name ``resolve_creator_names`` is expected to produce, so a test can assert
+    the budgets API echoes it. Every created user is deleted after the test.
+    """
+    created_emails = []
+
+    def _create(name: str):
+        uid = secrets.token_hex(4)
+        email = f"autotest_budgetcreator_{uid}@email.com"
+        password = keycloak_utils.create_platform_user(email=email)
+        created_emails.append(email)
+        user_client = get_client(username=email, password=password)
+        user_id = user_client.users.about_me().user_id
+        user_utils.update_admin_user(user_id, is_maintainer=True)
+        UserUtils(user_client).wait_until_user_management_effective()
+        detail = user_utils.update_admin_user(user_id, name=name)
+        return user_client, (detail.name or detail.username)
+
+    yield _create
+
+    for email in created_emails:
+        try:
+            keycloak_utils.delete_user(email)
+        except Exception as e:
+            logger.warning(f"Failed to delete user {email}: {e}")
+
+
+@pytest.fixture(scope="function")
+def budget_for_creator_state(request, budget_creator, admin_budget_utils):
+    """Indirect-parametrized: ``(budget_id, expected created_by_name)`` for one creator state.
+
+    ``request.param`` is one of ``"named"``, ``"unnamed"``, ``"system"``, ``"unresolved"``.
+    ``orphaned_creator_budget`` (tests/conftest.py) is requested lazily, only for the
+    ``"unresolved"`` state, so the other three states don't pay for provisioning and
+    deleting an extra user.
+    """
+    state = request.param
+    if state in ("named", "unnamed"):
+        user_client, display_name = budget_creator(
+            get_random_name() if state == "named" else ""
+        )
+        budget_id = f"autotest-cs-{secrets.token_hex(4)}"
+        AdminBudgetUtils(user_client).create_budget(budget_id, "platform")
+        return budget_id, display_name
+    if state == "system":
+        return admin_budget_utils.find_preconfigured_budget()["budget_id"], None
+    budget_id = request.getfixturevalue("orphaned_creator_budget")
+    return budget_id, None
 
 
 @pytest.fixture(scope="function")
