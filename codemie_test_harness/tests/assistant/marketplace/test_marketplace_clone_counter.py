@@ -42,7 +42,6 @@ from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data im
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.sanity
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.api
@@ -91,7 +90,6 @@ def test_clone_count_starts_at_zero_and_increments_to_one(
 
 
 @pytest.mark.not_for_parallel_run
-@pytest.mark.sanity
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.api
@@ -129,7 +127,6 @@ def test_sequential_clones_each_increment_clone_count(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.sanity
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.api
@@ -170,7 +167,6 @@ def test_clone_updates_assistant_usage_metric(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.sanity
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.api
