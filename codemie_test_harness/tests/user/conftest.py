@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import secrets
-
 import pytest
 
+from codemie_test_harness.tests.conftest import _disposable_user
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.user_utils import UserUtils
@@ -94,20 +93,13 @@ def disposable_project_member(user_utils, disposable_user, temp_project):
 def second_disposable_user(keycloak_utils):
     """A second, independent function-scoped fresh user; deleted after the test.
 
-    Unlike `temp_project_with_me` style fixtures, this does not reuse `disposable_user`:
-    a test needing two distinct existing users (e.g. a remap conflict case) cannot
-    request the same fixture twice in one test.
+    Unlike fixtures that reuse `disposable_user`, this is a distinct fixture so a test
+    needing two distinct existing users (e.g. a remap conflict case) cannot request the
+    same fixture twice in one test. Shares `disposable_user`'s setup/teardown via
+    `_disposable_user`, including its try/except around client creation and its
+    logged (not swallowed) teardown failures.
     """
-    uid = secrets.token_hex(4)
-    email = f"autotest_user2_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=email)
-    user_client = get_client(username=email, password=password)
-    user_id = user_client.users.about_me().user_id
-    yield email, user_id, user_client
-    try:
-        keycloak_utils.delete_user(email)
-    except Exception:
-        pass
+    yield from _disposable_user(keycloak_utils, "user2")
 
 
 ACTOR_FIXTURES = {

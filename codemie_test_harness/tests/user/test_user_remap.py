@@ -43,7 +43,7 @@ from codemie_test_harness.tests.utils.yaml_utils import (
 @pytest.mark.user
 @pytest.mark.api
 def test_remap_moves_user_to_new_id(user_utils, disposable_user, new_user_id_factory):
-    """@case identity-remap-migration_TC_001"""
+    # @case identity-remap-migration_TC_001
     _, old_user_id, _ = disposable_user
     new_user_id = new_user_id_factory()
 
@@ -87,14 +87,24 @@ def test_remap_moves_owned_content_to_new_user_id(
     default_llm,
     request,
 ):
-    """@case identity-remap-migration_TC_003"""
+    # @case identity-remap-migration_TC_003
     _, old_user_id, old_user_client = disposable_user
     new_user_id = new_user_id_factory()
 
     project_name = get_random_name()
     admin_utils.create_project(project_name)
 
+    old_user_assistant_utils = AssistantUtils(old_user_client)
+    old_user_conversation_utils = ConversationUtils(old_user_client)
+    old_user_workflow_utils = WorkflowUtils(old_user_client)
+
     def _cleanup_project():
+        # delete_project_cascade removes assistants, workflows and budgets, but not
+        # conversations; the conversation created below needs its own cleanup first.
+        try:
+            old_user_conversation_utils.delete_conversation(conversation_id)
+        except Exception:
+            pass
         try:
             project_utils.remove_user_from_project(project_name, new_user_id)
         except Exception:
@@ -105,10 +115,6 @@ def test_remap_moves_owned_content_to_new_user_id(
             pass
 
     request.addfinalizer(_cleanup_project)
-
-    old_user_assistant_utils = AssistantUtils(old_user_client)
-    old_user_conversation_utils = ConversationUtils(old_user_client)
-    old_user_workflow_utils = WorkflowUtils(old_user_client)
 
     # --- content owned by old_user_id, created before the remap ---
 
@@ -231,7 +237,7 @@ def test_remap_moves_owned_content_to_new_user_id(
 def test_remap_to_existing_different_user_id_is_rejected_not_merged(
     user_utils, disposable_user, second_disposable_user
 ):
-    """@case identity-remap-migration_TC_004"""
+    # @case identity-remap-migration_TC_004
     _, old_user_id, _ = disposable_user
     _, existing_user_id, _ = second_disposable_user
 
@@ -268,7 +274,7 @@ def test_remap_to_existing_different_user_id_is_rejected_not_merged(
 def test_remap_already_migrated_pair_is_idempotent(
     user_utils, disposable_user, new_user_id_factory
 ):
-    """@case identity-remap-migration_TC_005"""
+    # @case identity-remap-migration_TC_005
     _, old_user_id, _ = disposable_user
     new_user_id = new_user_id_factory()
     first = user_utils.remap_user(old_user_id, new_user_id)
@@ -294,8 +300,40 @@ def test_remap_already_migrated_pair_is_idempotent(
 
 @pytest.mark.user
 @pytest.mark.api
+def test_default_user_cannot_remap_user(
+    user_utils, default_user_utils, disposable_user
+):
+    """A plain user holding none of the admin/maintainer/auditor roles must not be able
+    to call the remap endpoint. `maintainer_client` cannot stand in for that actor here:
+    the backend's own role normalization sets is_admin on every maintainer, so maintainer
+    is proven admin-equivalent (or higher) throughout this suite, never a 403 case
+    (see test_platform_roles.py). `default_user_utils` is the fixture this suite already
+    uses to prove 403 on the sibling admin user-management endpoints. The target id is a
+    bare string, not `new_user_id_factory`: a rejected call never creates a row to clean up.
+    """
+    _, old_user_id, _ = disposable_user
+    new_user_id = f"autotest-remap-denied-{get_random_name()}"
+
+    status = default_user_utils.remap_user_status_code(old_user_id, new_user_id)
+
+    assert_that(
+        status,
+        equal_to(403),
+        "Default user should be denied access to the remap endpoint",
+    )
+
+    old_detail = user_utils.get_admin_user(old_user_id)
+    assert_that(
+        old_detail.id,
+        equal_to(old_user_id),
+        "A rejected remap must not rewrite old_user_id's row",
+    )
+
+
+@pytest.mark.user
+@pytest.mark.api
 def test_remap_when_neither_id_exists_returns_404(user_utils):
-    """@case identity-remap-migration_TC_006"""
+    # @case identity-remap-migration_TC_006
     missing_old_id = f"autotest-remap-missing-old-{get_random_name()}"
     missing_new_id = f"autotest-remap-missing-new-{get_random_name()}"
 
@@ -319,7 +357,7 @@ def test_remap_when_neither_id_exists_returns_404(user_utils):
 def test_remap_old_user_id_ceases_to_resolve(
     user_utils, disposable_user, new_user_id_factory
 ):
-    """@case identity-remap-migration_TC_009"""
+    # @case identity-remap-migration_TC_009
     _, old_user_id, _ = disposable_user
     new_user_id = new_user_id_factory()
 
