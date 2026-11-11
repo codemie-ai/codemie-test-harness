@@ -404,7 +404,7 @@ def delete_providers(client) -> int:
     return count
 
 
-def delete_cost_centers(client) -> int:
+def delete_cost_centers(client, prefix: str | None = None) -> int:
     """Delete test cost centers whose names match the test naming pattern.
 
     Targets cost centers with names of the form '[a-z]{3}-[a-z]{10}' — the
@@ -413,7 +413,19 @@ def delete_cost_centers(client) -> int:
     created_by is a user id, not comparable to TEST_USER's display name),
     so this relies entirely on the distinctive name pattern, same as
     delete_providers above. A cost center still assigned to a project 409s
-    on delete; that failure is logged and skipped, not raised.
+    on delete; that failure is logged and skipped, not raised — unless
+    `prefix` resolves it (see below).
+
+    `prefix`, when given (this session's own autotest_entity_prefix), is used
+    to retry a 409 once: a prefix-scoped project search (same substring
+    search the project sweep above already does, so this never looks at, or
+    touches, another session's projects on the shared preview stand) finds
+    out whether the project still pinning the cost center is one of THIS
+    session's own autotest-* projects that survived that sweep (e.g. its own
+    delete_project_cascade call failed). If so, that project is
+    cascade-deleted here and the cost center delete is retried once. A cost
+    center pinned to a project from another session — or to nothing, when
+    `prefix` is omitted — is logged and skipped as before.
     """
     from codemie_test_harness.tests.utils.cost_center_utils import (
         CostCenterUtils,
@@ -422,12 +434,36 @@ def delete_cost_centers(client) -> int:
 
     cost_center_utils = CostCenterUtils(client)
 
+    stale_projects: dict[str, str] = {}
+    project_utils = None
+    if prefix:
+        from codemie_test_harness.tests.utils.project_utils import ProjectUtils
+
+        project_utils = ProjectUtils(client)
+        for project in project_utils.list_all_projects(search=prefix):
+            if project.cost_center_id:
+                stale_projects[str(project.cost_center_id)] = project.name
+
     def fetch():
         all_cost_centers = cost_center_utils.list_cost_centers()
         return [c for c in all_cost_centers if TEST_COST_CENTER_NAME_RE.match(c.name)]
 
     def delete(cost_center):
-        cost_center_utils.delete_cost_center(cost_center.id)
+        try:
+            cost_center_utils.delete_cost_center(cost_center.id)
+        except requests.HTTPError as e:
+            response = e.response
+            project_name = stale_projects.get(str(cost_center.id))
+            if response is None or response.status_code != 409 or project_name is None:
+                raise
+            logger.info(
+                "   Cost center %s is pinned to this session's own leftover "
+                "project %s; retrying its cascade delete before the cost center",
+                cost_center.name,
+                project_name,
+            )
+            project_utils.delete_project_cascade(project_name)
+            cost_center_utils.delete_cost_center(cost_center.id)
 
     count, _ = delete_entities(
         entity_name="cost center",
