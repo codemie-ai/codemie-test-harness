@@ -805,6 +805,30 @@ def disposable_user(keycloak_utils):
 
 
 @pytest.fixture
+def new_user_id_factory(user_utils):
+    """Factory for a fresh id to remap a disposable user onto.
+
+    A remap rewrites the row's own id, so the Keycloak-side cleanup `disposable_user`
+    performs (by email, against the IDP) no longer reaches the backend row by its
+    original id. This factory best-effort deactivates the backend row at each id it
+    handed out, after the test.
+    """
+    issued_ids = []
+
+    def _issue():
+        new_id = f"autotest-remap-{secrets.token_hex(6)}"
+        issued_ids.append(new_id)
+        return new_id
+
+    yield _issue
+    for issued_id in issued_ids:
+        try:
+            user_utils.deactivate_user(issued_id)
+        except Exception as e:
+            logger.warning(f"Failed to deactivate remapped user {issued_id}: {e}")
+
+
+@pytest.fixture
 def ordered_users(client, user_utils):
     """Factory: create the users of an OrderScenario with a per-run search token.
 

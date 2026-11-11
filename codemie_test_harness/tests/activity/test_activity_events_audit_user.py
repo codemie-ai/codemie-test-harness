@@ -369,3 +369,69 @@ def test_user_project_role_updated_audit_record_stored(
     )
 
     project_utils.remove_user_from_project(project_name, user_id)
+
+
+# ---------------------------------------------------------------------------
+# user.remapped
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.activity
+@pytest.mark.api
+def test_user_remapped_audit_record_stored(
+    activity_utils, user_utils, disposable_user, new_user_id_factory
+):
+    """user.remapped audit record is stored when an admin remaps a user id."""
+    # @case identity-remap-migration_TC_008
+    _, old_user_id, _ = disposable_user
+    new_user_id = new_user_id_factory()
+    actor_id = user_utils.get_about_me().user_id
+
+    user_utils.remap_user(old_user_id, new_user_id)
+
+    response = activity_utils.list_activity_events(
+        entity_id=new_user_id,
+        event_type=["user.remapped"],
+    )
+
+    assert_that(
+        len(response.data),
+        equal_to(1),
+        "Exactly one user.remapped event should exist for the remapped user",
+    )
+    record = response.data[0]
+    assert_that(
+        record.event_type,
+        equal_to("user.remapped"),
+        "event_type should be user.remapped",
+    )
+    assert_that(
+        record.entity_id,
+        equal_to(new_user_id),
+        "entity_id should be the user's new id",
+    )
+    assert_that(
+        record.actor_id,
+        equal_to(actor_id),
+        "actor_id should be the admin who performed the remap",
+    )
+    assert_that(
+        record.attributes,
+        not_none(),
+        "attributes should be set for the remap",
+    )
+    assert_that(
+        record.attributes.get("old_id"),
+        equal_to(old_user_id),
+        "attributes.old_id should be the user's old id",
+    )
+    assert_that(
+        record.attributes.get("new_id"),
+        equal_to(new_user_id),
+        "attributes.new_id should be the user's new id",
+    )
+    assert_that(
+        record.attributes.get("actor_user_id"),
+        equal_to(actor_id),
+        "attributes.actor_user_id should be the admin who performed the remap",
+    )
