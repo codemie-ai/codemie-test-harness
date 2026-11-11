@@ -102,6 +102,7 @@ def test_get_users(analytics_utils):
     "endpoint_method",
     [
         "get_assistants_chats",
+        "get_assistants_requests",  # @case individual-assistant-run-analytics_TC_003
         "get_workflows",
         "get_tools_usage",
         "get_webhooks_invocation",
@@ -195,6 +196,7 @@ def test_cli_summary_all_time_periods(analytics_utils, time_period):
     "endpoint_method",
     [
         "get_assistants_chats",
+        "get_assistants_requests",  # @case individual-assistant-run-analytics_TC_003
         "get_workflows",
         "get_tools_usage",
         "get_llms_usage",
@@ -223,6 +225,7 @@ def test_tabular_endpoints_with_time_periods(
     "endpoint_method",
     [
         "get_assistants_chats",
+        "get_assistants_requests",  # @case individual-assistant-run-analytics_TC_003
         "get_workflows",
         "get_tools_usage",
         "get_llms_usage",
@@ -250,6 +253,7 @@ def test_tabular_endpoints_with_pagination(analytics_utils, endpoint_method):
     "endpoint_method",
     [
         "get_assistants_chats",
+        "get_assistants_requests",  # @case individual-assistant-run-analytics_TC_003
         "get_workflows",
         "get_tools_usage",
     ],
@@ -344,6 +348,7 @@ def test_cli_endpoints_with_time_periods(analytics_utils, endpoint_method, time_
     "endpoint_method",
     [
         "get_assistants_chats",
+        "get_assistants_requests",  # @case individual-assistant-run-analytics_TC_003
         "get_workflows",
         "get_tools_usage",
     ],
@@ -368,6 +373,7 @@ def test_endpoints_with_users_filter(analytics_utils, endpoint_method, client):
     "endpoint_method",
     [
         "get_assistants_chats",
+        "get_assistants_requests",  # @case individual-assistant-run-analytics_TC_003
         "get_workflows",
         "get_tools_usage",
     ],

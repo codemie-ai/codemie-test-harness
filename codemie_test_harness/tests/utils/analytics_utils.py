@@ -38,6 +38,12 @@ from requests import HTTPError
 
 from codemie_test_harness.otlp_builder import build_hook_events
 from codemie_test_harness.tests import PROJECT
+from codemie_test_harness.tests.test_data.assistants_requests_analytics_test_data import (
+    MAX_PER_PAGE,
+    REQUESTS_INDEX_TIMEOUT_S,
+    REQUESTS_POLL_INTERVAL_S,
+    REQUESTS_TIME_PERIOD,
+)
 
 from .base_utils import BaseUtils, poll_until
 from .cli_analytics_api_utils import (
@@ -105,6 +111,85 @@ class AnalyticsUtils(BaseUtils):
         """
         params = PaginatedAnalyticsQueryParams(**kwargs) if kwargs else None
         return self.client.analytics.get_assistants_chats(params)
+
+    def get_assistants_requests(self, **kwargs) -> TabularResponse:
+        """Get assistants requests analytics (one row per assistant request).
+
+        Args:
+            **kwargs: Query parameters including pagination, assistant_id and client_source
+
+        Returns:
+            TabularResponse with one row per assistant request, newest first
+        """
+        params = PaginatedAnalyticsQueryParams(**kwargs) if kwargs else None
+        return self.client.analytics.get_assistants_requests(params)
+
+    def wait_for_assistant_requests(
+        self,
+        expected_count: int,
+        settled: bool = False,
+        timeout: float = REQUESTS_INDEX_TIMEOUT_S,
+        **filters,
+    ) -> TabularResponse:
+        """Poll assistants-requests until it lists ``expected_count`` rows.
+
+        Analytics documents reach the index shortly after the chat reply. With
+        ``settled`` the poll also waits until every row carries a recorded cost
+        (a number, with no ``spend_unavailable`` flag), since the ledger settles later.
+        Returns the last response whether or not the condition held; the caller asserts.
+        """
+
+        def is_ready(response: TabularResponse) -> bool:
+            rows = response.data.rows
+            return len(rows) >= expected_count and (
+                not settled
+                or all(
+                    row["money_spent"] is not None and not row["spend_unavailable"]
+                    for row in rows
+                )
+            )
+
+        return poll_until(
+            lambda: self.get_assistants_requests(
+                time_period=REQUESTS_TIME_PERIOD, per_page=MAX_PER_PAGE, **filters
+            ),
+            is_ready,
+            timeout=timeout,
+            interval=REQUESTS_POLL_INTERVAL_S,
+        )
+
+    def wait_for_assistants_chats_row(
+        self,
+        assistant_name: str,
+        settled: bool = False,
+        timeout: float = REQUESTS_INDEX_TIMEOUT_S,
+        **filters,
+    ) -> dict | None:
+        """Poll assistants-chats until it lists a row for ``assistant_name``.
+
+        assistants-chats groups by assistant id and labels the row with the assistant's
+        current name. With ``settled`` the poll also waits for the row's cost to be
+        recorded. Returns the last row found, or None when none was listed.
+        """
+
+        def fetch() -> dict | None:
+            rows = self.get_assistants_chats(
+                time_period=REQUESTS_TIME_PERIOD, per_page=MAX_PER_PAGE, **filters
+            ).data.rows
+            return next(
+                (row for row in rows if row["assistant"] == assistant_name), None
+            )
+
+        return poll_until(
+            fetch,
+            lambda row: row is not None
+            and (
+                not settled
+                or (row["total_cost_usd"] is not None and not row["spend_unavailable"])
+            ),
+            timeout=timeout,
+            interval=REQUESTS_POLL_INTERVAL_S,
+        )
 
     def get_workflows(self, **kwargs) -> TabularResponse:
         """Get workflows analytics.
