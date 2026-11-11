@@ -97,6 +97,7 @@ def test_budget_list_and_popup_show_missing_creator_state(
     budgets_page = BudgetsManagementPage(page)
     budgets_page.navigate_to()
     budgets_page.show_up_to_100_items_per_page()
+    budgets_page.find_budget_row(budget["name"])
     budgets_page.should_have_created_by(budget["name"], expected_display)
 
     budgets_page.click_view_details(budget["name"])
@@ -124,4 +125,5 @@ def test_preconfigured_budget_row_actions_offer_view_details_not_edit(
     budgets_page = BudgetsManagementPage(page)
     budgets_page.navigate_to()
     budgets_page.show_up_to_100_items_per_page()
+    budgets_page.find_budget_row(budget["name"])
     budgets_page.should_offer_view_details_but_not_edit(budget["name"])

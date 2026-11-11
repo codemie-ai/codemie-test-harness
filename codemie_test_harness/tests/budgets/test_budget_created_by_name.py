@@ -19,8 +19,9 @@ Covers:
         GET list / GET by id / POST create / PATCH update / POST sync, and created_by keeps
         its original value and type on every call.
     TC-006 (AC-5, AC-6, AC-7)  GET /v1/admin/budgets sets created_by_name by creator state:
-        display name, username fallback, null for a system/predefined budget, and null with a
-        200 response when the creator no longer resolves.
+        display name, null for a system/predefined budget, and null with a 200 response when
+        the creator no longer resolves. The username-fallback state is not exercised here —
+        see test_list_budgets_sets_created_by_name_by_creator_state's docstring.
 """
 
 import secrets
@@ -141,11 +142,10 @@ def test_created_by_name_resolves_across_admin_endpoints(budget_creator):
 @pytest.mark.api
 @pytest.mark.parametrize(
     "budget_for_creator_state",
-    ["named", "unnamed", "system", "unresolved"],
+    ["named", "system", "unresolved"],
     indirect=True,
     ids=[
         "user_with_display_name",
-        "user_with_no_display_name",
         "system_or_predefined_budget",
         "creator_no_longer_resolves",
     ],
@@ -156,10 +156,16 @@ def test_list_budgets_sets_created_by_name_by_creator_state(
     """@case budget-created-by-column_TC_006
 
     AC-5/AC-6/AC-7: GET /v1/admin/budgets sets created_by_name by creator state —
-    the creator's display name (budget_service.py:342), the username when no display name
-    is set (same fallback), null while created_by stays unresolved for a system/predefined
-    budget (budget_router.py:57, budget_service.py:338), and null with a 200 response — no
-    exception — when the creator no longer resolves (user_repository.py:595).
+    the creator's display name (budget_service.py:342), null while created_by stays
+    unresolved for a system/predefined budget (budget_router.py:57,
+    budget_service.py:338), and null with a 200 response — no exception — when the
+    creator no longer resolves (user_repository.py:595).
+
+    The username-fallback state (AC-5, budget_service.py:342: ``user.name or
+    user.username``) is not covered live on this environment: Keycloak drops the
+    'name' claim entirely for a blank firstName/lastName, and the backend then rejects
+    the login, so a user with no display name cannot be produced through this account
+    path. That state is covered by backend unit tests only.
     """
     budget_id, expected_created_by_name = budget_for_creator_state
 

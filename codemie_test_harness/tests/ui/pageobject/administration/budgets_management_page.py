@@ -126,6 +126,27 @@ class BudgetsManagementPage(BasePage):
         return self
 
     @step
+    def find_budget_row(self, budget_name: str, max_pages: int = 50):
+        """Page forward until a row matching `budget_name` appears on the current page.
+
+        A long-lived stand accumulates hundreds of autotest platform budgets, so a seeded
+        budget (e.g. the preconfigured/system one) is not guaranteed to be on page 1 —
+        confirmed live: it can sit dozens of pages in. Call after navigate_to() (and,
+        ideally, show_up_to_100_items_per_page() first, to cut down the page count).
+        """
+        for _ in range(max_pages):
+            if self.budget_row(budget_name).count() > 0:
+                return self
+            next_btn = self.pagination_next_button
+            if not next_btn.is_visible() or next_btn.is_disabled():
+                break
+            next_btn.click()
+            self.page.wait_for_load_state("networkidle", timeout=15000)
+        raise AssertionError(
+            f"Budget row '{budget_name}' was not found within {max_pages} pages"
+        )
+
+    @step
     def open_row_actions(self, budget_name: str):
         """Open the row-actions menu of a budget row.
 
