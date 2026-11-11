@@ -396,6 +396,20 @@ class ProjectManagementPage(BasePage):
         """The option of the open dropdown whose label is the cost center name."""
         return self.page.get_by_role("option", name=name)
 
+    def _dropdown_label(self, text: str):
+        """The visible label of a single-select dropdown showing `text`. A bare text match
+        also hits the same text as a native <option> inside the hidden <select>."""
+        return self.page.locator("span.p-dropdown-label").filter(
+            has_text=re.compile(rf"^{re.escape(text)}$")
+        )
+
+    @property
+    def _cost_center_panel(self):
+        """The open Cost center dropdown panel: the multi-select overlay holding the search box."""
+        return self.page.locator(".p-multiselect-panel").filter(
+            has=self.cost_center_search_input
+        )
+
     @property
     def _no_cost_center_match_message(self):
         """Empty-filter message of the open dropdown."""
@@ -515,8 +529,8 @@ class ProjectManagementPage(BasePage):
         """Verify the Search box and the Budgets / Budget category filters (shown with their
         'All ...' placeholders while nothing is selected) are in the filter row."""
         expect(self.search_input).to_be_visible(timeout=15000)
-        expect(self.page.get_by_text("All projects", exact=True)).to_be_visible()
-        expect(self.page.get_by_text("All categories", exact=True)).to_be_visible()
+        expect(self._dropdown_label("All projects")).to_be_visible()
+        expect(self._dropdown_label("All categories")).to_be_visible()
         return self
 
     @step
@@ -544,7 +558,8 @@ class ProjectManagementPage(BasePage):
     def should_see_no_cost_center_match_message(self):
         """Verify the open dropdown shows the empty-search message and no options."""
         expect(self._no_cost_center_match_message).to_be_visible(timeout=15000)
-        expect(self.page.get_by_role("option")).to_have_count(0)
+        expect(self._cost_center_panel).to_be_visible()
+        expect(self._cost_center_panel.get_by_role("option")).to_have_count(0)
         return self
 
     @step
