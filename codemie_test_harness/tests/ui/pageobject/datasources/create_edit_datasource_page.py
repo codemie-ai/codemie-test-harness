@@ -830,6 +830,15 @@ class CreateEditDatasourcePage(BasePage):
         return self
 
     @step
+    def should_see_files_filter_placeholder_line(self, line: str):
+        """Verify the Files Filter placeholder holds the given text as a whole line of its own."""
+        expect(self.files_filter_input).to_be_visible()
+        expect(self.files_filter_input).to_have_attribute(
+            "placeholder", re.compile(rf"^{re.escape(line)}$", re.MULTILINE)
+        )
+        return self
+
+    @step
     def select_embeddings_model(self, value: str):
         self.embeddings_model_dropdown.click()
         self.dropdown_values(value).click()
