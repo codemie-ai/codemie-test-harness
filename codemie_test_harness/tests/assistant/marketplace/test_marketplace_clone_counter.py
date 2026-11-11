@@ -90,7 +90,6 @@ def test_clone_count_starts_at_zero_and_increments_to_one(
 
 
 @pytest.mark.not_for_parallel_run
-@pytest.mark.sanity
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.api
