@@ -14,6 +14,8 @@
 
 """API tests for the SuperAdmin user-id remap endpoint (POST /v1/admin/users/remap)."""
 
+import logging
+
 import pytest
 from hamcrest import (
     assert_that,
@@ -38,6 +40,50 @@ from codemie_test_harness.tests.utils.yaml_utils import (
     WorkflowYamlModel,
     prepare_yaml_content,
 )
+
+logger = logging.getLogger(__name__)
+
+
+@pytest.fixture
+def remap_project(admin_utils, project_utils):
+    """A project for `test_remap_moves_owned_content_to_new_user_id`: created empty,
+    cascade-deleted afterwards (needed over plain `delete_project` since the test scopes
+    budgets, an assistant and a workflow to it — `delete_project_cascade` also unassigns
+    every member but the creator, so neither old_user_id nor new_user_id needs an
+    explicit `remove_user_from_project` once the test is done with them).
+    """
+    name = get_random_name()
+    admin_utils.create_project(name)
+    yield name
+    try:
+        project_utils.delete_project_cascade(name)
+    except Exception as e:
+        logger.warning(f"Failed to delete project {name}: {e}")
+
+
+@pytest.fixture
+def owned_conversation_factory(disposable_user):
+    """Factory: create a conversation as `disposable_user`'s client, deleted afterwards.
+
+    `delete_project_cascade` removes assistants, workflows and budgets scoped to a
+    project, but not conversations, so a conversation created for one of these tests
+    needs this explicit cleanup instead.
+    """
+    _, _, old_user_client = disposable_user
+    conversation_utils = ConversationUtils(old_user_client)
+    created_ids = []
+
+    def _create(**kwargs):
+        conversation = conversation_utils.create_conversation(**kwargs)
+        created_ids.append(conversation["id"])
+        return conversation
+
+    yield _create
+    for conversation_id in created_ids:
+        try:
+            conversation_utils.delete_conversation(conversation_id)
+        except Exception as e:
+            logger.warning(f"Failed to delete conversation {conversation_id}: {e}")
 
 
 @pytest.mark.user
@@ -80,41 +126,19 @@ def test_remap_moves_owned_content_to_new_user_id(
     assistant_utils,
     workflow_utils,
     admin_project_budget_utils,
-    admin_utils,
-    project_utils,
     disposable_user,
     new_user_id_factory,
+    remap_project,
+    owned_conversation_factory,
     default_llm,
-    request,
 ):
     # @case identity-remap-migration_TC_003
     _, old_user_id, old_user_client = disposable_user
     new_user_id = new_user_id_factory()
-
-    project_name = get_random_name()
-    admin_utils.create_project(project_name)
+    project_name = remap_project
 
     old_user_assistant_utils = AssistantUtils(old_user_client)
-    old_user_conversation_utils = ConversationUtils(old_user_client)
     old_user_workflow_utils = WorkflowUtils(old_user_client)
-
-    def _cleanup_project():
-        # delete_project_cascade removes assistants, workflows and budgets, but not
-        # conversations; the conversation created below needs its own cleanup first.
-        try:
-            old_user_conversation_utils.delete_conversation(conversation_id)
-        except Exception:
-            pass
-        try:
-            project_utils.remove_user_from_project(project_name, new_user_id)
-        except Exception:
-            pass
-        try:
-            project_utils.delete_project_cascade(project_name)
-        except Exception:
-            pass
-
-    request.addfinalizer(_cleanup_project)
 
     # --- content owned by old_user_id, created before the remap ---
 
@@ -130,9 +154,7 @@ def test_remap_moves_owned_content_to_new_user_id(
 
     assistant = old_user_assistant_utils.create_assistant(project_name=project_name)
 
-    conversation = old_user_conversation_utils.create_conversation(
-        initial_assistant_id=assistant.id
-    )
+    conversation = owned_conversation_factory(initial_assistant_id=assistant.id)
     conversation_id = conversation["id"]
 
     workflow_assistant = AssistantModel(
