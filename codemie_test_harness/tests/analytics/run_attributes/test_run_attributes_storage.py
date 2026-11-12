@@ -129,11 +129,11 @@ def test_other_user_cannot_set_attributes_on_an_unreadable_conversation(
     user_utils,
     non_admin_user,
 ):
-    """The second user's attributes are dropped, but the request is still refused 403.
+    """A user without access to a conversation cannot chat on it, and cannot change its attributes.
 
-    The refusal comes from the conversation access check, not from the attributes: the
-    same user chats on a conversation of their own with the same assistant, and the chat
-    on the owner's conversation is refused with or without attributes.
+    The second user's chat on the owner's conversation is refused with 403 by the existing
+    conversation access check, while the same user chats on a conversation of their own with
+    the same assistant. The owner's attributes and original turns stay as they were.
     """
     # @case allow-callers-to-associate-custom_TC_011
     created_assistant = assistant_factory.create()
@@ -177,6 +177,8 @@ def test_other_user_cannot_set_attributes_on_an_unreadable_conversation(
         equal_to(owner_attributes),
         "attributes of a user without access must not reach the owner's conversation",
     )
+    # A prefix check: a refused request may still append an error turn to the history,
+    # which is not the concern of this case.
     assert_that(
         conversation.history[: len(history_before)],
         equal_to(history_before),
