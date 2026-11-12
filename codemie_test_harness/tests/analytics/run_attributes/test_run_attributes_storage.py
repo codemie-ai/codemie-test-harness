@@ -22,6 +22,7 @@ from requests import HTTPError
 
 from codemie_test_harness.tests import PROJECT
 from codemie_test_harness.tests.test_data.run_attributes_test_data import (
+    ACCESS_DENIED_ON_CONVERSATION,
     ATTRIBUTES_IMMUTABLE_MESSAGE,
     CONVERSATION_NOT_FOUND,
     RUN_PROMPT,
@@ -120,7 +121,7 @@ def test_attributes_of_a_conversation_with_history_cannot_be_changed(
 @pytest.mark.analytics
 @pytest.mark.conversations
 @pytest.mark.api
-def test_attributes_sent_for_an_unreadable_conversation_are_dropped(
+def test_other_user_cannot_set_attributes_on_an_unreadable_conversation(
     assistant_factory,
     assistant_utils,
     conversation_utils,
@@ -128,6 +129,12 @@ def test_attributes_sent_for_an_unreadable_conversation_are_dropped(
     user_utils,
     non_admin_user,
 ):
+    """The second user's attributes are dropped, but the request is still refused 403.
+
+    The refusal comes from the conversation access check, not from the attributes: the
+    same user chats on a conversation of their own with the same assistant, and the chat
+    on the owner's conversation is refused with or without attributes.
+    """
     # @case allow-callers-to-associate-custom_TC_011
     created_assistant = assistant_factory.create()
     conversation_id = str(uuid.uuid4())
@@ -138,24 +145,42 @@ def test_attributes_sent_for_an_unreadable_conversation_are_dropped(
         conversation_id=conversation_id,
         attributes=owner_attributes,
     )
+    history_before = conversation_utils.get_conversation_by_id(conversation_id).history
     _, other_user_id, other_client = non_admin_user
-    # The other user can chat with the assistant, but has no access to the owner's conversation.
+    # The other user may chat with the assistant, but has no access to the owner's conversation.
     user_utils.assign_user_to_project(other_user_id, PROJECT)
     client.assistants.share(created_assistant.id, [other_user_id])
+    other_assistant_utils = AssistantUtils(other_client)
 
-    # A rejection of the attributes would raise here.
-    AssistantUtils(other_client).ask_assistant(
+    other_assistant_utils.ask_assistant(
         created_assistant,
         RUN_PROMPT,
-        conversation_id=conversation_id,
+        conversation_id=str(uuid.uuid4()),
         attributes=get_attributes(),
     )
+    with pytest.raises(HTTPError) as rejected:
+        other_assistant_utils.ask_assistant(
+            created_assistant,
+            RUN_PROMPT,
+            conversation_id=conversation_id,
+            attributes=get_attributes(),
+        )
 
+    assert_error_details(
+        rejected.value.response,
+        403,
+        ACCESS_DENIED_ON_CONVERSATION.format(conversation_id=conversation_id),
+    )
     conversation = conversation_utils.get_conversation_by_id(conversation_id)
     assert_that(
         conversation.attributes,
         equal_to(owner_attributes),
         "attributes of a user without access must not reach the owner's conversation",
+    )
+    assert_that(
+        conversation.history[: len(history_before)],
+        equal_to(history_before),
+        "the turns the owner had must stay as they were",
     )
 
 

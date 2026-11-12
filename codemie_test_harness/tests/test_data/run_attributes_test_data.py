@@ -37,6 +37,9 @@ MAX_VALUE_LENGTH = 128
 CONVERSATION_NOT_FOUND = (
     "The conversation with ID [{conversation_id}] could not be found in the system."
 )
+ACCESS_DENIED_ON_CONVERSATION = (
+    "You don't have permission to access conversation {conversation_id}."
+)
 ATTRIBUTES_IMMUTABLE_MESSAGE = "Run attributes cannot be changed"
 INVALID_FILTER_MESSAGE = "Invalid attributes filter"
 MISSING_KEY_MESSAGE = "Missing attribute key"
