@@ -972,6 +972,38 @@ def maintainer_client(maintainer_credentials):
 
 
 @pytest.fixture
+def orphaned_creator_budget(keycloak_utils, user_utils, client):
+    """Platform budget whose creator's backend record is deleted right after creation.
+
+    AC-7/AC-13: ``created_by`` keeps the (now unresolvable) id, so every endpoint that
+    returns ``created_by_name`` must come back falsy with no error. Deleting only the
+    identity-provider account is not enough — ``resolve_creator_names`` reads the backend's
+    own user table (``user_repository.aget_users_by_ids`` filters ``deleted_at IS NOT
+    NULL``), so the backend record is removed the same way ``LocalUserUtils.delete_user_by_id``
+    does; a Keycloak-only deletion was confirmed live to still show the creator's name.
+    The creator needs the maintainer flag to create a budget at all (``maintainer_access_only``
+    on ``POST /v1/admin/budgets``; a plain admin test user gets 403, confirmed live).
+    """
+    uid = secrets.token_hex(4)
+    email = f"autotest_orphan_{uid}@email.com"
+    password = keycloak_utils.create_platform_user(email=email)
+    user_client = get_client(username=email, password=password)
+    user_id = user_client.users.about_me().user_id
+    try:
+        user_utils.update_admin_user(user_id, is_maintainer=True)
+        UserUtils(user_client).wait_until_user_management_effective()
+        budget_id = f"autotest-orphan-{uid}"
+        AdminBudgetUtils(user_client).create_budget(budget_id, "platform")
+    finally:
+        LocalUserUtils(client).delete_user_by_id(user_id)
+        try:
+            keycloak_utils.delete_user(email)
+        except Exception as e:
+            logger.warning(f"Failed to delete auth-server user {email}: {e}")
+    return budget_id
+
+
+@pytest.fixture
 def project_admin_client(request, keycloak_utils, user_utils, default_project_member):
     """Plain user who is project admin of the member's project, but holds no platform role."""
     email = f"autotest_projadmin_{secrets.token_hex(4)}@email.com"
