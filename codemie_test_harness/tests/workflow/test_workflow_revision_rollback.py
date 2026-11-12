@@ -76,14 +76,6 @@ def workflow_with_revisions(revision_utils, default_llm):
             pass
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Workflow save can be reverted by a late background schema job, so "
-        "workflow history gets wrong entries and the live config can roll back silently"
-    ),
-    raises=AssertionError,
-    strict=False,
-)
 @pytest.mark.workflow
 @pytest.mark.api
 def test_list_revisions_defaults_to_first_twenty_newest_first(
