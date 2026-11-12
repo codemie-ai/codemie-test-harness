@@ -176,14 +176,6 @@ def test_set_budget_reports_registered_client_email_as_not_assigned(
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Adding the first member to a project created via the provisioning API "
-        "returns 500 (FK violation on fk_pmba_shared_budget_id)"
-    ),
-    raises=HTTPError,
-    strict=True,
-)
 @pytest.mark.budget
 @pytest.mark.enterprise
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
