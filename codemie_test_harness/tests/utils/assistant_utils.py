@@ -184,6 +184,8 @@ class AssistantUtils(BaseUtils):
         output_schema=None,
         extract_failed_tools=False,
         return_stream_metadata=False,
+        attributes=None,
+        save_history=None,
     ):
         user_prompt = f"{user_prompt}; REQUEST_UUID: {uuid.uuid4()};"
         chat_request = AssistantChatRequest(
@@ -196,6 +198,8 @@ class AssistantUtils(BaseUtils):
             history=history,
             output_schema=output_schema,
             metadata={"langfuse_traces_enabled": LANGFUSE_TRACES_ENABLED},
+            attributes=attributes,
+            save_history=save_history,
         )
 
         response = self.client.assistants.chat(
