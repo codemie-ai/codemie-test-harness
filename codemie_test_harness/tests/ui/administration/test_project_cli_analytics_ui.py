@@ -48,6 +48,7 @@ pytestmark = [
     pytest.mark.ui,
     pytest.mark.project,
     pytest.mark.cli_analytics,
+    pytest.mark.oss_standalone,
 ]
 
 GLOBAL_ADMIN = pytest.param("cli_global_admin", id="global admin")

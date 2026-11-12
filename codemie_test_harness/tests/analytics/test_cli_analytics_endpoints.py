@@ -25,6 +25,7 @@ from codemie_sdk.models.analytics import (
 
 @pytest.mark.smoke
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_get_cli_analytics_cost(analytics_utils, cli_analytics_enabled):
     """Cost breakdown is returned with its totals."""
@@ -36,6 +37,7 @@ def test_get_cli_analytics_cost(analytics_utils, cli_analytics_enabled):
 
 @pytest.mark.smoke
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_get_cli_analytics_sessions(analytics_utils, cli_analytics_enabled):
     """Session list is returned as a page of sessions."""

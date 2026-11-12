@@ -30,6 +30,7 @@ from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
 @pytest.mark.ui
 @pytest.mark.smoke
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 def test_cli_analytics_tab_opens_from_analytics_page(page):
     """CLI Analytics tab opens from the Analytics page with its default section loaded."""
     cli_analytics = AnalyticsPage(page).navigate_to().open_cli_analytics()
@@ -40,6 +41,7 @@ def test_cli_analytics_tab_opens_from_analytics_page(page):
 
 @pytest.mark.ui
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 def test_cli_analytics_sections_load(page):
     """Every CLI Analytics section loads its data and renders without widget errors."""
     cli_analytics = CLIAnalyticsPage(page).navigate_to()
@@ -54,6 +56,7 @@ def test_cli_analytics_sections_load(page):
 
 @pytest.mark.ui
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 def test_cli_analytics_session_opens_from_sessions_table(page, cli_analytics_session):
     """A seeded session is found in the Sessions table and opens its detail modal."""
     cli_analytics = CLIAnalyticsPage(page).navigate_to()
@@ -70,6 +73,7 @@ def test_cli_analytics_session_opens_from_sessions_table(page, cli_analytics_ses
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.ui
 def test_cli_analytics_tool_success_dash_when_no_tool_calls(
     page, cli_analytics_session

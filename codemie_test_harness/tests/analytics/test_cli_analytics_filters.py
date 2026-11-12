@@ -42,6 +42,7 @@ def _listed_session_ids(analytics_utils, project_name: str, **window_params) -> 
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 @pytest.mark.parametrize("boundary", BOUNDARY_SESSION_KEYS)
 def test_session_is_listed_only_if_it_started_in_window(
@@ -65,6 +66,7 @@ def test_session_is_listed_only_if_it_started_in_window(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_sessions_outside_window_do_not_add_to_totals(
     analytics_utils, cli_analytics_project, boundary_sessions
@@ -82,6 +84,7 @@ def test_sessions_outside_window_do_not_add_to_totals(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 @pytest.mark.parametrize("utc_offset_hours", WINDOW_UTC_OFFSETS)
 def test_window_bounds_with_utc_offset_select_same_sessions(
