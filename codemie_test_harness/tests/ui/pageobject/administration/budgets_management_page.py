@@ -64,13 +64,36 @@ class BudgetsManagementPage(BasePage):
         """'Create budget' button (should be absent for auditor role)."""
         return self.page.get_by_role("button", name="Create budget", exact=True)
 
+    def _column_index(self, header_text: str) -> int:
+        """0-based index of the column whose header text contains `header_text`.
+
+        Derived from the live header row rather than hard-coded, so a reordered or
+        inserted column does not silently point a cell lookup at the wrong column.
+        """
+        headers = self.budget_table.get_by_role("columnheader").all_text_contents()
+        for index, text in enumerate(headers):
+            if header_text in text:
+                return index
+        raise AssertionError(f"No column header matches '{header_text}'; got {headers}")
+
     def budget_row(self, budget_name: str):
-        """A specific budget row identified by its Name column text."""
-        return self.budget_rows.filter(has_text=budget_name)
+        """A specific budget row identified by an exact match on its Name cell.
+
+        Matches the Name cell's own text exactly rather than filtering the whole row by
+        substring, so a budget whose name is a substring of another's (e.g. the
+        preconfigured/system budget's name) does not match more than one row.
+        """
+        name_index = self._column_index("Name")
+        return self.budget_rows.filter(
+            has=self.page.get_by_role("cell")
+            .nth(name_index)
+            .get_by_text(budget_name, exact=True)
+        )
 
     def created_by_cell(self, budget_name: str):
-        """'Created By' cell (7th column, index 6) of a budget row."""
-        return self.budget_row(budget_name).get_by_role("cell").nth(6)
+        """'Created By' cell of a budget row, column located by its header text."""
+        created_by_index = self._column_index("Created By")
+        return self.budget_row(budget_name).get_by_role("cell").nth(created_by_index)
 
     @property
     def items_per_page_dropdown(self):
@@ -135,6 +158,10 @@ class BudgetsManagementPage(BasePage):
         ideally, show_up_to_100_items_per_page() first, to cut down the page count).
         """
         for _ in range(max_pages):
+            # `.count()` does not auto-wait; wait for a concrete signal that the page's
+            # rows have actually rendered before relying on it, or a freshly-loaded page
+            # can read as "row not found" before its rows are in the DOM.
+            expect(self.budget_rows.first).to_be_visible(timeout=15000)
             if self.budget_row(budget_name).count() > 0:
                 return self
             next_btn = self.pagination_next_button
@@ -224,7 +251,7 @@ class BudgetsManagementPage(BasePage):
         expect(self._view_details_menu_item).to_be_visible(timeout=5000)
         expect(self._edit_menu_item).to_have_count(0)
         self.page.keyboard.press("Escape")
-        self.page.wait_for_timeout(300)
+        expect(self._row_actions_menu).to_be_hidden(timeout=5000)
         return self
 
     @step

@@ -26,7 +26,7 @@ class AdminBudgetUtils(BaseUtils):
             "Content-Type": "application/json",
         }
 
-    def list_budgets(self, page: int = 0, per_page: int = 10) -> list:
+    def _list_budgets_page(self, page: int, per_page: int) -> dict:
         resp = requests.get(
             f"{API_DOMAIN}/v1/admin/budgets",
             params={"page": page, "per_page": per_page},
@@ -34,8 +34,11 @@ class AdminBudgetUtils(BaseUtils):
             verify=VERIFY_SSL,
         )
         resp.raise_for_status()
+        return resp.json()
+
+    def list_budgets(self, page: int = 0, per_page: int = 10) -> list:
         # PaginatedBudgetListResponse.data (rest_api/models/budget.py), not "items".
-        return resp.json().get("data", [])
+        return self._list_budgets_page(page, per_page).get("data", [])
 
     def get_budget(self, budget_id: str) -> dict:
         resp = requests.get(
@@ -60,10 +63,17 @@ class AdminBudgetUtils(BaseUtils):
     def _iter_all_budgets(self, per_page: int = 100):
         """Yield every budget across every page, newest first (the API's own order)."""
         page = 0
+        seen = 0
         while True:
-            budgets = self.list_budgets(page=page, per_page=per_page)
+            body = self._list_budgets_page(page, per_page)
+            budgets = body.get("data", [])
             yield from budgets
-            if len(budgets) < per_page:
+            seen += len(budgets)
+            # PaginatedBudgetListResponse.pagination.total (rest_api/models/budget.py):
+            # stop on the declared total, not on a short page, since the server caps
+            # per_page at 100 (budget_router.py) independent of what is asked for.
+            total = body.get("pagination", {}).get("total", seen)
+            if not budgets or seen >= total:
                 return
             page += 1
 
