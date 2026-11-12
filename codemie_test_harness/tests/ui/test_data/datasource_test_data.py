@@ -144,7 +144,8 @@ EMPTY_FILE_ERROR = "At least one file is required"
 EMPTY_GOOGLE_LINK_ERROR = "Google Docs link is required"
 EMPTY_INTEGRATION_ERROR = "Integration is required for this data source type"
 
-INTEGRATION_PLACEHOLDER = "Select integration"
+# Placeholder of the integration dropdown on the Git data source form (observed live)
+GIT_INTEGRATION_PLACEHOLDER = "Integration for Git"
 
 FULL_REINDEX_STARTED = (
     "Full reindexing of datasource  has been started in the background"

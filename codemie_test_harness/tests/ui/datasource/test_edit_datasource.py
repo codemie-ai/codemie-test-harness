@@ -223,7 +223,7 @@ def test_code_datasource_no_error_after_project_change_and_description_edit(
 @pytest.mark.prod_regression
 def test_clear_git_datasource_integration_persists_after_save(
     page,
-    gitlab_datasource_with_integration,
+    public_git_datasource_with_integration,
     gitlab_integration,
 ):
     """Clearing the integration of a Git datasource persists and stays empty on reopen.
@@ -231,14 +231,17 @@ def test_clear_git_datasource_integration_persists_after_save(
     Regression: the integration dropdown could not be cleared on the edit form
     (the saved alias snapped back) and an empty integration was not persisted.
 
+    The datasource indexes a public repository, so that Save without an integration
+    passes the Save-time git connectivity check.
+
     Steps:
         1. Open the datasource for editing; the saved integration alias is shown.
-        2. Click the clear icon; the placeholder is shown.
+        2. Click the clear icon; the Git placeholder ("Integration for Git") is shown.
         3. Click plain Save (no reindex) and wait for the datasource list.
         4. Reopen the datasource for editing; the placeholder is shown, not the alias.
     """
     # @case git-datasource-integration-cannot-be_TC_001
-    datasource = gitlab_datasource_with_integration
+    datasource = public_git_datasource_with_integration
     datasource_page = DataSourcePage(page)
     edit_page = CreateEditDatasourcePage(page)
 

@@ -35,7 +35,7 @@ from codemie_test_harness.tests.ui.pageobject.datasources.datasource_sidebar imp
 )
 from codemie_test_harness.tests.ui.test_data.datasource_test_data import (
     DataSourceType,
-    INTEGRATION_PLACEHOLDER,
+    GIT_INTEGRATION_PLACEHOLDER,
     SUMMARIZATION_METHODS_LIST,
     DATA_SOURCE_TYPES_LIST,
     FILE_INSTRUCTIONS,
@@ -1193,17 +1193,22 @@ class CreateEditDatasourcePage(BasePage):
 
     @step
     def should_see_selected_integration(self, integration: str):
-        """Assert the integration dropdown label shows exactly the given alias.
+        """Assert the integration dropdown label shows the given alias.
 
-        Scoped to the label so the clear icon and the trigger never affect the match.
+        The UI appends a scope suffix to the alias, e.g. "<alias> (project)", so
+        the label must equal the alias optionally followed by one parenthesised
+        suffix. Anything else, including the placeholder, fails. Scoped to the
+        label so the clear icon and the trigger never affect the match.
         """
-        expect(self.integration_dropdown).to_have_text(integration)
+        expect(self.integration_dropdown).to_have_text(
+            re.compile(rf"^{re.escape(integration)}(\s*\([^)]*\))?$")
+        )
         return self
 
     @step
     def should_see_integration_empty(self):
-        """Assert the integration dropdown shows the placeholder, not a selected alias."""
-        expect(self.integration_dropdown).to_have_text(INTEGRATION_PLACEHOLDER)
+        """Assert the Git form's integration dropdown shows its placeholder, not a selected alias."""
+        expect(self.integration_dropdown).to_have_text(GIT_INTEGRATION_PLACEHOLDER)
         return self
 
     @step
