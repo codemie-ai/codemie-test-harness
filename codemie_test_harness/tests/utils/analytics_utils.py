@@ -118,10 +118,8 @@ class AnalyticsUtils(BaseUtils):
         Returns:
             TabularResponse with one row per assistant request
         """
-        params = PaginatedAnalyticsQueryParams(**kwargs)
-        return self.client.analytics.get_assistants_requests(
-            params, assistant_id=assistant_id
-        )
+        params = PaginatedAnalyticsQueryParams(assistant_id=assistant_id, **kwargs)
+        return self.client.analytics.get_assistants_requests(params)
 
     def get_workflows_executions(self, **kwargs) -> TabularResponse:
         """Get per-execution workflow analytics.
