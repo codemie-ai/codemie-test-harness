@@ -124,7 +124,7 @@ def test_get_users(analytics_utils):
     ],
 )
 def test_all_tabular_endpoints_baseline(analytics_utils, endpoint_method):
-    """Test all 19 tabular endpoints with default parameters."""
+    """Test all 20 tabular endpoints with default parameters."""
     method = getattr(analytics_utils, endpoint_method)
     response = method()
 

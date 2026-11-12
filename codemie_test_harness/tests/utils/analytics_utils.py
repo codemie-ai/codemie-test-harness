@@ -185,6 +185,8 @@ class AnalyticsUtils(BaseUtils):
         self,
         assistant_name: str,
         assistant_id: str,
+        *,
+        start_date: str,
         settled: bool = False,
         timeout: float = REQUESTS_INDEX_TIMEOUT_S,
         **filters,
@@ -195,16 +197,20 @@ class AnalyticsUtils(BaseUtils):
         is labelled with the assistant's current name (or with the id itself when the
         assistant no longer exists). The row is therefore found by ``assistant_name``, which
         is unique per test run; ``assistant_id`` only sharpens the failure message.
+        ``start_date`` is required: assistants-chats ranks assistants by message count and
+        keeps only the first 1000 before paging, so on a long-lived stand a fresh assistant
+        is cut off unless the window is narrowed to the test's own data
+        (see ``requests_window_start``).
         With ``settled`` the poll also waits for the row's cost to be recorded.
 
         Raises AssertionError, saying what came back, when the row is not listed or the
         name matches more than one row.
         """
 
+        sent_filters = _period_filters({"start_date": start_date, **filters})
+
         def fetch() -> tuple[TabularResponse, list[dict]]:
-            response = self.get_assistants_chats(
-                per_page=MAX_PER_PAGE, **_period_filters(filters)
-            )
+            response = self.get_assistants_chats(per_page=MAX_PER_PAGE, **sent_filters)
             matches = [
                 row for row in response.data.rows if row["assistant"] == assistant_name
             ]
@@ -227,7 +233,7 @@ class AnalyticsUtils(BaseUtils):
             interval=REQUESTS_POLL_INTERVAL_S,
         )
         assert len(matches) == 1, self._describe_chats_miss(
-            response, matches, assistant_id, filters
+            response, matches, assistant_id, sent_filters
         )
         return matches[0]
 
@@ -248,8 +254,8 @@ class AnalyticsUtils(BaseUtils):
         )
         labelled_by_id = [row for row in rows if row["assistant"] == assistant_id]
         return (
-            f"assistants-chats returned {len(rows)} rows for the filters "
-            f"{sorted(filters)}; truncated at the page or query cap: {truncated}; "
+            f"assistants-chats returned {len(rows)} rows for the filters sent, "
+            f"{filters}; truncated at the page or query cap: {truncated}; "
             f"rows labelled with the assistant's name: {len(matches)}; "
             f"rows labelled with the assistant's id instead of its name: "
             f"{len(labelled_by_id)}"
