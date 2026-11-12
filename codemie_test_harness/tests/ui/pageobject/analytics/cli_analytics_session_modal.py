@@ -30,9 +30,9 @@ class CLIAnalyticsSessionModal(BasePage):
 
     WIDGET_TITLES = (
         "Cost & Time",
-        "Token usage",
+        "Tokens",
         "Activity",
-        "Token & cost growth",
+        "Token & Cost Growth",
         "Timeline",
     )
     NO_DATA_TEXT = "No data for this session."

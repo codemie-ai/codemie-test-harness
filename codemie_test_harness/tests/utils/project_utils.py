@@ -17,7 +17,6 @@
 import json
 import logging
 import time
-from datetime import datetime
 from typing import Callable, List, Optional
 from uuid import UUID
 
@@ -602,16 +601,25 @@ class ProjectUtils(BaseUtils):
         )
 
     def remove_extra_project_members(self, project_name: str) -> None:
-        """Unassign every project member except the earliest-added one,
-        treated as the creator (there's no reliable created_by on
-        test-created projects).
+        """Unassign every project member except the creator.
+
+        created_by is the reliable signal here, confirmed live: it is set to
+        whoever called create_project and still reads back correctly on a
+        later get_project_detail. When it is unset, or no longer among the
+        members (e.g. the creator was already removed, directly or by an
+        earlier partial run of this method), there is no member left to
+        spare — every one is extra. Admin-created projects always have
+        created_by=None (see delete_project_with_all_members), so a single
+        remaining member there is a leftover assignment, not a creator to
+        protect; the previous "spare whoever is left when <=1 member remains"
+        shortcut treated that member as the creator and left DELETE
+        /v1/projects/{name} 409ing on "assigned users" forever.
         """
         detail = self.get_project_detail(project_name)
-        if len(detail.members) <= 1:
-            return
-        creator = min(detail.members, key=lambda m: m.date or datetime.min)
+        member_ids = {m.user_id for m in detail.members}
+        creator_id = detail.created_by if detail.created_by in member_ids else None
         for member in detail.members:
-            if member.user_id == creator.user_id:
+            if member.user_id == creator_id:
                 continue
             try:
                 self.remove_user_from_project(project_name, member.user_id)
