@@ -23,7 +23,6 @@ from hamcrest import (
     is_not,
     has_item,
 )
-from requests import HTTPError
 
 from codemie_sdk.models.provisioning import ProvisioningProjectBlock
 from codemie_test_harness.cli.constants import PROVISIONING_FULL_CLIENT_KEYS
