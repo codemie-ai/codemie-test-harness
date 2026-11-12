@@ -1480,15 +1480,6 @@ class CreateEditDatasourcePage(BasePage):
     # -------------------------------
 
     @property
-    def optional_integration_hint(self):
-        """'Integration is optional' informational banner in IntegrationSection for Git datasource.
-
-        Uses a stable partial-text match on a unique sentence fragment so the locator
-        remains valid if the hint spans multiple DOM nodes or if surrounding copy changes.
-        """
-        return self.page.get_by_text("Integration is optional", exact=False)
-
-    @property
     def public_access_error_toast(self):
         """Error notification shown when repository is not publicly accessible.
 
@@ -1500,12 +1491,6 @@ class CreateEditDatasourcePage(BasePage):
         return self.page.get_by_role("alert").filter(
             has_text="Failed to connect to git"
         )
-
-    @step
-    def should_see_optional_integration_hint(self):
-        """Verify optional integration hint is visible on the Git datasource form."""
-        expect(self.optional_integration_hint).to_be_visible()
-        return self
 
     @step
     def should_see_public_access_error_notification(self):

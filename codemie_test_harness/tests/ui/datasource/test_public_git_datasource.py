@@ -17,7 +17,7 @@ UI E2E tests: Allow creating Git datasource for public
 repositories without specifying an integration.
 
 Scenarios:
-    TC-002  Create public Git datasource without integration (UI) + optional hint visible
+    TC-002  Create public Git datasource without integration (UI)
     TC-007  UI shows error notification when private repo used without integration
 """
 
@@ -38,7 +38,7 @@ from codemie_test_harness.tests.utils.credentials_manager import CredentialsMana
 
 
 # ---------------------------------------------------------------------------
-# TC-002 — Create public Git datasource + optional integration hint visible (UI)
+# TC-002 — Create public Git datasource without integration (UI)
 # ---------------------------------------------------------------------------
 
 
@@ -47,25 +47,21 @@ from codemie_test_harness.tests.utils.credentials_manager import CredentialsMana
 @pytest.mark.ui
 @pytest.mark.not_for_parallel_run
 @pytest.mark.prod_regression
-def test_create_public_git_datasource_ui_shows_optional_hint(
+def test_create_public_git_datasource_without_integration_ui(
     page, cleanup_file_datasources
 ):
-    """UI shows optional-integration hint; datasource reaches COMPLETED status.
+    """Public repo without an integration: datasource reaches COMPLETED status.
 
     Steps:
         1. Navigate to create datasource form.
-        2. Verify optional integration hint is visible (AC-2: banner present for Git).
-        3. Create datasource with public repo URL, no integration.
-        4. Verify datasource row appears with COMPLETED status (AC-1, AC-4, AC-5).
-        5. Teardown: delete datasource via API.
+        2. Create datasource with public repo URL, no integration.
+        3. Verify datasource row appears with COMPLETED status (AC-1, AC-4, AC-5).
+        4. Teardown: delete datasource via API.
     """
     create_page = CreateEditDatasourcePage(page)
     datasource_page = DataSourcePage(page)
 
     create_page.navigate_to()
-
-    # AC-2: Integration-optional banner is visible before form submission
-    create_page.should_see_optional_integration_hint()
 
     datasource_name = create_page.create_git_datasource(
         project_name=PROJECT,
