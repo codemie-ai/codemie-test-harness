@@ -45,6 +45,7 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
     project_key_alias,
 )
 from codemie_test_harness.tests.utils.activity_utils import ActivityUtils
+from codemie_test_harness.tests.utils.admin_budget_utils import AdminBudgetUtils
 from codemie_test_harness.tests.utils.admin_project_budget_group_utils import (
     AdminProjectBudgetGroupUtils,
 )
@@ -52,13 +53,16 @@ from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
 from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
+from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.budget_utils import BudgetUtils
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
+from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
 from codemie_test_harness.tests.utils.proxy_utils import ProxyUtils
 from codemie_test_harness.tests.utils.skill_utils import SkillsUtils
+from codemie_test_harness.tests.utils.user_utils import UserUtils
 from codemie_test_harness.tests.utils.workflow_utils import WorkflowUtils
 from codemie_test_harness.tests.utils.yaml_utils import (
     AssistantModel,
@@ -83,6 +87,99 @@ def keycloak_user(keycloak_utils, lite_llm_budget_utils):
         f"{email}_{DEFAULT_CLI_BUDGET_ID}",
     ):
         lite_llm_budget_utils.delete_customer(customer_id)
+
+
+@pytest.fixture(scope="function")
+def budget_creator(keycloak_utils, user_utils):
+    """Factory ``(name) -> (user_client, expected_created_by_name)``, `name` non-empty.
+
+    Creates a maintainer-role user (admin budgets require ``maintainer_access_only`` —
+    a plain admin test user gets 403, confirmed live) with its display name set to
+    exactly `name`, and returns the display name ``resolve_creator_names`` is expected
+    to produce (AC-5, ``budget_service.py:342``: ``user.name or user.username``), so a
+    test can assert the budgets API echoes it. Every created user is deleted after the
+    test.
+
+    On an identity-provider stand (``IDP_PROVIDER != "local"``, true on the preview
+    stand), ``AuthenticationService.sync_idp_user_profile`` (../codemie
+    src/codemie/service/user/authentication_service.py, ~309-320 and ~470) overwrites
+    the backend's ``name`` field from the Keycloak firstName/lastName claims on every
+    authenticated call that client makes — confirmed live: setting the name through
+    ``update_admin_user`` is undone by the very next call (``about_me()``,
+    ``create_budget()``). So on that path the Keycloak claim source is set first, via
+    ``KeycloakUtils.set_profile_name`` (firstName=`name`, lastName empty), before the
+    user's client makes any authenticated call — and the result is read back and
+    checked, rather than assumed, since the exact composition of the synced name from
+    firstName/lastName is this realm's behavior, not this harness's. There is no
+    "blank name" counterpart here: on this stand Keycloak drops the 'name' claim
+    entirely for a blank firstName/lastName and the backend then rejects the login, so
+    that state cannot be produced live through this account path (the
+    created_by_name username fallback it would exercise is covered by backend unit
+    tests only, on this environment). On a local-auth stand (``LocalUserUtils``, no
+    such resync), the admin API update is sufficient and is used directly.
+    """
+    created_emails = []
+
+    def _create(name: str):
+        uid = secrets.token_hex(4)
+        email = f"autotest_budgetcreator_{uid}@email.com"
+        password = keycloak_utils.create_platform_user(email=email)
+        created_emails.append(email)
+
+        if EnvironmentResolver.is_localhost():
+            user_client = get_client(username=email, password=password)
+            user_id = user_client.users.about_me().user_id
+            user_utils.update_admin_user(user_id, is_maintainer=True)
+            UserUtils(user_client).wait_until_user_management_effective()
+            detail = user_utils.update_admin_user(user_id, name=name)
+            return user_client, (detail.name or detail.username)
+
+        # IDP-backed stand: set the Keycloak claim source before any authenticated call.
+        keycloak_utils.set_profile_name(email, first_name=name, last_name="")
+        user_client = get_client(username=email, password=password)
+        user_id = user_client.users.about_me().user_id
+        user_utils.update_admin_user(user_id, is_maintainer=True)
+        UserUtils(user_client).wait_until_user_management_effective()
+        detail = user_utils.get_admin_user(user_id)
+
+        if detail.name != name:
+            raise AssertionError(
+                f"Expected the Keycloak-synced display name to equal {name!r} "
+                f"(firstName set, lastName empty); got {detail.name!r} instead — "
+                "this realm's full-name claim did not resolve to just the firstName."
+            )
+        return user_client, (detail.name or detail.username)
+
+    yield _create
+
+    for email in created_emails:
+        try:
+            keycloak_utils.delete_user(email)
+        except Exception as e:
+            logger.warning(f"Failed to delete user {email}: {e}")
+
+
+@pytest.fixture(scope="function")
+def budget_for_creator_state(request, budget_creator, admin_budget_utils):
+    """Indirect-parametrized: ``(budget_id, expected created_by_name)`` for one creator state.
+
+    ``request.param`` is one of ``"named"``, ``"system"``, ``"unresolved"``.
+    ``orphaned_creator_budget`` (tests/conftest.py) is requested lazily, only for the
+    ``"unresolved"`` state, so the other two states don't pay for provisioning and
+    deleting an extra user. There is no "unnamed" (username-fallback) state here: see
+    ``budget_creator``'s docstring for why that state cannot be produced live on this
+    stand.
+    """
+    state = request.param
+    if state == "named":
+        user_client, display_name = budget_creator(get_random_name())
+        budget_id = f"autotest-cs-{secrets.token_hex(4)}"
+        AdminBudgetUtils(user_client).create_budget(budget_id, "platform")
+        return budget_id, display_name
+    if state == "system":
+        return admin_budget_utils.find_preconfigured_budget()["budget_id"], None
+    budget_id = request.getfixturevalue("orphaned_creator_budget")
+    return budget_id, None
 
 
 @pytest.fixture(scope="function")

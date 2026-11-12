@@ -366,3 +366,17 @@ def disposable_project(project_utils):
             project_utils.delete_project(project_name)
         except Exception as e:
             logger.warning(f"Failed to delete project {project_name}: {e}")
+
+
+@pytest.fixture
+def budget_and_expected_display(request, admin_budget_utils):
+    """Indirect-parametrized: ``(budget dict, expected 'Created By' text)`` for one
+    missing-creator state (budget-created-by-column_TC_003).
+
+    ``request.param`` is ``"system"`` or ``"unresolved"``. ``orphaned_creator_budget``
+    (tests/conftest.py) is requested lazily, only for the ``"unresolved"`` state.
+    """
+    if request.param == "system":
+        return admin_budget_utils.find_preconfigured_budget(), "System"
+    budget_id = request.getfixturevalue("orphaned_creator_budget")
+    return admin_budget_utils.get_budget(budget_id), "—"
