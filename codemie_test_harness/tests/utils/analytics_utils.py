@@ -18,6 +18,7 @@ import json
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from codemie_sdk.models.analytics import (
     AnalyticsQueryParams,
@@ -39,10 +40,12 @@ from requests import HTTPError
 from codemie_test_harness.otlp_builder import build_hook_events
 from codemie_test_harness.tests import PROJECT
 from codemie_test_harness.tests.test_data.assistants_requests_analytics_test_data import (
+    CHATS_QUERY_ROW_CAP,
     MAX_PER_PAGE,
     REQUESTS_INDEX_TIMEOUT_S,
     REQUESTS_POLL_INTERVAL_S,
     REQUESTS_TIME_PERIOD,
+    REQUESTS_WINDOW_MARGIN_MIN,
 )
 
 from .base_utils import BaseUtils, poll_until
@@ -61,6 +64,26 @@ CLI_ANALYTICS_FEATURE_ID = "features:cliAnalytics"
 CLI_PROJECT_CONTEXT_TIMEOUT = 30
 # Ingested events reach the session tables on the next rollup refresh (30 s by default).
 CLI_SESSION_ROLLUP_TIMEOUT = 180
+
+
+def requests_window_start() -> str:
+    """ISO start of a short window that opens just before a test creates its data.
+
+    Narrowing both assistants endpoints to this window keeps the rows of the shared stand
+    out of the result. Pass it as ``start_date``; the end defaults to now.
+    """
+    start = datetime.now(timezone.utc) - timedelta(minutes=REQUESTS_WINDOW_MARGIN_MIN)
+    return start.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _period_filters(filters: dict) -> dict:
+    """Default to the recent time period unless the caller gave its own start_date.
+
+    The API gives ``time_period`` precedence over ``start_date``, so both must not be sent.
+    """
+    if "start_date" in filters:
+        return filters
+    return {"time_period": REQUESTS_TIME_PERIOD, **filters}
 
 
 @dataclass(frozen=True)
@@ -151,7 +174,7 @@ class AnalyticsUtils(BaseUtils):
 
         return poll_until(
             lambda: self.get_assistants_requests(
-                time_period=REQUESTS_TIME_PERIOD, per_page=MAX_PER_PAGE, **filters
+                per_page=MAX_PER_PAGE, **_period_filters(filters)
             ),
             is_ready,
             timeout=timeout,
@@ -161,34 +184,75 @@ class AnalyticsUtils(BaseUtils):
     def wait_for_assistants_chats_row(
         self,
         assistant_name: str,
+        assistant_id: str,
         settled: bool = False,
         timeout: float = REQUESTS_INDEX_TIMEOUT_S,
         **filters,
-    ) -> dict | None:
-        """Poll assistants-chats until it lists a row for ``assistant_name``.
+    ) -> dict:
+        """Poll assistants-chats until it lists the row of one assistant, and return it.
 
-        assistants-chats groups by assistant id and labels the row with the assistant's
-        current name. With ``settled`` the poll also waits for the row's cost to be
-        recorded. Returns the last row found, or None when none was listed.
+        assistants-chats groups by assistant id but its rows do not expose the id: each row
+        is labelled with the assistant's current name (or with the id itself when the
+        assistant no longer exists). The row is therefore found by ``assistant_name``, which
+        is unique per test run; ``assistant_id`` only sharpens the failure message.
+        With ``settled`` the poll also waits for the row's cost to be recorded.
+
+        Raises AssertionError, saying what came back, when the row is not listed or the
+        name matches more than one row.
         """
 
-        def fetch() -> dict | None:
-            rows = self.get_assistants_chats(
-                time_period=REQUESTS_TIME_PERIOD, per_page=MAX_PER_PAGE, **filters
-            ).data.rows
-            return next(
-                (row for row in rows if row["assistant"] == assistant_name), None
+        def fetch() -> tuple[TabularResponse, list[dict]]:
+            response = self.get_assistants_chats(
+                per_page=MAX_PER_PAGE, **_period_filters(filters)
+            )
+            matches = [
+                row for row in response.data.rows if row["assistant"] == assistant_name
+            ]
+            return response, matches
+
+        def is_ready(fetched: tuple[TabularResponse, list[dict]]) -> bool:
+            _, matches = fetched
+            return len(matches) == 1 and (
+                not settled
+                or (
+                    matches[0]["total_cost_usd"] is not None
+                    and not matches[0]["spend_unavailable"]
+                )
             )
 
-        return poll_until(
+        response, matches = poll_until(
             fetch,
-            lambda row: row is not None
-            and (
-                not settled
-                or (row["total_cost_usd"] is not None and not row["spend_unavailable"])
-            ),
+            is_ready,
             timeout=timeout,
             interval=REQUESTS_POLL_INTERVAL_S,
+        )
+        assert len(matches) == 1, self._describe_chats_miss(
+            response, matches, assistant_id, filters
+        )
+        return matches[0]
+
+    @staticmethod
+    def _describe_chats_miss(
+        response: TabularResponse,
+        matches: list[dict],
+        assistant_id: str,
+        filters: dict,
+    ) -> str:
+        """Say why assistants-chats has no single row for the assistant."""
+        rows = response.data.rows
+        pagination = response.pagination
+        truncated = (
+            pagination.has_more
+            if pagination is not None
+            else len(rows) >= CHATS_QUERY_ROW_CAP
+        )
+        labelled_by_id = [row for row in rows if row["assistant"] == assistant_id]
+        return (
+            f"assistants-chats returned {len(rows)} rows for the filters "
+            f"{sorted(filters)}; truncated at the page or query cap: {truncated}; "
+            f"rows labelled with the assistant's name: {len(matches)}; "
+            f"rows labelled with the assistant's id instead of its name: "
+            f"{len(labelled_by_id)}"
         )
 
     def get_workflows(self, **kwargs) -> TabularResponse:

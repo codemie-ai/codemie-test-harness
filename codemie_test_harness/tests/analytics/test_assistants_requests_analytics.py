@@ -18,6 +18,7 @@ import uuid
 
 import pytest
 from hamcrest import (
+    any_of,
     assert_that,
     close_to,
     contains_exactly,
@@ -47,7 +48,10 @@ from codemie_test_harness.tests.test_data.assistants_requests_analytics_test_dat
     SUCCESS_STATUS,
     UNUSED_CLIENT_SOURCE,
 )
-from codemie_test_harness.tests.utils.analytics_utils import AnalyticsUtils
+from codemie_test_harness.tests.utils.analytics_utils import (
+    AnalyticsUtils,
+    requests_window_start,
+)
 from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
 
 
@@ -70,6 +74,7 @@ def test_assistants_requests_lists_one_row_per_request_matching_chats_totals(
     assistant, assistant_utils, analytics_utils
 ):
     """@case individual-assistant-run-analytics_TC_001"""
+    window_start = requests_window_start()
     test_assistant = assistant()
     conversation_id = str(uuid.uuid4())
     assistant_utils.ask_assistant(
@@ -99,7 +104,7 @@ def test_assistants_requests_lists_one_row_per_request_matching_chats_totals(
     )
 
     chats_row = analytics_utils.wait_for_assistants_chats_row(
-        test_assistant.name, projects=test_assistant.project
+        test_assistant.name, test_assistant.id, start_date=window_start
     )
     assert_that(
         chats_row, is_not(none()), "assistants-chats lists the assistant's chat"
@@ -228,7 +233,9 @@ def test_assistants_requests_row_has_tokens_cost_time_and_status_without_error_d
         "money_spent is a number, or null while flagged spend_unavailable",
     )
     assert_that(
-        row["execution_time"], instance_of((int, float)), "execution time is a number"
+        row["execution_time"],
+        any_of(instance_of(int), instance_of(float)),
+        "execution time is a number",
     )
     assert_that(row["status"], equal_to(SUCCESS_STATUS), "the request succeeded")
     assert_that(
@@ -244,12 +251,13 @@ def test_assistants_requests_cost_sum_equals_assistants_chats_total_cost(
     assistant, assistant_utils, analytics_utils
 ):
     """@case individual-assistant-run-analytics_TC_006"""
+    window_start = requests_window_start()
     test_assistant = assistant()
     assistant_utils.ask_assistant(test_assistant, FIRST_PROMPT)
     assistant_utils.ask_assistant(test_assistant, SECOND_PROMPT)
 
     response = analytics_utils.wait_for_assistant_requests(
-        2, settled=True, assistant_id=test_assistant.id
+        2, settled=True, assistant_id=test_assistant.id, start_date=window_start
     )
     rows = response.data.rows
     assert_that(rows, has_length(2), "one row per request")
@@ -260,7 +268,10 @@ def test_assistants_requests_cost_sum_equals_assistants_chats_total_cost(
     )
 
     chats_row = analytics_utils.wait_for_assistants_chats_row(
-        test_assistant.name, settled=True, projects=test_assistant.project
+        test_assistant.name,
+        test_assistant.id,
+        settled=True,
+        start_date=window_start,
     )
     assert_that(
         chats_row, is_not(none()), "assistants-chats lists the assistant's chat"

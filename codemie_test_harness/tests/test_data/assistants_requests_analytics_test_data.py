@@ -23,6 +23,11 @@ REQUESTS_POLL_INTERVAL_S = 5
 
 # Both endpoints are paged; the largest page the API serves.
 MAX_PER_PAGE = 1000
+# assistants-chats ranks assistants by message count and keeps only the first 1000 before paging.
+CHATS_QUERY_ROW_CAP = 1000
+
+# A test's window opens this long before it creates its data, to absorb clock skew.
+REQUESTS_WINDOW_MARGIN_MIN = 5
 
 # The ledger figure and the chats total are the same value; allow only float noise.
 COST_TOLERANCE = 1e-6
