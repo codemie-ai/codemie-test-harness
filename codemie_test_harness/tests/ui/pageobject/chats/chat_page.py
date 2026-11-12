@@ -40,6 +40,9 @@ from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.pageobject.components.export_conversation_dialog import (
     ExportConversationDialog,
 )
+from codemie_test_harness.tests.ui.pageobject.components.tool_output_preview import (
+    ToolOutputPreview,
+)
 from codemie_test_harness.tests.ui.pageobject.chats.configuration_panel import (
     ConfigurationPanel,
 )
@@ -1380,6 +1383,23 @@ class ChatPage(BasePage):
         tool_block = self.tool_blocks.filter(has_text=tool_name_pattern)
         expect(tool_block.first).to_be_visible(timeout=timeout)
         return self
+
+    @step
+    def open_tool_output(self, tool_name_pattern: str) -> ToolOutputPreview:
+        """
+        Open the tool card of a tool and return its plain-text output component.
+
+        The card is opened with one click on the tool block; nothing is clicked when
+        output lines are already rendered, so a card the chat left open stays open.
+        VERIFY: whether a card starts opened or closed was not observed in the UI.
+
+        Args:
+            tool_name_pattern: Tool name or pattern to match (e.g., "Code Execute")
+        """
+        tool_output = ToolOutputPreview(self.page, self.chat_history_container)
+        if not tool_output.lines.first.is_visible():
+            self.tool_blocks.filter(has_text=tool_name_pattern).first.click()
+        return tool_output
 
     @step
     def should_have_any_tool_used(self, *tool_name_patterns: str, timeout: int = 30000):
