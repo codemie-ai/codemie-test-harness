@@ -8,7 +8,7 @@ Rules for every AI agent and every person who works in this repository, Claude C
 
 | Path | Why |
 |---|---|
-| `.env`, `**/.env`, `.env.local`, `.env.*.local`, `.env.prod*`, `.env.preview`, `.env.sandbox` | real settings files hold the CodeMie password and integration tokens; they are git-ignored (`.gitignore`). The tracked template `codemie_test_harness/.env.template` is allowed |
+| `.env`, `.env.local`, `.env.*.local`, `.env.prod*`, `.env.preview`, `.env.sandbox`, `.env.dev*`, `.env.stag*`, `.env.uat*`, `.env.qa*`, `.env.test*`, `*.env`, `.envrc`, in any folder | real settings files hold the CodeMie password and integration tokens; they are git-ignored (`.gitignore`). The tracked template `codemie_test_harness/.env.template` is allowed |
 | `~/.codemie/**`, mainly `~/.codemie/test-harness.json` | the harness CLI stores the login and integration credentials there (`CONFIG_FILE`, `codemie_test_harness/cli/constants.py`) |
 | `*.pem`, `*.key` | private keys and certificates |
 | `~/.ssh/**` | SSH keys give push access to repositories |
@@ -48,6 +48,9 @@ Only some rows of this table have a rule in `.claude/settings.json` (pushes, res
 
 ## Limits
 
+- Claude Code loads the project `.claude/settings.json` only when the session starts at the repository root. A session started in a package folder has no rules from this file. Start Claude Code at the root.
+- The path rules are anchored to the repository root (`/**/...`), so a `cd` into a package does not change them. Do not change them to `**/...`: that form is relative to the current folder.
+- Do not add a `!` exception (for example `Read(!/**/.env.example)`) to a root-anchored rule. Claude Code ignores it, and the rule blocks the excepted file too. List the blocked names instead of a broad `.env.*`.
 - Bash rules match the command text. Another spelling passes: for example `git -C . push --force`, `gh api -X POST …/releases`, `git commit -an`, or a script that runs the command. A rule that matches text inside a quoted message refuses a harmless command.
 - Read rules cover the file tools and file commands such as `cat`. They do not cover a program that opens the file itself.
 - With the Claude Code sandbox on, the Read deny rules also apply to every Bash subprocess. Then `pytest` and `codemie-test-harness` cannot read `.env` or `~/.codemie/test-harness.json`. Give the settings through environment variables, or let a person run the suite outside the sandbox. `poetry lock` still works in the sandbox.
