@@ -18,6 +18,7 @@ from typing import List, Optional
 from requests import HTTPError
 
 from codemie_sdk.models.user import (
+    AdminUserConversation,
     AdminUserListItem,
     AdminUserProject,
     CodeMieUserDetail,
@@ -219,3 +220,20 @@ class UserUtils(BaseUtils):
             return 200
         except HTTPError as e:
             return e.response.status_code
+
+    def remap_user(self, old_user_id: str, new_user_id: str) -> CodeMieUserDetail:
+        """Remap `old_user_id` to `new_user_id` (SuperAdmin only); moves the row and its content."""
+        return self.client.users.remap_user(old_user_id, new_user_id)
+
+    def remap_user_status_code(self, old_user_id: str, new_user_id: str) -> int:
+        try:
+            self.remap_user(old_user_id, new_user_id)
+            return 200
+        except HTTPError as e:
+            return e.response.status_code
+
+    def get_admin_user_conversation(
+        self, user_id: str, conversation_id: str
+    ) -> AdminUserConversation:
+        """Get a conversation, scoped to the user id it must belong to (admin only)."""
+        return self.client.users.get_admin_user_conversation(user_id, conversation_id)
