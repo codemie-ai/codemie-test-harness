@@ -53,19 +53,34 @@ from codemie_test_harness.tests.utils.analytics_utils import (
     requests_window_start,
 )
 from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
+from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
+    assert_principal_is,
+)
+from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
+from codemie_test_harness.tests.utils.logger_util import setup_logger
+from codemie_test_harness.tests.utils.marketplace_management_utils import (
+    personal_project_of,
+)
+
+logger = setup_logger(__name__)
 
 
 @pytest.fixture
 def regular_user_assistant(regular_client):
     """An assistant owned by the plain test user, created in that user's own project."""
+    username = CredentialsManager.get_parameter("AUTH_USERNAME_DEFAULT")
+    if not username:
+        pytest.skip("AUTH_USERNAME_DEFAULT is not set: no plain test user")
+    assert_principal_is(regular_client, username, not_admin=True)
+    user = regular_client.users.about_me()
+    project = personal_project_of(user) or username
     utils = AssistantUtils(regular_client)
-    project = regular_client.users.about_me().applications[0]
     created = utils.create_assistant(project_name=project)
     yield utils, created
     try:
         utils.delete_assistant(created)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Failed to delete assistant {created.id}: {e}")
 
 
 @pytest.mark.analytics
@@ -155,6 +170,20 @@ def test_assistants_requests_filters_by_assistant_id_and_client_source(
         [column.id for column in first_response.data.columns],
         has_items(*CORRELATION_COLUMNS),
         "the correlation columns are part of the response",
+    )
+
+    first_source = first_response.data.rows[0]["client_source"]
+    assert_that(first_source, is_not(none()), "the request row carries a client source")
+    same_source = analytics_utils.get_assistants_requests(
+        time_period=REQUESTS_TIME_PERIOD,
+        per_page=MAX_PER_PAGE,
+        assistant_id=first.id,
+        client_source=first_source,
+    )
+    assert_that(
+        [row["request_id"] for row in same_source.data.rows],
+        has_item(first_response.data.rows[0]["request_id"]),
+        "filtering by the request's own client source returns that request",
     )
 
     other_source = analytics_utils.get_assistants_requests(
