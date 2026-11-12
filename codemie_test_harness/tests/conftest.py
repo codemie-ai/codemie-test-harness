@@ -777,16 +777,12 @@ def keycloak_utils(client):
     return KeycloakUtils()
 
 
-@pytest.fixture
-def disposable_user(keycloak_utils):
-    """Function-scoped fresh user; deleted automatically after each test.
-
-    NOTE (localhost only): LocalUserUtils.create_test_user creates users with
-    is_admin=True.  On localhost TC-010 may therefore receive HTTP 200 instead
-    of 403, giving false assurance for the access-control scenario.
+def _disposable_user(keycloak_utils, label):
+    """Shared body for the disposable-user fixtures below: create a fresh user with
+    `label` in its email, yield (email, user_id, client), delete it afterwards.
     """
     uid = secrets.token_hex(4)
-    email = f"autotest_user_{uid}@email.com"
+    email = f"autotest_{label}_{uid}@email.com"
     password = keycloak_utils.create_test_user(email=email, project_name=email)
     try:
         user_client = get_client(username=email, password=password)
@@ -802,6 +798,43 @@ def disposable_user(keycloak_utils):
         keycloak_utils.delete_user(email)
     except Exception as e:
         logger.warning(f"Failed to delete user {email}: {e}")
+
+
+@pytest.fixture
+def disposable_user(keycloak_utils):
+    """Function-scoped fresh user; deleted automatically after each test.
+
+    NOTE (localhost only): LocalUserUtils.create_test_user creates users with
+    is_admin=True.  On localhost TC-010 may therefore receive HTTP 200 instead
+    of 403, giving false assurance for the access-control scenario.
+    """
+    yield from _disposable_user(keycloak_utils, "user")
+
+
+@pytest.fixture
+def new_user_id_factory(user_utils):
+    """Factory for a fresh id to remap a disposable user onto.
+
+    A remap rewrites the row's own id, so the Keycloak-side cleanup `disposable_user`
+    performs (by email, against the IDP) no longer reaches the backend row by its
+    original id. The SDK has no admin delete-user call, only deactivate, so this
+    factory best-effort deactivates the backend row at each id it handed out, after
+    the test; the row itself, and the original email it still carries, are left
+    behind in the backend permanently.
+    """
+    issued_ids = []
+
+    def _issue():
+        new_id = f"autotest-remap-{secrets.token_hex(6)}"
+        issued_ids.append(new_id)
+        return new_id
+
+    yield _issue
+    for issued_id in issued_ids:
+        try:
+            user_utils.deactivate_user(issued_id)
+        except Exception as e:
+            logger.warning(f"Failed to deactivate remapped user {issued_id}: {e}")
 
 
 @pytest.fixture
@@ -936,6 +969,38 @@ def maintainer_credentials(request, keycloak_utils, user_utils):
 def maintainer_client(maintainer_credentials):
     email, password = maintainer_credentials
     return get_client(username=email, password=password)
+
+
+@pytest.fixture
+def orphaned_creator_budget(keycloak_utils, user_utils, client):
+    """Platform budget whose creator's backend record is deleted right after creation.
+
+    AC-7/AC-13: ``created_by`` keeps the (now unresolvable) id, so every endpoint that
+    returns ``created_by_name`` must come back falsy with no error. Deleting only the
+    identity-provider account is not enough — ``resolve_creator_names`` reads the backend's
+    own user table (``user_repository.aget_users_by_ids`` filters ``deleted_at IS NOT
+    NULL``), so the backend record is removed the same way ``LocalUserUtils.delete_user_by_id``
+    does; a Keycloak-only deletion was confirmed live to still show the creator's name.
+    The creator needs the maintainer flag to create a budget at all (``maintainer_access_only``
+    on ``POST /v1/admin/budgets``; a plain admin test user gets 403, confirmed live).
+    """
+    uid = secrets.token_hex(4)
+    email = f"autotest_orphan_{uid}@email.com"
+    password = keycloak_utils.create_platform_user(email=email)
+    user_client = get_client(username=email, password=password)
+    user_id = user_client.users.about_me().user_id
+    try:
+        user_utils.update_admin_user(user_id, is_maintainer=True)
+        UserUtils(user_client).wait_until_user_management_effective()
+        budget_id = f"autotest-orphan-{uid}"
+        AdminBudgetUtils(user_client).create_budget(budget_id, "platform")
+    finally:
+        LocalUserUtils(client).delete_user_by_id(user_id)
+        try:
+            keycloak_utils.delete_user(email)
+        except Exception as e:
+            logger.warning(f"Failed to delete auth-server user {email}: {e}")
+    return budget_id
 
 
 @pytest.fixture

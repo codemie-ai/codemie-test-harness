@@ -63,22 +63,20 @@ class CLIAnalyticsPage(BasePage):
     API_PATH = "/v1/analytics/cli-analytics/"
     SECTIONS = {
         CLIAnalyticsSection.OVERVIEW: SectionSpec(
-            "Net lines over time", ("overview", "repositories")
+            "Net Lines Over Time", ("overview", "repositories")
         ),
-        CLIAnalyticsSection.USERS: SectionSpec(
-            "Per-user detail", ("users", "user-charts")
-        ),
+        CLIAnalyticsSection.USERS: SectionSpec("All Users", ("users", "user-charts")),
         CLIAnalyticsSection.REPOSITORIES: SectionSpec(
             "Repositories", ("repositories",)
         ),
         CLIAnalyticsSection.TOOLS_AND_MODELS: SectionSpec(
             "Most Used Tools", ("tools",)
         ),
-        CLIAnalyticsSection.ACTIVITY: SectionSpec("By weekday", ("activity",)),
+        CLIAnalyticsSection.ACTIVITY: SectionSpec("Sessions by Weekday", ("activity",)),
         CLIAnalyticsSection.EFFICIENCY: SectionSpec(
             "Context Bloat", ("efficiency", "sessions")
         ),
-        CLIAnalyticsSection.COST: SectionSpec("Cost by model", ("cost", "sessions")),
+        CLIAnalyticsSection.COST: SectionSpec("Cost by Model", ("cost", "sessions")),
         CLIAnalyticsSection.SESSIONS: SectionSpec(
             "Sessions", ("sessions", "frameworks")
         ),
