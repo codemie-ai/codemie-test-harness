@@ -62,23 +62,46 @@ def remap_project(admin_utils, project_utils):
 
 
 @pytest.fixture
-def owned_conversation_factory(disposable_user):
+def owned_conversation_factory(disposable_user, user_utils):
     """Factory: create a conversation as `disposable_user`'s client, deleted afterwards.
 
     `delete_project_cascade` removes assistants, workflows and budgets scoped to a
     project, but not conversations, so a conversation created for one of these tests
     needs this explicit cleanup instead.
+
+    Conversation ownership is checked by matching the caller's id to
+    `conversation.user_id` — there's no admin delete-by-id or delete-by-user-id route.
+    Once a test remaps `old_user_id` to `new_user_id`, `old_user_client`'s token can no
+    longer delete a conversation now owned by `new_user_id`, and `new_user_id` has no
+    client of its own to delete it with either (it's a synthetic id with no backend
+    account behind it). Call `note_remap(new_user_id)` right after remapping so
+    teardown remaps the row back to `old_user_id` before deleting with
+    `old_user_client`, which owns it again at that point.
     """
-    _, _, old_user_client = disposable_user
+    _, old_user_id, old_user_client = disposable_user
     conversation_utils = ConversationUtils(old_user_client)
     created_ids = []
+    current_owner_id = old_user_id
 
     def _create(**kwargs):
         conversation = conversation_utils.create_conversation(**kwargs)
         created_ids.append(conversation["id"])
         return conversation
 
+    def _note_remap(new_owner_id):
+        nonlocal current_owner_id
+        current_owner_id = new_owner_id
+
+    _create.note_remap = _note_remap
     yield _create
+    if created_ids and current_owner_id != old_user_id:
+        try:
+            user_utils.remap_user(current_owner_id, old_user_id)
+        except Exception as e:
+            logger.warning(
+                f"Failed to remap conversation owner {current_owner_id} back to "
+                f"{old_user_id} for cleanup: {e}"
+            )
     for conversation_id in created_ids:
         try:
             conversation_utils.delete_conversation(conversation_id)
@@ -212,6 +235,7 @@ def test_remap_moves_owned_content_to_new_user_id(
     # --- remap ---
 
     user_utils.remap_user(old_user_id, new_user_id)
+    owned_conversation_factory.note_remap(new_user_id)
 
     # --- confirm content now resolves under new_user_id after the remap ---
 
