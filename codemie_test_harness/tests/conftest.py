@@ -2641,7 +2641,9 @@ def pytest_sessionfinish(session):
     alone. Skills are only scoped by created_by (matches every skill this
     TEST_USER created, across sessions — same as before this refactor,
     not narrowed further here). Providers and cost centers match a
-    structural name pattern, also session-agnostic. Jira/Confluence/ADO
+    structural name pattern, also session-agnostic — except that a cost
+    center still pinned to a project (409 on delete) gets one prefix-scoped
+    retry: see delete_cost_centers' own docstring. Jira/Confluence/ADO
     cleanup is intentionally NOT done here — see test_clean_all_entities
     for that.
     """
@@ -2724,7 +2726,7 @@ def pytest_sessionfinish(session):
         logger.error(f"Failed to cleanup providers: {e}")
 
     try:
-        cleanup_utils.delete_cost_centers(client)
+        cleanup_utils.delete_cost_centers(client, prefix=prefix)
     except Exception as e:
         logger.error(f"Failed to cleanup cost centers: {e}")
 
