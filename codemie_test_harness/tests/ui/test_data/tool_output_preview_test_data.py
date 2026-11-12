@@ -22,9 +22,9 @@ from dataclasses import dataclass
 PREVIEW_EDGE_LINES = 20
 MINIMUM_PREVIEW_LINES = 60
 
-# VERIFY: the tool card title for code_executor was not observed in the chat; the
-# pattern is matched as a substring against the tool block text.
-CODE_EXECUTOR_TOOL_LABEL = "Code Execute"
+# Display name of the code_executor tool in the chat: the accessible name of its
+# tool card header button.
+CODE_EXECUTOR_TOOL_LABEL = "Code Executor"
 
 CODE_EXECUTOR_SYSTEM_PROMPT = (
     "You are a test assistant with the code_executor tool. For every user request "

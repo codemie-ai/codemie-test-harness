@@ -49,7 +49,7 @@ class ToolOutputPreview:
         """
         Args:
             page: Playwright page object
-            scope: Locator of the chat history the tool output is rendered in
+            scope: Locator of the tool card (thought container) holding the output
         """
         self.page = page
         self.scope = scope
@@ -58,8 +58,10 @@ class ToolOutputPreview:
 
     @property
     def lines(self) -> Locator:
-        """Rendered output lines (each is its own element whose whole text is ``line <n>``)."""
-        return self.scope.get_by_text(re.compile(r"^line \d+$"))
+        """Rendered Result lines of the tool card: each is its own <div> whose whole text is
+        ``line <n>`` (the last one carries a trailing space). The Input
+        section shows the code, never a bare ``line <n>``."""
+        return self.scope.get_by_text(re.compile(r"^line \d+\s*$"))
 
     @property
     def hidden_lines_button(self) -> Locator:

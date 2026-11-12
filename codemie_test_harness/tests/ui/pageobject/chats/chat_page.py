@@ -1384,22 +1384,37 @@ class ChatPage(BasePage):
         expect(tool_block.first).to_be_visible(timeout=timeout)
         return self
 
-    @step
-    def open_tool_output(self, tool_name_pattern: str) -> ToolOutputPreview:
-        """
-        Open the tool card of a tool and return its plain-text output component.
+    def tool_card_button(self, tool_name: str) -> Locator:
+        """Header button of a tool card; its accessible name is the tool's display name
+        (e.g. "Code Executor") and aria-expanded tells whether the card is open."""
+        return self.chat_history_container.get_by_role(
+            "button", name=tool_name, exact=True
+        )
 
-        The card is opened with one click on the tool block; nothing is clicked when
-        output lines are already rendered, so a card the chat left open stays open.
-        VERIFY: whether a card starts opened or closed was not observed in the UI.
+    def tool_card(self, tool_name: str) -> Locator:
+        """Tool card of a tool: the thought container (data-thought-id) that holds the
+        card header button, the Input section and the Result section."""
+        # The inner locator is page-rooted: filter(has=...) queries it relative to each card.
+        return self.chat_history_container.locator("[data-thought-id]").filter(
+            has=self.page.get_by_role("button", name=tool_name, exact=True)
+        )
+
+    @step
+    def open_tool_output(self, tool_name: str) -> ToolOutputPreview:
+        """
+        Open the tool card of a tool and return its plain-text Result component.
+
+        A card starts closed (aria-expanded=false); one click on its header opens it.
 
         Args:
-            tool_name_pattern: Tool name or pattern to match (e.g., "Code Execute")
+            tool_name: Display name of the tool (e.g., "Code Executor")
         """
-        tool_output = ToolOutputPreview(self.page, self.chat_history_container)
-        if not tool_output.lines.first.is_visible():
-            self.tool_blocks.filter(has_text=tool_name_pattern).first.click()
-        return tool_output
+        header = self.tool_card_button(tool_name)
+        expect(header).to_be_visible()
+        if header.get_attribute("aria-expanded") != "true":
+            header.click()
+        expect(header).to_have_attribute("aria-expanded", "true")
+        return ToolOutputPreview(self.page, self.tool_card(tool_name))
 
     @step
     def should_have_any_tool_used(self, *tool_name_patterns: str, timeout: int = 30000):
