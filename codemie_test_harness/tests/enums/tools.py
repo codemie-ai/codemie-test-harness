@@ -256,6 +256,12 @@ class CliMcpServer(str, Enum):
     RUN_COMMAND = "run command"
 
 
+class McpServerInstructionsFixture(str, Enum):
+    """Enum for the server-side-instructions fixture MCP server tool names."""
+
+    CONFIRM_REPLY = "confirm_reply"
+
+
 class McpServerFetch(str, Enum):
     """Enum for MCP Server Fetch tool names."""
 
