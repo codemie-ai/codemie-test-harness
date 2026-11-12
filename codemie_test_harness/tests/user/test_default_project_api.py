@@ -54,6 +54,7 @@ from codemie_test_harness.tests.utils.user_utils import UserUtils
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.smoke
+@pytest.mark.oss_standalone
 def test_set_default_project_marks_exactly_one_default(
     user_utils, default_project_member
 ):
@@ -78,6 +79,7 @@ def test_set_default_project_marks_exactly_one_default(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_switching_default_project_replaces_previous_default(
     user_utils, default_project_member
 ):
@@ -107,6 +109,7 @@ def test_switching_default_project_replaces_previous_default(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_personal_project_can_be_set_as_default(user_utils, default_project_member):
     """TC-03: the user's own personal project is a valid explicit default."""
     member = default_project_member
@@ -124,6 +127,7 @@ def test_personal_project_can_be_set_as_default(user_utils, default_project_memb
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.parametrize("case", ["non_member_project", "unknown_project"])
+@pytest.mark.oss_standalone
 def test_set_default_project_rejected_for_invalid_project(
     request, user_utils, default_project_member, case
 ):
@@ -147,6 +151,7 @@ def test_set_default_project_rejected_for_invalid_project(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_removing_default_membership_falls_back_to_personal_project(
     user_utils, default_project_member
 ):
@@ -165,6 +170,7 @@ def test_removing_default_membership_falls_back_to_personal_project(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_bulk_removing_default_membership_falls_back_to_personal_project(
     user_utils, project_utils, default_project_member
 ):
@@ -188,6 +194,7 @@ def test_bulk_removing_default_membership_falls_back_to_personal_project(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_removing_non_default_membership_keeps_default(
     user_utils, default_project_member
 ):
@@ -206,6 +213,7 @@ def test_removing_non_default_membership_keeps_default(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_clear_default_project(user_utils, default_project_member):
     """TC-08a: clearing unsets the default; clearing again, or a non-default project, is a no-op."""
     member = default_project_member
@@ -236,6 +244,7 @@ def test_clear_default_project(user_utils, default_project_member):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_clear_default_project_for_non_member_returns_404(
     user_utils, default_project_member, temp_project
 ):
@@ -250,6 +259,7 @@ def test_clear_default_project_for_non_member_returns_404(
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.parametrize("actor_utils", ["admin", "maintainer"], indirect=True)
+@pytest.mark.oss_standalone
 def test_admin_and_maintainer_can_set_and_clear_default_project(
     user_utils, actor_utils, default_project_member
 ):
@@ -276,6 +286,7 @@ def test_admin_and_maintainer_can_set_and_clear_default_project(
 @pytest.mark.parametrize(
     "actor_utils", ["project_admin", "auditor", "plain_user"], indirect=True
 )
+@pytest.mark.oss_standalone
 def test_roles_without_user_management_cannot_change_default_project(
     user_utils, actor_utils, default_project_member
 ):
@@ -301,6 +312,7 @@ def test_roles_without_user_management_cannot_change_default_project(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_auditor_can_see_default_project_marker(
     user_utils, auditor_client, default_project_member
 ):
@@ -328,6 +340,7 @@ def test_auditor_can_see_default_project_marker(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_admin_user_detail_and_list_expose_default_project_marker(
     user_utils, default_project_member
 ):
@@ -361,6 +374,7 @@ def test_admin_user_detail_and_list_expose_default_project_marker(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_member_profile_shows_default_project_and_follows_changes(
     user_utils, default_project_member
 ):
@@ -398,6 +412,7 @@ def test_member_profile_shows_default_project_and_follows_changes(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_user_projects_keep_their_order_when_defaults_change(
     user_utils, default_project_member
 ):
@@ -425,6 +440,7 @@ def test_user_projects_keep_their_order_when_defaults_change(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_defaults_of_different_users_in_one_project_are_independent(
     user_utils, default_project_member, disposable_user
 ):
@@ -450,6 +466,7 @@ def test_defaults_of_different_users_in_one_project_are_independent(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_default_project_can_be_set_again_after_default_membership_removed(
     user_utils, default_project_member
 ):
@@ -469,6 +486,7 @@ def test_default_project_can_be_set_again_after_default_membership_removed(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_set_default_project_for_unknown_user_returns_404(
     user_utils, default_project_member
 ):

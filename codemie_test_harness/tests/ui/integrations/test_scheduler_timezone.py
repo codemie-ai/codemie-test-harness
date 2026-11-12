@@ -195,6 +195,7 @@ def test_scheduler_edit_page_displays_saved_timezone(
 @pytest.mark.ui
 @pytest.mark.parametrize("tz, expected_label", _TIMEZONE_OFFSET_CASES)
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_scheduler_timezone_dropdown_option_shows_utc_offset(
     page: Page,
     tz: str,

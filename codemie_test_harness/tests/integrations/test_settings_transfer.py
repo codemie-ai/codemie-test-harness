@@ -218,6 +218,7 @@ def _assert_test_connection_succeeds(integration_utils, integration, context):
 @pytest.mark.settings_transfer
 @pytest.mark.smoke
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_move_relocates_project_and_user_scoped_integrations(
     project, integration_utils
 ):
@@ -305,6 +306,7 @@ def test_transfer_move_relocates_project_and_user_scoped_integrations(
 @pytest.mark.settings_transfer
 @pytest.mark.smoke
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_copy_duplicates_integrations_and_preserves_source(
     project, integration_utils
 ):
@@ -395,6 +397,7 @@ def test_transfer_copy_duplicates_integrations_and_preserves_source(
 @pytest.mark.settings_transfer
 @pytest.mark.api
 @pytest.mark.parametrize("mode", transfer_mode_test_data)
+@pytest.mark.oss_standalone
 def test_transfer_empty_source_project_returns_zero_counts(
     project, integration_utils, mode
 ):
@@ -517,6 +520,7 @@ def test_transfer_copy_skips_webhook_and_scheduler_integrations(
 @pytest.mark.integration
 @pytest.mark.settings_transfer
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_move_preserves_integration_id(project, integration_utils):
     """TC-05: a moved integration keeps its id and remains resolvable in the target project."""
     source = project()
@@ -546,6 +550,7 @@ def test_transfer_move_preserves_integration_id(project, integration_utils):
 @pytest.mark.settings_transfer
 @pytest.mark.api
 @pytest.mark.parametrize("mode", transfer_mode_test_data)
+@pytest.mark.oss_standalone
 def test_transfer_blocked_by_alias_collision_in_target(
     project, integration_utils, mode
 ):
@@ -594,6 +599,7 @@ def test_transfer_blocked_by_alias_collision_in_target(
     "source_override, target_override, mode_override, same_project, expected_message",
     invalid_transfer_payload_test_data,
 )
+@pytest.mark.oss_standalone
 def test_transfer_rejects_invalid_payload(
     project,
     integration_utils,
@@ -652,6 +658,7 @@ def test_transfer_rejects_invalid_payload(
 @pytest.mark.settings_transfer
 @pytest.mark.api
 @pytest.mark.parametrize("missing_side", missing_project_side_test_data)
+@pytest.mark.oss_standalone
 def test_transfer_rejects_nonexistent_project(project, integration_utils, missing_side):
     """TC-08: a nonexistent source/target project is rejected with 404, checked independently for each side."""
     existing = project()
@@ -677,6 +684,7 @@ def test_transfer_rejects_nonexistent_project(project, integration_utils, missin
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
 @pytest.mark.parametrize("role, expected_status", transfer_role_test_data)
+@pytest.mark.oss_standalone
 def test_transfer_requires_admin_or_maintainer_role(
     request, project, integration_utils, role, expected_status
 ):
@@ -731,6 +739,7 @@ def test_transfer_requires_admin_or_maintainer_role(
 @pytest.mark.parametrize(
     "type_of_integration, moved_scopes", transfer_type_filter_test_data
 )
+@pytest.mark.oss_standalone
 def test_transfer_type_of_integration_selects_scopes(
     project, integration_utils, type_of_integration, moved_scopes
 ):
@@ -758,6 +767,7 @@ def test_transfer_type_of_integration_selects_scopes(
 @pytest.mark.parametrize(
     "type_of_integration, listed", transfer_list_selection_test_data
 )
+@pytest.mark.oss_standalone
 def test_transfer_list_limits_transfer_to_listed_aliases(
     project, integration_utils, type_of_integration, listed
 ):
@@ -894,6 +904,7 @@ def test_transfer_copy_rejects_webhook_named_in_list(
     "type_of_integration, build_list, expected_details",
     transfer_invalid_filter_test_data,
 )
+@pytest.mark.oss_standalone
 def test_transfer_rejects_invalid_filter_combinations(
     project, integration_utils, type_of_integration, build_list, expected_details
 ):

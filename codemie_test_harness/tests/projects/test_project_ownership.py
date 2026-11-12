@@ -60,6 +60,7 @@ def _member_roles(project_utils, project_name):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_persists_new_owner(
     project_utils, non_admin_user, ownership_project
 ):
@@ -88,6 +89,7 @@ def test_transfer_ownership_persists_new_owner(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_by_unauthorized_user_returns_404(
     project_utils, non_admin_user, ownership_project
 ):
@@ -120,6 +122,7 @@ def test_transfer_ownership_by_unauthorized_user_returns_404(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_keeps_members_and_previous_owner(
     project_utils, non_admin_user, extra_platform_user, ownership_project
 ):
@@ -162,6 +165,7 @@ def test_transfer_ownership_keeps_members_and_previous_owner(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_to_non_member_adds_new_owner_as_project_admin(
     project_utils, non_admin_user, ownership_project
 ):
@@ -189,6 +193,7 @@ def test_transfer_ownership_to_non_member_adds_new_owner_as_project_admin(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_to_missing_user_returns_404(
     project_utils, ownership_project
 ):
@@ -217,6 +222,7 @@ def test_transfer_ownership_to_missing_user_returns_404(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_of_personal_project_returns_403(
     project_utils, non_admin_user
 ):

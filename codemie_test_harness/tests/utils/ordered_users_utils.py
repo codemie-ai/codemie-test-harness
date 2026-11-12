@@ -45,7 +45,7 @@ class OrderedUsersBuilder:
     def __init__(self, client, user_utils) -> None:
         self._client = client
         self._user_utils = user_utils
-        self._local = EnvironmentResolver.is_localhost()
+        self._local = EnvironmentResolver.uses_local_auth()
         self._local_users = LocalUserUtils(client) if self._local else None
         self._keycloak = None if self._local else KeycloakUtils()
         self._created: List[tuple] = []  # (user id, email)

@@ -74,9 +74,10 @@ def activity_project(maintainer_client):
 def keycloak_utils(maintainer_client):
     """Session-scoped user-lifecycle helper.
 
-    Uses LocalUserUtils on localhost, KeycloakUtils elsewhere.
+    Uses LocalUserUtils on stands with local auth (localhost, OSS standalone),
+    KeycloakUtils elsewhere.
     """
-    if EnvironmentResolver.is_localhost():
+    if EnvironmentResolver.uses_local_auth():
         return LocalUserUtils(maintainer_client)
     return KeycloakUtils()
 

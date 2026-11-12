@@ -36,6 +36,7 @@ from codemie_test_harness.tests.ui.pageobject.administration.user_management_pag
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_project_members_tab_lists_members_a_to_z_without_sort_params(
     page, project_with_ordered_members
 ):
@@ -53,6 +54,7 @@ def test_project_members_tab_lists_members_a_to_z_without_sort_params(
 
 @pytest.mark.user
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_users_management_lists_users_a_to_z(page, ordered_users):
     # @case admin-users-default-name-order_TC_005
     users = ordered_users(MIXED_CASE_NAMES)

@@ -60,6 +60,7 @@ def test_about_me(user_utils):
 @pytest.mark.api
 @pytest.mark.smoke
 @pytest.mark.sanity
+@pytest.mark.oss_standalone
 def test_get_user_data(user_utils):
     user_data = user_utils.get_user_data()
 

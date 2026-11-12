@@ -49,6 +49,7 @@ from codemie_test_harness.tests.ui.test_data.project_ownership_ui_test_data impo
     ids=CHANGE_OWNERSHIP_VISIBILITY_IDS,
     indirect=["acting_credentials"],
 )
+@pytest.mark.oss_standalone
 def test_change_ownership_menu_item_visibility(
     page, ownership_project, acting_credentials, change_ownership_visible
 ):
@@ -65,6 +66,7 @@ def test_change_ownership_menu_item_visibility(
 
 @pytest.mark.ui
 @pytest.mark.project
+@pytest.mark.oss_standalone
 def test_change_project_owner_through_popup(
     page, client, project_utils, non_admin_user, ownership_project
 ):

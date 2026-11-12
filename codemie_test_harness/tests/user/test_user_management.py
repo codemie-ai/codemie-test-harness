@@ -39,6 +39,7 @@ from codemie_sdk.models.user import (
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_admin_users_returns_paginated_response(user_utils):
     response = user_utils.list_admin_users()
 
@@ -71,6 +72,7 @@ def test_list_admin_users_returns_paginated_response(user_utils):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_admin_users_respects_pagination_parameters(user_utils):
     response = user_utils.list_admin_users(page=0, per_page=10)
 
@@ -88,6 +90,7 @@ def test_list_admin_users_respects_pagination_parameters(user_utils):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_admin_users_search_returns_matching_users(user_utils):
     me = user_utils.get_about_me()
     response = user_utils.list_admin_users(search=me.email)
@@ -107,6 +110,7 @@ def test_list_admin_users_search_returns_matching_users(user_utils):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_admin_users_search_by_username(user_utils):
     me = user_utils.get_about_me()
     users = user_utils.list_all_admin_users(search=me.username)
@@ -126,6 +130,7 @@ def test_list_admin_users_search_by_username(user_utils):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_get_admin_user_by_id_returns_full_details(user_utils):
     me = user_utils.get_about_me()
     detail = user_utils.get_admin_user(me.user_id)
@@ -153,6 +158,7 @@ def test_get_admin_user_by_id_returns_full_details(user_utils):
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
+@pytest.mark.oss_standalone
 def test_update_admin_user_name_persists(updated_user):
     _, new_name, updated = updated_user
 
@@ -165,6 +171,7 @@ def test_update_admin_user_name_persists(updated_user):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_get_user_project_memberships_returns_list(user_utils):
     me = user_utils.get_about_me()
     projects = user_utils.get_user_projects(me.user_id)
@@ -184,6 +191,7 @@ def test_get_user_project_memberships_returns_list(user_utils):
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
+@pytest.mark.oss_standalone
 def test_assign_and_remove_user_from_project(user_utils, temp_project):
     me = user_utils.get_about_me()
 
@@ -206,6 +214,7 @@ def test_assign_and_remove_user_from_project(user_utils, temp_project):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_get_admin_user_with_nonexistent_id_returns_404(user_utils):
     status_code = user_utils.get_admin_user_status_code("nonexistent-user-id-000000")
 
@@ -214,6 +223,7 @@ def test_get_admin_user_with_nonexistent_id_returns_404(user_utils):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_admin_users_with_invalid_filters_returns_400(user_utils):
     status_code = user_utils.list_admin_users_status_code(filters="not-valid-json{{{")
 
@@ -226,6 +236,7 @@ def test_list_admin_users_with_invalid_filters_returns_400(user_utils):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_admin_users_filter_is_active_returns_only_active_users(user_utils):
     response = user_utils.list_admin_users(filters=json.dumps({"is_active": True}))
 
@@ -243,6 +254,7 @@ def test_list_admin_users_filter_is_active_returns_only_active_users(user_utils)
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_admin_users_filter_is_active_false_returns_deactivated_user(
     user_utils, deactivated_user
 ):
@@ -270,6 +282,7 @@ def test_list_admin_users_filter_is_active_false_returns_deactivated_user(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_admin_users_filter_platform_role_admin_returns_only_admins(user_utils):
     response = user_utils.list_admin_users(
         filters=json.dumps({"platform_role": "admin"})
@@ -289,6 +302,7 @@ def test_list_admin_users_filter_platform_role_admin_returns_only_admins(user_ut
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_admin_users_filter_user_type_returns_valid_response(user_utils):
     response = user_utils.list_admin_users(filters=json.dumps({"user_type": "regular"}))
 
@@ -302,6 +316,7 @@ def test_list_admin_users_filter_user_type_returns_valid_response(user_utils):
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
+@pytest.mark.oss_standalone
 def test_list_admin_users_filter_projects_returns_assigned_user(
     user_utils, temp_project_with_me
 ):
@@ -322,6 +337,7 @@ def test_list_admin_users_filter_projects_returns_assigned_user(
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
+@pytest.mark.oss_standalone
 def test_update_user_project_role_sets_project_admin(user_utils, temp_project):
     me = user_utils.get_about_me()
     user_utils.assign_user_to_project(me.user_id, temp_project, is_project_admin=False)
@@ -345,6 +361,7 @@ def test_update_user_project_role_sets_project_admin(user_utils, temp_project):
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
+@pytest.mark.oss_standalone
 def test_deactivate_user_sets_inactive(user_utils, disposable_user):
     _, user_id, _ = disposable_user
 
@@ -360,6 +377,7 @@ def test_deactivate_user_sets_inactive(user_utils, disposable_user):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_admin_user_has_required_permissions(user_utils):
     me = user_utils.get_about_me()
 

@@ -127,9 +127,16 @@ def cleanup_faq_assistant_conversations():
     """Delete all conversations for AI/Run FAQ assistant after each test."""
     yield
     client = get_client()
-    assistants = client.assistants.list(
-        filters={"search": AssistantNames.AI_RUN_FAQ}, per_page=200, scope="marketplace"
-    )
+    try:
+        assistants = client.assistants.list(
+            filters={"search": AssistantNames.AI_RUN_FAQ},
+            per_page=200,
+            scope="marketplace",
+        )
+    except HTTPError:
+        # Assistants don't exist on this deployment (e.g. OSS standalone, which
+        # only has integrations) — nothing to clean up.
+        return
     assistant = next(
         (a for a in assistants if a.name == AssistantNames.AI_RUN_FAQ), None
     )

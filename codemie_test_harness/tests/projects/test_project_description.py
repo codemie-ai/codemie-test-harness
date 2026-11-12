@@ -41,6 +41,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
         "non_matching_term_excludes_it_with_no_error",
     ],
 )
+@pytest.mark.oss_standalone
 def test_search_on_project_with_no_description(project_utils, project, term_matches):
     """TC_008 / TC_009 — a project created with an empty
     description (normalizes server-side to None, project_service.py:389) is still returned

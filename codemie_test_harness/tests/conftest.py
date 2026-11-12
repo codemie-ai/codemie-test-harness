@@ -771,8 +771,9 @@ def ensure_test_project(admin_utils):
 
 @pytest.fixture(scope="session")
 def keycloak_utils(client):
-    """Session-scoped user-lifecycle helper. Uses LocalUserUtils on localhost, KeycloakUtils elsewhere."""
-    if EnvironmentResolver.is_localhost():
+    """Session-scoped user-lifecycle helper. Uses LocalUserUtils on stands with local
+    auth (localhost, OSS standalone), KeycloakUtils elsewhere."""
+    if EnvironmentResolver.uses_local_auth():
         return LocalUserUtils(client)
     return KeycloakUtils()
 
@@ -788,6 +789,32 @@ def disposable_user(keycloak_utils):
     uid = secrets.token_hex(4)
     email = f"autotest_user_{uid}@email.com"
     password = keycloak_utils.create_test_user(email=email, project_name=email)
+    try:
+        user_client = get_client(username=email, password=password)
+        user_id = user_client.users.about_me().user_id
+    except Exception:
+        try:
+            keycloak_utils.delete_user(email)
+        except Exception as e:
+            logger.warning(f"Failed to delete user {email} after setup failure: {e}")
+        raise
+    yield email, user_id, user_client
+    try:
+        keycloak_utils.delete_user(email)
+    except Exception as e:
+        logger.warning(f"Failed to delete user {email}: {e}")
+
+
+@pytest.fixture
+def disposable_platform_user(keycloak_utils):
+    """Function-scoped fresh non-admin user (developer role only); deleted after each test.
+
+    Unlike disposable_user, the user is never a platform admin, so ordinary project
+    membership behaves the same on local-auth stands as on identity-provider stands.
+    """
+    uid = secrets.token_hex(4)
+    email = f"autotest_platform_user_{uid}@email.com"
+    password = keycloak_utils.create_platform_user(email=email)
     try:
         user_client = get_client(username=email, password=password)
         user_id = user_client.users.about_me().user_id
@@ -2594,6 +2621,11 @@ def pytest_sessionfinish(session):
     structural name pattern, also session-agnostic. Jira/Confluence/ADO
     cleanup is intentionally NOT done here — see test_clean_all_entities
     for that.
+
+    OSS standalone only has integrations: assistants, skills, datasources,
+    workflows and cost centers don't exist there (404/403 on every call), so
+    those five are skipped outright instead of hitting the API and logging
+    an error every run.
     """
     if not hasattr(session.config, "workerinput"):
         _release_marketplace_core_gates()
@@ -2605,6 +2637,7 @@ def pytest_sessionfinish(session):
     client = get_client()
     prefix = autotest_entity_prefix
     common_filters = {"created_by": TEST_USER}
+    has_full_platform = not EnvironmentResolver.is_oss_standalone()
 
     try:
         cleanup_utils.delete_integrations(
@@ -2626,34 +2659,35 @@ def pytest_sessionfinish(session):
     except Exception as e:
         logger.error(f"Failed to clean up user integrations: {e}")
 
-    try:
-        cleanup_utils.delete_assistants(
-            client, {**common_filters, "search": prefix}, name_contains=prefix
-        )
-    except Exception as e:
-        logger.error(f"Failed to clean up assistants: {e}")
+    if has_full_platform:
+        try:
+            cleanup_utils.delete_assistants(
+                client, {**common_filters, "search": prefix}, name_contains=prefix
+            )
+        except Exception as e:
+            logger.error(f"Failed to clean up assistants: {e}")
 
-    try:
-        cleanup_utils.delete_skills(
-            client,
-            {**common_filters, "search": prefix},
-        )
-    except Exception as e:
-        logger.error(f"Failed to clean up skills: {e}")
+        try:
+            cleanup_utils.delete_skills(
+                client,
+                {**common_filters, "search": prefix},
+            )
+        except Exception as e:
+            logger.error(f"Failed to clean up skills: {e}")
 
-    try:
-        cleanup_utils.delete_datasources(
-            client, {**common_filters, "name": prefix}, name_contains=prefix
-        )
-    except Exception as e:
-        logger.error(f"Failed to clean up datasources: {e}")
+        try:
+            cleanup_utils.delete_datasources(
+                client, {**common_filters, "name": prefix}, name_contains=prefix
+            )
+        except Exception as e:
+            logger.error(f"Failed to clean up datasources: {e}")
 
-    try:
-        cleanup_utils.delete_workflows(
-            client, {**common_filters, "name": prefix}, name_contains=prefix
-        )
-    except Exception as e:
-        logger.error(f"Failed to clean up workflows: {e}")
+        try:
+            cleanup_utils.delete_workflows(
+                client, {**common_filters, "name": prefix}, name_contains=prefix
+            )
+        except Exception as e:
+            logger.error(f"Failed to clean up workflows: {e}")
 
     try:
         # search="autotest-" narrows the listing server-side (fast); the
@@ -2673,10 +2707,11 @@ def pytest_sessionfinish(session):
     except Exception as e:
         logger.error(f"Failed to cleanup providers: {e}")
 
-    try:
-        cleanup_utils.delete_cost_centers(client)
-    except Exception as e:
-        logger.error(f"Failed to cleanup cost centers: {e}")
+    if has_full_platform:
+        try:
+            cleanup_utils.delete_cost_centers(client)
+        except Exception as e:
+            logger.error(f"Failed to cleanup cost centers: {e}")
 
     logger.info("Session cleanup completed.")
 

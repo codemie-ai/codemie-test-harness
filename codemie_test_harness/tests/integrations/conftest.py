@@ -27,21 +27,21 @@ from codemie_test_harness.tests.utils.local_user_utils import LocalUserUtils
 
 
 @pytest.fixture(scope="module")
-def litellm_keycloak_utils(client):
-    if EnvironmentResolver.is_localhost():
+def keycloak_utils(client):
+    if EnvironmentResolver.uses_local_auth():
         return LocalUserUtils(client)
     return KeycloakUtils()
 
 
 @pytest.fixture
-def non_admin_user(litellm_keycloak_utils):
+def non_admin_user(keycloak_utils):
     uid = secrets.token_hex(4)
     email = f"autotest_litellm_{uid}@email.com"
-    password = litellm_keycloak_utils.create_platform_user(email=email)
+    password = keycloak_utils.create_platform_user(email=email)
     member_client = get_client(username=email, password=password)
     member_id = member_client.users.about_me().user_id
     yield email, member_id, member_client
-    litellm_keycloak_utils.delete_user(email)
+    keycloak_utils.delete_user(email)
 
 
 @pytest.fixture
@@ -51,7 +51,7 @@ def non_admin_integration_utils(non_admin_user):
 
 
 @pytest.fixture
-def disposable_maintainer_client(litellm_keycloak_utils, user_utils):
+def disposable_maintainer_client(keycloak_utils, user_utils):
     """A CodeMie client for a disposable user promoted to platform maintainer.
 
     ``is_maintainer=True`` satisfies the ``admin_or_maintainer_access_only``
@@ -60,16 +60,16 @@ def disposable_maintainer_client(litellm_keycloak_utils, user_utils):
     """
     uid = secrets.token_hex(4)
     email = f"autotest_maintainer_{uid}@email.com"
-    password = litellm_keycloak_utils.create_test_user(email=email, project_name=email)
+    password = keycloak_utils.create_test_user(email=email, project_name=email)
     user_client = get_client(username=email, password=password)
     user_id = user_client.users.about_me().user_id
     user_utils.update_admin_user(user_id, is_maintainer=True)
     yield user_client
-    litellm_keycloak_utils.delete_user(email)
+    keycloak_utils.delete_user(email)
 
 
 @pytest.fixture
-def admin_client(litellm_keycloak_utils, user_utils):
+def admin_client(keycloak_utils, user_utils):
     """A CodeMie client for a disposable user promoted to platform admin.
 
     ``is_admin=True`` satisfies the ``admin_or_maintainer_access_only`` guard
@@ -78,12 +78,12 @@ def admin_client(litellm_keycloak_utils, user_utils):
     """
     uid = secrets.token_hex(4)
     email = f"autotest_admin_{uid}@email.com"
-    password = litellm_keycloak_utils.create_test_user(email=email, project_name=email)
+    password = keycloak_utils.create_test_user(email=email, project_name=email)
     user_client = get_client(username=email, password=password)
     user_id = user_client.users.about_me().user_id
     user_utils.update_admin_user(user_id, is_admin=True)
     yield user_client
-    litellm_keycloak_utils.delete_user(email)
+    keycloak_utils.delete_user(email)
 
 
 @pytest.fixture

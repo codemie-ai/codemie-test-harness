@@ -14,6 +14,25 @@
 
 import logging
 import sys
+from contextlib import contextmanager
+
+SDK_HTTP_LOGGER = "codemie_sdk.utils.http"
+
+
+@contextmanager
+def expected_http_errors():
+    """Silence the SDK's ERROR log for HTTP responses the test provokes on purpose.
+
+    Use around a call that is meant to fail (e.g. a 403 access-control check);
+    the assertion on the raised error still runs as usual.
+    """
+    sdk_logger = logging.getLogger(SDK_HTTP_LOGGER)
+    previous_level = sdk_logger.level
+    sdk_logger.setLevel(logging.CRITICAL)
+    try:
+        yield
+    finally:
+        sdk_logger.setLevel(previous_level)
 
 
 class _SafeStreamHandler(logging.StreamHandler):
