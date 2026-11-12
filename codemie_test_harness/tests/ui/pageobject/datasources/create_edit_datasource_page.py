@@ -599,14 +599,19 @@ class CreateEditDatasourcePage(BasePage):
         On create, a single eligible integration is auto-selected once the
         settings load, so the form may or may not hold a value. Wait a bounded
         time for the clear icon: when it shows up, clear the selection and
-        confirm the placeholder; when it never does, no integration was
-        selected and there is nothing to clear.
+        confirm the placeholder. When it never does, re-read the form: if the
+        integration dropdown is rendered, it must show the placeholder (a late
+        auto-select fails here instead of letting the test go on with an
+        integration selected); if no dropdown is rendered at all (the form
+        offers only "Add User Integration"), there is nothing to clear.
         """
         try:
             self.integration_clear_icon.wait_for(
                 state="visible", timeout=self.INTEGRATION_AUTOSELECT_WAIT_MS
             )
         except PlaywrightTimeoutError:
+            if self.integration_input.count() > 0:
+                self.should_see_integration_empty()
             return self
         self.clear_integration()
         self.should_see_integration_empty()
@@ -708,8 +713,16 @@ class CreateEditDatasourcePage(BasePage):
             integration: Alias to pick in the integration dropdown; the pick is
                 verified to stick before the form is submitted.
             clear_integration: When True, make sure the integration is empty
-                (clears an auto-selected one). Do not combine with `integration`.
+                (clears an auto-selected one). Cannot be combined with `integration`.
+
+        Raises:
+            ValueError: if both `integration` and `clear_integration` are given.
         """
+        if integration and clear_integration:
+            raise ValueError(
+                "create_git_datasource: `integration` and `clear_integration=True` "
+                "contradict each other; pass only one of them"
+            )
         name = self._base_create_datasource(
             name, project_name, description, DataSourceType.GIT, shared, integration
         )
@@ -1195,13 +1208,14 @@ class CreateEditDatasourcePage(BasePage):
     def should_see_selected_integration(self, integration: str):
         """Assert the integration dropdown label shows the given alias.
 
-        The UI appends a scope suffix to the alias, e.g. "<alias> (project)", so
-        the label must equal the alias optionally followed by one parenthesised
-        suffix. Anything else, including the placeholder, fails. Scoped to the
-        label so the clear icon and the trigger never affect the match.
+        The UI appends the integration scope to the alias, e.g. "<alias> (project)",
+        so the label must equal the alias optionally followed by a "(project)" or
+        "(user)" suffix. Anything else, including the placeholder or a different
+        parenthesised text, fails. Scoped to the label so the clear icon and the
+        trigger never affect the match.
         """
         expect(self.integration_dropdown).to_have_text(
-            re.compile(rf"^{re.escape(integration)}(\s*\([^)]*\))?$")
+            re.compile(rf"^{re.escape(integration)}(\s*\((project|user)\))?$")
         )
         return self
 
