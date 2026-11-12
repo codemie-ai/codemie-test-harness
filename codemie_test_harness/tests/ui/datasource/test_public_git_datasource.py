@@ -71,7 +71,9 @@ def test_create_public_git_datasource_ui_shows_optional_hint(
         project_name=PROJECT,
         repo_link=CredentialsManager.get_parameter("GITHUB_PUBLIC_PROJECT"),
         branch="main",
-        # integration omitted — public repo, no credentials needed
+        # no integration — public repo, no credentials needed; clear any
+        # auto-selected one so the form is really empty
+        clear_integration=True,
     )
     cleanup_file_datasources.append(datasource_name)
 
@@ -117,7 +119,9 @@ def test_private_git_repo_without_integration_shows_error_notification(page):
         project_name=PROJECT,
         repo_link=CredentialsManager.get_parameter("GITLAB_PROJECT"),
         branch="main",
-        # integration omitted — private repo, will be rejected by health check
+        # no integration — private repo, will be rejected by health check; clear
+        # any auto-selected one so the rejection is not masked
+        clear_integration=True,
     )
 
     # AC-6: Error notification visible; no datasource created

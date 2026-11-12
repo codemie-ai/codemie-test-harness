@@ -123,9 +123,8 @@ def test_edit_datasource(
 @pytest.mark.prod_regression
 def test_code_datasource_no_error_after_project_change_and_description_edit(
     page,
-    datasource_utils,
+    gitlab_datasource_with_integration,
     gitlab_integration,
-    default_embedding_llm,
 ):
     """
     Test that after changing project and saving, subsequent description edits succeed without 'Repository not found' error.
@@ -142,9 +141,9 @@ def test_code_datasource_no_error_after_project_change_and_description_edit(
         - Both PROJECT and test_project_name exist
 
     Test Steps:
-        1. Create a GitLab datasource via API with PROJECT
+        1. Use a GitLab datasource created via API with PROJECT and the integration
         2. Navigate to datasource list page
-        3. Open datasource for editing
+        3. Open datasource for editing and verify the saved integration is shown
         4. Change the project from PROJECT to test_project_name (project selector IS ENABLED in edit mode)
         5. Click "Save & Reindex"
         6. Verify save succeeds and project is updated to test_project_name
@@ -163,12 +162,9 @@ def test_code_datasource_no_error_after_project_change_and_description_edit(
     datasource_page = DataSourcePage(page)
     edit_page = CreateEditDatasourcePage(page)
 
-    # Step 1: Create a GitLab datasource via API
-    datasource = datasource_utils.create_gitlab_datasource(
-        setting_id=gitlab_integration.id,
-        embeddings_model=default_embedding_llm.base_name,
-        project_name=PROJECT,
-    )
+    # Step 1: GitLab datasource created via API in PROJECT with the integration
+    # (function-scoped fixture, deleted via API in teardown)
+    datasource = gitlab_datasource_with_integration
 
     # Step 2: Navigate to datasource list page
     datasource_page.navigate_to()
@@ -176,6 +172,8 @@ def test_code_datasource_no_error_after_project_change_and_description_edit(
 
     # Step 3: Open datasource for editing
     datasource_page.open_and_select_row_action(datasource.name, "Edit")
+    # The saved integration is shown on the edit form
+    edit_page.should_see_selected_integration(gitlab_integration.alias)
 
     # Step 4: Change the project (project selector IS ENABLED in edit mode)
     # Change from PROJECT to test_project_name
@@ -217,3 +215,47 @@ def test_code_datasource_no_error_after_project_change_and_description_edit(
         created_by=TEST_USER,
         timeout=120000,
     )
+
+
+@pytest.mark.gitlab
+@pytest.mark.datasource
+@pytest.mark.ui
+@pytest.mark.prod_regression
+def test_clear_git_datasource_integration_persists_after_save(
+    page,
+    gitlab_datasource_with_integration,
+    gitlab_integration,
+):
+    """Clearing the integration of a Git datasource persists and stays empty on reopen.
+
+    Regression: the integration dropdown could not be cleared on the edit form
+    (the saved alias snapped back) and an empty integration was not persisted.
+
+    Steps:
+        1. Open the datasource for editing; the saved integration alias is shown.
+        2. Click the clear icon; the placeholder is shown.
+        3. Click plain Save (no reindex) and wait for the datasource list.
+        4. Reopen the datasource for editing; the placeholder is shown, not the alias.
+    """
+    # @case git-datasource-integration-cannot-be_TC_001
+    datasource = gitlab_datasource_with_integration
+    datasource_page = DataSourcePage(page)
+    edit_page = CreateEditDatasourcePage(page)
+
+    datasource_page.navigate_to()
+    datasource_page.should_see_datasource_with_name(datasource.name)
+
+    datasource_page.open_and_select_row_action(datasource.name, "Edit")
+    edit_page.should_see_selected_integration(gitlab_integration.alias)
+
+    edit_page.clear_integration()
+    edit_page.should_see_integration_empty()
+
+    edit_page.click_save()
+    datasource_page.should_see_datasource_with_name(datasource.name)
+
+    datasource_page.open_and_select_row_action(datasource.name, "Edit")
+    # The form is loaded once the datasource name is filled; only then is an empty
+    # integration label a statement about the saved value, not a loading state.
+    edit_page.should_see_disabled_name_input(datasource.name)
+    edit_page.should_see_integration_empty()

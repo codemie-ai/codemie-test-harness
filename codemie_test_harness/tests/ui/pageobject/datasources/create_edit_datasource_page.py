@@ -16,7 +16,7 @@ import re
 from typing import Optional
 
 from hamcrest import assert_that, is_not, empty, matches_regexp
-from playwright.sync_api import expect
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.test_data.google_datasource_test_data import (
@@ -35,6 +35,7 @@ from codemie_test_harness.tests.ui.pageobject.datasources.datasource_sidebar imp
 )
 from codemie_test_harness.tests.ui.test_data.datasource_test_data import (
     DataSourceType,
+    INTEGRATION_PLACEHOLDER,
     SUMMARIZATION_METHODS_LIST,
     DATA_SOURCE_TYPES_LIST,
     FILE_INSTRUCTIONS,
@@ -60,6 +61,10 @@ class CreateEditDatasourcePage(BasePage):
     """Create Data Source page object with property-based element locators."""
 
     page_url = "/data-sources/create"
+
+    # How long to wait for the create form to auto-select a single eligible
+    # integration before concluding that none was selected.
+    INTEGRATION_AUTOSELECT_WAIT_MS = 5000
 
     def __init__(self, page):
         super().__init__(page)
@@ -187,6 +192,16 @@ class CreateEditDatasourcePage(BasePage):
     @property
     def integration_dropdown(self):
         return self.integration_input.locator(".p-dropdown-label")
+
+    @property
+    def integration_clear_icon(self):
+        """Clear (X) icon of the integration dropdown.
+
+        PrimeReact renders it only while a value is selected and the dropdown is
+        clearable. Source-derived class name (`.p-dropdown-clear-icon`); not yet
+        observed on a stand with a saved integration.
+        """
+        return self.integration_input.locator(".p-dropdown-clear-icon")
 
     @property
     def refresh_integrations_button(self):
@@ -572,6 +587,32 @@ class CreateEditDatasourcePage(BasePage):
         return self
 
     @step
+    def clear_integration(self):
+        """Click the clear (X) icon of the integration dropdown."""
+        self.integration_clear_icon.click()
+        return self
+
+    @step
+    def clear_integration_if_selected(self):
+        """Leave the integration empty on the create form.
+
+        On create, a single eligible integration is auto-selected once the
+        settings load, so the form may or may not hold a value. Wait a bounded
+        time for the clear icon: when it shows up, clear the selection and
+        confirm the placeholder; when it never does, no integration was
+        selected and there is nothing to clear.
+        """
+        try:
+            self.integration_clear_icon.wait_for(
+                state="visible", timeout=self.INTEGRATION_AUTOSELECT_WAIT_MS
+            )
+        except PlaywrightTimeoutError:
+            return self
+        self.clear_integration()
+        self.should_see_integration_empty()
+        return self
+
+    @step
     def click_create(self):
         self.create_button.click()
         return self
@@ -658,13 +699,24 @@ class CreateEditDatasourcePage(BasePage):
         summarization_method: Optional[str] = None,
         embeddings_model: Optional[str] = None,
         integration: Optional[str] = None,
+        clear_integration: bool = False,
     ):
         """
         Creates a Git DataSource with required and optional fields.
+
+        Args:
+            integration: Alias to pick in the integration dropdown; the pick is
+                verified to stick before the form is submitted.
+            clear_integration: When True, make sure the integration is empty
+                (clears an auto-selected one). Do not combine with `integration`.
         """
         name = self._base_create_datasource(
             name, project_name, description, DataSourceType.GIT, shared, integration
         )
+        if integration:
+            self.should_see_selected_integration(integration)
+        if clear_integration:
+            self.clear_integration_if_selected()
         if repo_link:
             self.fill_repo_link(repo_link)
         if branch:
@@ -1141,7 +1193,17 @@ class CreateEditDatasourcePage(BasePage):
 
     @step
     def should_see_selected_integration(self, integration: str):
-        expect(self.integration_input).to_have_text(integration)
+        """Assert the integration dropdown label shows exactly the given alias.
+
+        Scoped to the label so the clear icon and the trigger never affect the match.
+        """
+        expect(self.integration_dropdown).to_have_text(integration)
+        return self
+
+    @step
+    def should_see_integration_empty(self):
+        """Assert the integration dropdown shows the placeholder, not a selected alias."""
+        expect(self.integration_dropdown).to_have_text(INTEGRATION_PLACEHOLDER)
         return self
 
     @step

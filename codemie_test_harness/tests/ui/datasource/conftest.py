@@ -62,6 +62,26 @@ def enough_datasources():
 
 
 @pytest.fixture
+def gitlab_datasource_with_integration(
+    datasource_utils, gitlab_integration, default_embedding_llm
+):
+    """Function-scoped Git datasource created via API with a saved integration.
+
+    A test may edit or clear the integration of this datasource, which would
+    break other tests if they shared the session-scoped `gitlab_datasource`, so
+    every test gets its own copy. Teardown deletes it via the API and never
+    raises.
+    """
+    datasource = datasource_utils.create_gitlab_datasource(
+        setting_id=gitlab_integration.id,
+        embeddings_model=default_embedding_llm.base_name,
+    )
+    yield datasource
+    if datasource:
+        datasource_utils.safe_delete_datasource(datasource)
+
+
+@pytest.fixture
 def cleanup_file_datasources():
     """Track datasource names created during a test and delete them in teardown.
 
