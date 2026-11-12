@@ -777,16 +777,12 @@ def keycloak_utils(client):
     return KeycloakUtils()
 
 
-@pytest.fixture
-def disposable_user(keycloak_utils):
-    """Function-scoped fresh user; deleted automatically after each test.
-
-    NOTE (localhost only): LocalUserUtils.create_test_user creates users with
-    is_admin=True.  On localhost TC-010 may therefore receive HTTP 200 instead
-    of 403, giving false assurance for the access-control scenario.
+def _disposable_user(keycloak_utils, label):
+    """Shared body for the disposable-user fixtures below: create a fresh user with
+    `label` in its email, yield (email, user_id, client), delete it afterwards.
     """
     uid = secrets.token_hex(4)
-    email = f"autotest_user_{uid}@email.com"
+    email = f"autotest_{label}_{uid}@email.com"
     password = keycloak_utils.create_test_user(email=email, project_name=email)
     try:
         user_client = get_client(username=email, password=password)
@@ -802,6 +798,43 @@ def disposable_user(keycloak_utils):
         keycloak_utils.delete_user(email)
     except Exception as e:
         logger.warning(f"Failed to delete user {email}: {e}")
+
+
+@pytest.fixture
+def disposable_user(keycloak_utils):
+    """Function-scoped fresh user; deleted automatically after each test.
+
+    NOTE (localhost only): LocalUserUtils.create_test_user creates users with
+    is_admin=True.  On localhost TC-010 may therefore receive HTTP 200 instead
+    of 403, giving false assurance for the access-control scenario.
+    """
+    yield from _disposable_user(keycloak_utils, "user")
+
+
+@pytest.fixture
+def new_user_id_factory(user_utils):
+    """Factory for a fresh id to remap a disposable user onto.
+
+    A remap rewrites the row's own id, so the Keycloak-side cleanup `disposable_user`
+    performs (by email, against the IDP) no longer reaches the backend row by its
+    original id. The SDK has no admin delete-user call, only deactivate, so this
+    factory best-effort deactivates the backend row at each id it handed out, after
+    the test; the row itself, and the original email it still carries, are left
+    behind in the backend permanently.
+    """
+    issued_ids = []
+
+    def _issue():
+        new_id = f"autotest-remap-{secrets.token_hex(6)}"
+        issued_ids.append(new_id)
+        return new_id
+
+    yield _issue
+    for issued_id in issued_ids:
+        try:
+            user_utils.deactivate_user(issued_id)
+        except Exception as e:
+            logger.warning(f"Failed to deactivate remapped user {issued_id}: {e}")
 
 
 @pytest.fixture
@@ -1219,6 +1252,21 @@ def invalid_gitlab_integration(integration_utils):
     integration = integration_utils.create_integration(
         credential_type=CredentialTypes.GIT,
         credential_values=CredentialsManager.invalid_gitlab_credentials(),
+    )
+    yield integration
+    if integration:
+        integration_utils.delete_integration(integration)
+
+
+@pytest.fixture(scope="session")
+def ms_exchange_integration(integration_utils):
+    """MS Exchange integration for workflow Tool-node tests (exchange_forward, exchange_send).
+
+    Dummy NTLM-path credentials — integration creation does not validate them live.
+    """
+    integration = integration_utils.create_integration(
+        credential_type=CredentialTypes.MS_EXCHANGE,
+        credential_values=CredentialsManager.ms_exchange_credentials(),
     )
     yield integration
     if integration:
@@ -2108,6 +2156,7 @@ def skill(skill_utils):
         content=None,
         visibility=None,
         categories=None,
+        mcp_servers=None,
     ):
         nonlocal created_skill
         from codemie_sdk.models.skill import SkillVisibility
@@ -2118,6 +2167,7 @@ def skill(skill_utils):
             content=content,
             visibility=visibility or SkillVisibility.PROJECT,
             categories=categories,
+            mcp_servers=mcp_servers,
         )
         return created_skill
 
@@ -2623,7 +2673,9 @@ def pytest_sessionfinish(session):
     alone. Skills are only scoped by created_by (matches every skill this
     TEST_USER created, across sessions — same as before this refactor,
     not narrowed further here). Providers and cost centers match a
-    structural name pattern, also session-agnostic. Jira/Confluence/ADO
+    structural name pattern, also session-agnostic — except that a cost
+    center still pinned to a project (409 on delete) gets one prefix-scoped
+    retry: see delete_cost_centers' own docstring. Jira/Confluence/ADO
     cleanup is intentionally NOT done here — see test_clean_all_entities
     for that.
     """
@@ -2706,7 +2758,7 @@ def pytest_sessionfinish(session):
         logger.error(f"Failed to cleanup providers: {e}")
 
     try:
-        cleanup_utils.delete_cost_centers(client)
+        cleanup_utils.delete_cost_centers(client, prefix=prefix)
     except Exception as e:
         logger.error(f"Failed to cleanup cost centers: {e}")
 

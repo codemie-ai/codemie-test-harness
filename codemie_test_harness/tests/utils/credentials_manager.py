@@ -970,6 +970,25 @@ class CredentialsManager:
         ]
 
     @staticmethod
+    def ms_exchange_credentials() -> List[CredentialValues]:
+        """Create MS Exchange (NTLM path) credentials for a test integration.
+
+        Integration creation does not validate credentials live (ExchangeToolConfig is only
+        instantiated from these values when the user explicitly tests the connection), so
+        these dummy values are sufficient — no real Exchange mailbox is required. Keys match
+        ExchangeToolConfig's fields (codemie_tools.ms_exchange.models).
+        """
+        return [
+            CredentialValues(key="auth_type", value="ntlm"),
+            CredentialValues(key="mailbox", value="qa-automation@example.com"),
+            CredentialValues(
+                key="ews_url", value="https://ews.example.com/EWS/Exchange.asmx"
+            ),
+            CredentialValues(key="service_account_username", value="qa-automation"),
+            CredentialValues(key="service_account_password", value="dummy-password"),
+        ]
+
+    @staticmethod
     def github_credentials() -> List[CredentialValues]:
         """Create GitHub credentials using configuration-driven approach."""
         return [

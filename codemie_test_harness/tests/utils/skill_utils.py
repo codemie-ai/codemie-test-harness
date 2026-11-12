@@ -17,6 +17,7 @@
 import base64
 from typing import List, Optional
 
+from codemie_sdk.models.assistant import MCPServerDetails
 from codemie_sdk.models.skill import (
     SkillCompanionFilePayload,
     SkillCreateRequest,
@@ -53,6 +54,7 @@ class SkillsUtils(BaseUtils):
         visibility: SkillVisibility = SkillVisibility.PROJECT,
         categories: Optional[List[str]] = None,
         enabled_builtin_subagents: Optional[List[str]] = None,
+        mcp_servers: Optional[List[MCPServerDetails]] = None,
     ):
         """Send create skill request.
 
@@ -63,6 +65,7 @@ class SkillsUtils(BaseUtils):
             project_name: Project name
             visibility: Skill visibility setting
             categories: List of category IDs
+            mcp_servers: MCP servers contributed by this skill to assistants it is attached to
 
         Returns:
             Tuple of (created skill response, skill name)
@@ -80,6 +83,7 @@ class SkillsUtils(BaseUtils):
             visibility=visibility,
             categories=categories or [],
             enabled_builtin_subagents=enabled_builtin_subagents,
+            mcp_servers=mcp_servers or [],
         )
 
         response = self.client.skills.create(request)
@@ -94,6 +98,7 @@ class SkillsUtils(BaseUtils):
         visibility: SkillVisibility = SkillVisibility.PROJECT,
         categories: Optional[List[str]] = None,
         enabled_builtin_subagents: Optional[List[str]] = None,
+        mcp_servers: Optional[List[MCPServerDetails]] = None,
     ):
         """Create a skill and wait for it to be available.
 
@@ -104,6 +109,7 @@ class SkillsUtils(BaseUtils):
             project_name: Project name
             visibility: Skill visibility setting
             categories: List of category IDs
+            mcp_servers: MCP servers contributed by this skill to assistants it is attached to
 
         Returns:
             Created skill object with full details (including content)
@@ -116,6 +122,7 @@ class SkillsUtils(BaseUtils):
             visibility=visibility,
             categories=categories,
             enabled_builtin_subagents=enabled_builtin_subagents,
+            mcp_servers=mcp_servers,
         )
 
         # Wait for the skill to appear in the list
