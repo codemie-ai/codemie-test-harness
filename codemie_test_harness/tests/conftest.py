@@ -2713,7 +2713,13 @@ def pytest_sessionfinish(session):
     client = get_client()
     prefix = autotest_entity_prefix
     common_filters = {"created_by": TEST_USER}
-    has_full_platform = not EnvironmentResolver.is_oss_standalone()
+    try:
+        has_full_platform = not EnvironmentResolver.is_oss_standalone()
+    except Exception as e:
+        logger.warning(
+            f"Failed to resolve environment, assuming full platform for cleanup: {e}"
+        )
+        has_full_platform = True
 
     try:
         cleanup_utils.delete_integrations(
