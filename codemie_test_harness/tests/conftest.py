@@ -778,13 +778,19 @@ def keycloak_utils(client):
     return KeycloakUtils()
 
 
-def _disposable_user(keycloak_utils, label):
+def _disposable_user(keycloak_utils, label, create=None):
     """Shared body for the disposable-user fixtures below: create a fresh user with
-    `label` in its email, yield (email, user_id, client), delete it afterwards.
+    `label` in its email via `create(email) -> password` (keycloak_utils.create_test_user,
+    i.e. a platform admin, by default), yield (email, user_id, client), delete it
+    afterwards.
     """
     uid = secrets.token_hex(4)
     email = f"autotest_{label}_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=email)
+
+    def _create_platform_admin(e):
+        return keycloak_utils.create_test_user(email=e, project_name=e)
+
+    password = (create or _create_platform_admin)(email)
     try:
         user_client = get_client(username=email, password=password)
         user_id = user_client.users.about_me().user_id
@@ -845,23 +851,9 @@ def disposable_platform_user(keycloak_utils):
     Unlike disposable_user, the user is never a platform admin, so ordinary project
     membership behaves the same on local-auth stands as on identity-provider stands.
     """
-    uid = secrets.token_hex(4)
-    email = f"autotest_platform_user_{uid}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    try:
-        user_client = get_client(username=email, password=password)
-        user_id = user_client.users.about_me().user_id
-    except Exception:
-        try:
-            keycloak_utils.delete_user(email)
-        except Exception as e:
-            logger.warning(f"Failed to delete user {email} after setup failure: {e}")
-        raise
-    yield email, user_id, user_client
-    try:
-        keycloak_utils.delete_user(email)
-    except Exception as e:
-        logger.warning(f"Failed to delete user {email}: {e}")
+    yield from _disposable_user(
+        keycloak_utils, "platform_user", create=keycloak_utils.create_platform_user
+    )
 
 
 @pytest.fixture
