@@ -16,7 +16,7 @@
 
 import pytest
 from codemie_sdk.models.workflow import WorkflowMode
-from hamcrest import assert_that, equal_to, greater_than, has_length
+from hamcrest import assert_that, equal_to, greater_than, has_length, not_none
 from requests import HTTPError
 
 from codemie_test_harness.tests.test_data.workflow_revision_test_data import (
@@ -252,6 +252,11 @@ def test_rollback_is_recorded_as_new_revision_with_displaced_config(
         "The newest revision must hold the config the rollback displaced",
     )
     assert_that(newest.change_notes, equal_to(ROLLBACK_CHANGE_NOTES))
+    assert_that(
+        newest.created_by,
+        not_none(),
+        "The rollback revision must record who performed the rollback",
+    )
     assert_that(newest.created_by.user_id, equal_to(client.users.about_me().user_id))
 
 

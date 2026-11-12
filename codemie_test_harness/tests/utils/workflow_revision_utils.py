@@ -14,8 +14,6 @@
 
 """Helpers for the workflow revision history and rollback API."""
 
-from codemie_sdk.models.workflow import WorkflowUpdateRequest
-
 from codemie_test_harness.tests.utils.workflow_utils import WorkflowUtils
 
 
@@ -23,18 +21,10 @@ class WorkflowRevisionUtils(WorkflowUtils):
     def save_workflow_yaml(self, workflow, yaml_config):
         """Save a new ``yaml_config``; a semantic change adds one revision to the history.
 
-        Unlike ``update_workflow`` it does not wait on the workflow list, so it stays
-        cheap when a test builds a history of more than twenty revisions.
+        It does not wait on the workflow list (``wait=False``), so it stays cheap when a
+        test builds a history of more than twenty revisions.
         """
-        request = WorkflowUpdateRequest(
-            name=workflow.name,
-            project=workflow.project,
-            description=workflow.description,
-            yaml_config=yaml_config,
-            mode=workflow.mode,
-            shared=workflow.shared,
-        )
-        return self.send_update_workflow_request(workflow.id, request=request)
+        return self.update_workflow(workflow, yaml_config=yaml_config, wait=False)
 
     def list_workflow_versions(self, workflow_id, page=None, per_page=None):
         """List the saved revisions, newest first. Raises HTTPError on a non-2xx answer."""
