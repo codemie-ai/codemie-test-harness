@@ -1386,17 +1386,23 @@ class ChatPage(BasePage):
 
     def tool_card_button(self, tool_name: str) -> Locator:
         """Header button of a tool card; its accessible name is the tool's display name
-        (e.g. "Code Executor") and aria-expanded tells whether the card is open."""
+        (e.g. "Code Executor") and aria-expanded tells whether the card is open.
+
+        Takes the first card: the model may call the tool more than once in a turn,
+        and every call renders its own header."""
         return self.chat_history_container.get_by_role(
             "button", name=tool_name, exact=True
-        )
+        ).first
 
     def tool_card(self, tool_name: str) -> Locator:
         """Tool card of a tool: the thought container (data-thought-id) that holds the
-        card header button, the Input section and the Result section."""
+        card header button, the Input section and the Result section. The first such
+        card, matching tool_card_button()."""
         # The inner locator is page-rooted: filter(has=...) queries it relative to each card.
-        return self.chat_history_container.locator("[data-thought-id]").filter(
-            has=self.page.get_by_role("button", name=tool_name, exact=True)
+        return (
+            self.chat_history_container.locator("[data-thought-id]")
+            .filter(has=self.page.get_by_role("button", name=tool_name, exact=True))
+            .first
         )
 
     @step
@@ -1414,7 +1420,7 @@ class ChatPage(BasePage):
         if header.get_attribute("aria-expanded") != "true":
             header.click()
         expect(header).to_have_attribute("aria-expanded", "true")
-        return ToolOutputPreview(self.page, self.tool_card(tool_name))
+        return ToolOutputPreview(self.tool_card(tool_name))
 
     @step
     def should_have_any_tool_used(self, *tool_name_patterns: str, timeout: int = 30000):

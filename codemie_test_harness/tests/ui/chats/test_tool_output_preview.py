@@ -39,6 +39,23 @@ from codemie_test_harness.tests.ui.test_data.tool_output_preview_test_data impor
 TOOL_RESPONSE_TIMEOUT_MS = 120000
 
 
+def _run_code_executor_prompt(page, navigate_to_new_chat_page, assistant, prompt):
+    """Ask a new code_executor assistant to run the prompt and open its tool card."""
+    chat_page = navigate_to_new_chat_page(page)
+    test_assistant = assistant(
+        Toolkit.FILE_MANAGEMENT.value,
+        FileManagementTool.CODE_EXECUTOR.value,
+        system_prompt=CODE_EXECUTOR_SYSTEM_PROMPT,
+    )
+
+    chat_page.send_message(message=prompt.content, assistant_name=test_assistant.name)
+    chat_page.wait_for_assistant_response(timeout=TOOL_RESPONSE_TIMEOUT_MS)
+    chat_page.should_have_tool_used(
+        CODE_EXECUTOR_TOOL_LABEL, timeout=TOOL_RESPONSE_TIMEOUT_MS
+    )
+    return chat_page.open_tool_output(CODE_EXECUTOR_TOOL_LABEL)
+
+
 # @case long-tool-output-shows-its_TC_002
 @pytest.mark.chat
 @pytest.mark.ui
@@ -53,22 +70,9 @@ def test_long_tool_output_shows_preview_and_expands_and_collapses(
     AC-1: first 20 and last 20 lines with a hidden-lines control.
     AC-2: the control expands the output to every line.
     """
-    chat_page = navigate_to_new_chat_page(page)
-    test_assistant = assistant(
-        Toolkit.FILE_MANAGEMENT.value,
-        FileManagementTool.CODE_EXECUTOR.value,
-        system_prompt=CODE_EXECUTOR_SYSTEM_PROMPT,
+    tool_output = _run_code_executor_prompt(
+        page, navigate_to_new_chat_page, assistant, LONG_OUTPUT_PROMPT
     )
-
-    chat_page.send_message(
-        message=LONG_OUTPUT_PROMPT.content, assistant_name=test_assistant.name
-    )
-    chat_page.wait_for_assistant_response(timeout=TOOL_RESPONSE_TIMEOUT_MS)
-    chat_page.should_have_tool_used(
-        CODE_EXECUTOR_TOOL_LABEL, timeout=TOOL_RESPONSE_TIMEOUT_MS
-    )
-
-    tool_output = chat_page.open_tool_output(CODE_EXECUTOR_TOOL_LABEL)
     tool_output.should_show_preview(LONG_OUTPUT_PROMPT.line_count)
 
     tool_output.expand(LONG_OUTPUT_PROMPT.line_count)
@@ -90,23 +94,9 @@ def test_tool_output_below_threshold_is_shown_in_full_without_toggle(
 
     AC-4: output below the threshold has no control.
     """
-    chat_page = navigate_to_new_chat_page(page)
-    test_assistant = assistant(
-        Toolkit.FILE_MANAGEMENT.value,
-        FileManagementTool.CODE_EXECUTOR.value,
-        system_prompt=CODE_EXECUTOR_SYSTEM_PROMPT,
+    tool_output = _run_code_executor_prompt(
+        page, navigate_to_new_chat_page, assistant, BELOW_THRESHOLD_OUTPUT_PROMPT
     )
-
-    chat_page.send_message(
-        message=BELOW_THRESHOLD_OUTPUT_PROMPT.content,
-        assistant_name=test_assistant.name,
-    )
-    chat_page.wait_for_assistant_response(timeout=TOOL_RESPONSE_TIMEOUT_MS)
-    chat_page.should_have_tool_used(
-        CODE_EXECUTOR_TOOL_LABEL, timeout=TOOL_RESPONSE_TIMEOUT_MS
-    )
-
-    tool_output = chat_page.open_tool_output(CODE_EXECUTOR_TOOL_LABEL)
     tool_output.should_show_all_lines_without_toggle(
         BELOW_THRESHOLD_OUTPUT_PROMPT.line_count
     )

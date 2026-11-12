@@ -45,13 +45,11 @@ def _line_texts(first: int, last: int) -> list:
 class ToolOutputPreview:
     """Component for the plain-text output of one tool call in the chat history."""
 
-    def __init__(self, page, scope: Locator):
+    def __init__(self, scope: Locator):
         """
         Args:
-            page: Playwright page object
             scope: Locator of the tool card (thought container) holding the output
         """
-        self.page = page
         self.scope = scope
 
     # Elements
@@ -127,7 +125,9 @@ class ToolOutputPreview:
     def should_show_all_lines_without_toggle(self, total_lines: int):
         """A result below the 60-line threshold: every line is rendered and there is
         neither a hidden-lines button nor a Collapse button."""
-        assert total_lines < MINIMUM_PREVIEW_LINES
+        assert total_lines < MINIMUM_PREVIEW_LINES, (
+            f"{total_lines} lines is not below {MINIMUM_PREVIEW_LINES}"
+        )
         expect(self.lines).to_have_text(_line_texts(1, total_lines))
         expect(self.hidden_lines_button).to_have_count(0)
         expect(self.collapse_button).to_have_count(0)
