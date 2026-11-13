@@ -59,16 +59,14 @@ class CLIAnalyticsPage(BasePage):
     """CLI Analytics dashboard and its section navigation."""
 
     PATH = "/analytics?tab=cliAnalytics"
-    TAB_NAME = "CLI Analytics"
+    TAB_NAME = "AI Attribution"
     API_PATH = "/v1/analytics/cli-analytics/"
     SECTIONS = {
         CLIAnalyticsSection.OVERVIEW: SectionSpec(
             "Net Lines Over Time", ("overview", "repositories")
         ),
-        CLIAnalyticsSection.USERS: SectionSpec("All Users", ("users", "user-charts")),
-        CLIAnalyticsSection.REPOSITORIES: SectionSpec(
-            "Repositories", ("repositories",)
-        ),
+        CLIAnalyticsSection.USERS: SectionSpec("All Users", ("users",)),
+        CLIAnalyticsSection.REPOSITORIES: SectionSpec("Repositories", ("projects",)),
         CLIAnalyticsSection.TOOLS_AND_MODELS: SectionSpec(
             "Most Used Tools", ("tools",)
         ),
