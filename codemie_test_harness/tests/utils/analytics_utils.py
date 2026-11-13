@@ -106,6 +106,48 @@ class AnalyticsUtils(BaseUtils):
         params = PaginatedAnalyticsQueryParams(**kwargs) if kwargs else None
         return self.client.analytics.get_assistants_chats(params)
 
+    def get_assistants_requests(
+        self, assistant_id: str | None = None, **kwargs
+    ) -> TabularResponse:
+        """Get per-request assistant analytics.
+
+        Args:
+            assistant_id: Optional exact assistant id to list the requests of
+            **kwargs: Query parameters including pagination and the attributes filter
+
+        Returns:
+            TabularResponse with one row per assistant request
+        """
+        params = PaginatedAnalyticsQueryParams(assistant_id=assistant_id, **kwargs)
+        return self.client.analytics.get_assistants_requests(params)
+
+    def get_workflows_executions(self, **kwargs) -> TabularResponse:
+        """Get per-execution workflow analytics.
+
+        Args:
+            **kwargs: Query parameters including pagination and the attributes filter
+
+        Returns:
+            TabularResponse with one row per workflow execution
+        """
+        params = PaginatedAnalyticsQueryParams(**kwargs)
+        return self.client.analytics.get_workflows_executions(params)
+
+    def get_attributes_usage(
+        self, attribute_key: str | None = None, **kwargs
+    ) -> TabularResponse:
+        """Get usage grouped by the values of one run attribute key.
+
+        Args:
+            attribute_key: Attribute key to group by; omitted from the request when None
+            **kwargs: Query parameters including pagination and the attributes filter
+
+        Returns:
+            TabularResponse with one row per attribute value
+        """
+        params = PaginatedAnalyticsQueryParams(**kwargs)
+        return self.client.analytics.get_attributes_usage(attribute_key, params)
+
     def get_workflows(self, **kwargs) -> TabularResponse:
         """Get workflows analytics.
 

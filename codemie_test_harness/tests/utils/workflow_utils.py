@@ -274,6 +274,7 @@ class WorkflowUtils(BaseUtils):
         modify_prompt: bool = True,
         file_names: Optional[List[str]] = None,
         timeout: Optional[int] = None,
+        attributes: Optional[dict] = None,
     ):
         """
         Create a workflow execution with optional conversation context.
@@ -297,6 +298,7 @@ class WorkflowUtils(BaseUtils):
                 (seconds) for this call only. Pass it for executions known to run
                 long for reasons unrelated to the LLM (e.g. a script step that
                 provisions a sandbox) instead of raising the timeout for every test.
+            attributes: Optional run attributes (string keys and values) fixed for this execution.
 
         Returns:
             Completed workflow execution object with LLM response
@@ -319,6 +321,7 @@ class WorkflowUtils(BaseUtils):
             file_names=file_names,
             conversation_id=conversation_id,
             tags=tags,
+            attributes=attributes,
         )
 
         # Wait for execution to appear (same technique as execute_workflow)
@@ -385,6 +388,18 @@ class WorkflowUtils(BaseUtils):
         )
 
         return execution, executions_service
+
+    def send_workflow_execution_request(
+        self, workflow_id, user_input: str = "", attributes: Optional[dict] = None
+    ):
+        """Send one workflow execution request and return the raw creation response.
+
+        Unlike ``create_workflow_execution`` it neither waits for the execution nor
+        modifies the prompt, so a rejected request surfaces as the HTTPError it raises.
+        """
+        return self.client.workflows.executions(workflow_id).create(
+            user_input=user_input, attributes=attributes
+        )
 
     def run_workflow(
         self, workflow_id, user_input="", tags: Optional[List[str]] = None
