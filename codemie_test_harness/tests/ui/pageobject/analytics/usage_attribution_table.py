@@ -70,10 +70,12 @@ class UsageAttributionTable(BasePage):
     def options_select(self) -> Locator:
         """Select that switches the scope (shared projects, repository groups) or the filter (people).
 
-        A PrimeReact Dropdown exposes its aria-label on the trigger, a role=button element.
+        A PrimeReact Dropdown exposes its aria-label on a visually hidden readonly input only, and
+        the role=button trigger carries no name. The input cannot be clicked, so this is the
+        Dropdown root that holds it; a click on the root opens the option list.
         """
-        return self.page.get_by_role(
-            "button", name=self.spec.options_select, exact=True
+        return self.page.locator('[data-pc-name="dropdown"]').filter(
+            has=self.page.get_by_label(self.spec.options_select, exact=True)
         )
 
     @property
