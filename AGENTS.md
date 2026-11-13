@@ -13,6 +13,8 @@ AGENTS.md has no native import directive. Open the paths below as plain files.
 | Environments | .ai-run/guides/testing/environments.md | Target stands, settings sources, test data, safety |
 | Risk model | .ai-run/guides/testing/risk-model.md | Risk areas and priorities |
 | Test config | .ai-run/guides/testing/config.json | Machine-readable disciplines, adapters, conventions, SDK entry |
+| Safety | .ai-run/guides/safety-no-go.md | Files never read, commands never run, actions that need a person |
+| Security | .ai-run/guides/development/security-patterns.md | Public-repo rules, secrets, placeholders, CI scans, `make scan-internal` |
 | Quality gates | .ai-run/guides/quality-gates.md | Exact checks, CI jobs, pre-commit hook, gaps |
 | Git | .ai-run/guides/standards/git-workflow.md | Branches, commits, PR titles, ticket-key rule |
 | Release | docs/RELEASING.md | Tags, versions, publish workflow |
@@ -39,6 +41,7 @@ AGENTS.md has no native import directive. Open the paths below as plain files.
 
 | Rule | Trigger | Action |
 |---|---|---|
+| Safety | ANY task | Load `.ai-run/guides/safety-no-go.md`; never read secrets, run destructive commands or publish. `.claude/settings.json` blocks the usual spellings for Claude Code only |
 | Check Guides First | ANY task | Match the request to a category and load the P0 guide before searching broadly |
 | Testing | "write tests" / "run tests" | Load `.ai-run/guides/testing/strategy.md`. The suites need a running CodeMie installation. |
 | Git Operations | "commit" / "push" / "PR" | Only then; load `.ai-run/guides/standards/git-workflow.md` |
