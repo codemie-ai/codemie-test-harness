@@ -49,11 +49,11 @@ def test_set_budget_creates_project_cost_center_admins_and_budget(
     provisioning_full,
     provisioning_client_names,
     provisioning_client_user_id,
-    non_admin_user,
+    platform_user,
     provisioning_utils,
 ):
     # @case provisioning-api-for-third-party_TC_001
-    member_email, member_id, _ = non_admin_user
+    member_email, member_id = platform_user.email, platform_user.user_id
     project_name = provisioning_utils.new_project_name()
     cost_center = provisioning_utils.new_cost_center_name()
     unknown = unknown_email()
@@ -175,10 +175,10 @@ def test_set_budget_replaces_amounts_and_removes_categories_not_sent(
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_resend_converges_to_the_same_state(
-    provisioning_full, non_admin_user, provisioning_utils
+    provisioning_full, platform_user, provisioning_utils
 ):
     # @case provisioning-api-for-third-party_TC_011
-    member_email, _, _ = non_admin_user
+    member_email = platform_user.email
     project_name = provisioning_utils.new_project_name()
     request = budget_request(
         {"platform": 100.0, "cli": 40.0},

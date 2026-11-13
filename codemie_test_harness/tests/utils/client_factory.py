@@ -19,6 +19,7 @@ import pytest
 import requests
 from codemie_sdk import CodeMieClient
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
+from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
 
 
 class _LocalAuthClient(CodeMieClient):
@@ -26,12 +27,10 @@ class _LocalAuthClient(CodeMieClient):
 
     ``CodeMieClient`` decides local-auth vs. Keycloak purely from the domain string
     (``localhost`` / ``127.0.0.1`` / ``0.0.0.0`` / ``192.168``), not from whether a
-    Keycloak realm is actually configured. An OSS-standalone backend that has no
-    Keycloak (local-auth only, via ``/v1/local-auth/login``) but is reached at a real
-    hostname — e.g. an OSS-standalone sandbox behind an IdP-fronted ingress — would
-    otherwise fall into the Keycloak branch with empty ``AUTH_SERVER_URL`` /
-    ``AUTH_REALM_NAME`` and fail before it ever tries to log in. ``get_client()``
-    selects this subclass instead whenever no Keycloak realm is configured.
+    Keycloak realm is actually configured. An OSS-standalone backend (local IdP only,
+    via ``/v1/local-auth/login``) is reached at a real hostname and would otherwise
+    fall into the Keycloak branch and fail before it ever tries to log in.
+    ``get_client()`` selects this subclass on every local-IdP stand.
     """
 
     @staticmethod
@@ -45,16 +44,14 @@ def get_client(
 ):
     """Create a test client instance.
 
-    Uses the Keycloak-backed login when ``AUTH_SERVER_URL``/``AUTH_REALM_NAME`` are
-    configured (preview, production); otherwise forces local-auth via
-    `_LocalAuthClient`, since the SDK only takes that branch for a literal localhost
-    domain and an OSS-standalone stand with no Keycloak realm can be reached at a
-    real hostname.
+    The login is chosen by domain, like the user-lifecycle helper
+    (`get_user_lifecycle_utils`): local-auth via `_LocalAuthClient` on localhost and
+    OSS standalone (local IdP), Keycloak on every other stand.
     """
     auth_server_url = CredentialsManager.get_parameter("AUTH_SERVER_URL", "")
     auth_realm_name = CredentialsManager.get_parameter("AUTH_REALM_NAME", "")
     client_cls = (
-        CodeMieClient if (auth_server_url or auth_realm_name) else _LocalAuthClient
+        _LocalAuthClient if EnvironmentResolver.uses_local_auth() else CodeMieClient
     )
     try:
         return client_cls(

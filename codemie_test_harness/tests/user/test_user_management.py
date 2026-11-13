@@ -362,8 +362,8 @@ def test_update_user_project_role_sets_project_admin(user_utils, temp_project):
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
 @pytest.mark.oss_standalone
-def test_deactivate_user_sets_inactive(user_utils, disposable_user):
-    _, user_id, _ = disposable_user
+def test_deactivate_user_sets_inactive(user_utils, admin_user):
+    user_id = admin_user.user_id
 
     user_utils.deactivate_user(user_id)
 

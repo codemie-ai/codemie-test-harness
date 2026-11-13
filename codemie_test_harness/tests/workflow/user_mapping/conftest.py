@@ -113,7 +113,7 @@ def assistant_scoped_mapping(
 @pytest.fixture(scope="function")
 def user_isolation_context(
     client,
-    non_admin_user,
+    platform_user,
     admin_utils,
     project_utils,
     user_utils,
@@ -125,7 +125,7 @@ def user_isolation_context(
     """Build everything the user-isolation test (S15) needs from scratch.
 
     User A is the main test ``client``; User B is a disposable non-admin user
-    (``non_admin_user``). A fresh project with both users as members holds a Jira
+    (``platform_user``). A fresh project with both users as members holds a Jira
     integration, a shared Jira assistant and a workflow using it. User A then saves
     an explicit-none selection at both workflow and assistant scope, so there is
     real data of A's that B must not see.
@@ -137,7 +137,11 @@ def user_isolation_context(
 
     Yields ``(client_a, client_b, assistant_id, workflow_id)``.
     """
-    _email, member_id, client_b = non_admin_user
+    _email, member_id, client_b = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
 
     project_name = get_random_name()
     admin_utils.create_project(project_name)

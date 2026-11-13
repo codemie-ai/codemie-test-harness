@@ -781,11 +781,9 @@ def test_bulk_assign_users_to_project(project_utils, project, user_utils):
 @pytest.mark.api
 @pytest.mark.smoke
 @pytest.mark.oss_standalone
-def test_assign_and_remove_user_from_project(
-    project_utils, project, disposable_platform_user
-):
+def test_assign_and_remove_user_from_project(project_utils, project, platform_user):
     """Test complete flow: assign a non-admin user to project and then remove them."""
-    _, test_user_id, _ = disposable_platform_user
+    test_user_id = platform_user.user_id
 
     # Create a new project for testing
     test_project = project()

@@ -699,7 +699,7 @@ def test_transfer_requires_admin_or_maintainer_role(
     )
 
     if role == "plain_member":
-        _, _, role_client = request.getfixturevalue("non_admin_user")
+        role_client = request.getfixturevalue("platform_user").client
     else:
         role_client = request.getfixturevalue(f"{role}_client")
 

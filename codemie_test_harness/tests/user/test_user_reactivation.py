@@ -55,10 +55,10 @@ def _project_roles(detail):
 @pytest.mark.api
 @pytest.mark.oss_standalone
 def test_reactivate_restores_active_user_with_roles_and_projects(
-    user_utils, disposable_project_member
+    user_utils, platform_project_user
 ):
     # @case platform-admins-deactivate-reactivate-users_TC_001
-    _, user_id, _, project = disposable_project_member
+    _, user_id, _, project = platform_project_user
     user_utils.update_admin_user(user_id, is_admin=True)
     before = user_utils.get_admin_user(user_id)
     user_utils.deactivate_user(user_id)
@@ -99,16 +99,16 @@ def test_reactivate_restores_active_user_with_roles_and_projects(
 @pytest.mark.api
 @pytest.mark.oss_standalone
 def test_deactivated_user_is_denied_access_until_reactivated(
-    user_utils, disposable_user, disposable_user_utils
+    user_utils, admin_user, admin_user_utils
 ):
     # @case platform-admins-deactivate-reactivate-users_TC_002
-    _, user_id, _ = disposable_user
+    user_id = admin_user.user_id
 
     message = user_utils.deactivate_user_message(user_id)
     with pytest.raises(HTTPError) as denied:
-        disposable_user_utils.get_about_me()
+        admin_user_utils.get_about_me()
     user_utils.reactivate_user(user_id)
-    restored = disposable_user_utils.get_about_me()
+    restored = admin_user_utils.get_about_me()
 
     assert_that(
         message,
@@ -142,10 +142,10 @@ def test_deactivated_user_is_denied_access_until_reactivated(
 )
 @pytest.mark.oss_standalone
 def test_reactivate_is_rejected_for_active_user(
-    user_utils, disposable_user, rejection: ReactivationRejection
+    user_utils, admin_user, rejection: ReactivationRejection
 ):
     # @case platform-admins-deactivate-reactivate-users_TC_003
-    _, active_user_id, _ = disposable_user
+    active_user_id = admin_user.user_id
 
     with pytest.raises(HTTPError) as rejected:
         user_utils.reactivate_user(rejection.target_id(active_user_id))
@@ -181,11 +181,9 @@ def test_reactivate_is_rejected_for_unknown_user(user_utils):
 @pytest.mark.api
 @pytest.mark.parametrize("action", STATUS_ACTIONS, ids=[a.name for a in STATUS_ACTIONS])
 @pytest.mark.oss_standalone
-def test_admin_cannot_change_own_status(
-    user_utils, admin_client, promoted_admin_user, action
-):
+def test_admin_cannot_change_own_status(user_utils, admin_client, admin_user, action):
     # @case platform-admins-deactivate-reactivate-users_TC_006
-    _, admin_id, _ = promoted_admin_user
+    admin_id = admin_user.user_id
 
     with pytest.raises(HTTPError) as refused:
         action.perform(UserUtils(admin_client), admin_id)
@@ -327,10 +325,10 @@ def test_platform_role_grant_on_deactivated_user_is_refused(
 @pytest.mark.api
 @pytest.mark.oss_standalone
 def test_project_access_grant_to_deactivated_user_is_refused_and_removal_allowed(
-    user_utils, disposable_project_member
+    user_utils, platform_project_user
 ):
     # @case platform-admins-deactivate-reactivate-users_TC_018
-    _, user_id, _, project = disposable_project_member
+    _, user_id, _, project = platform_project_user
     user_utils.deactivate_user(user_id)
 
     with pytest.raises(HTTPError) as refused:

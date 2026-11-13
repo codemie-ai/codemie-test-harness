@@ -442,11 +442,11 @@ def test_user_projects_keep_their_order_when_defaults_change(
 @pytest.mark.api
 @pytest.mark.oss_standalone
 def test_defaults_of_different_users_in_one_project_are_independent(
-    user_utils, default_project_member, disposable_user
+    user_utils, default_project_member, admin_user
 ):
     """TC-15: two users can both have the same project as default."""
     member = default_project_member
-    _, other_user_id, _ = disposable_user
+    other_user_id = admin_user.user_id
     user_utils.assign_user_to_project(other_user_id, member.project_a)
 
     user_utils.set_default_project(member.user_id, member.project_a)

@@ -72,6 +72,31 @@ a dedicated non-parallel pass.
 - **Every `.py` file carries the Apache-2.0 licence header** from `scripts/license_template.txt`; a new file needs it (`make license-fix` inserts it).
 - **No internal values in tracked files.** Hosts, e-mail domains, ticket keys and customer names stay out of the tree; `make scan-internal` checks it (needs `HARNESS_SCAN_PATTERNS` and/or `HARNESS_SCAN_CUSTOMER_NAMES` set on the machine; exit 2 means none is set).
 
+## User fixtures
+
+Role fixtures in `tests/conftest.py` (session-scoped `keycloak_utils` picks LocalUserUtils or
+KeycloakUtils by `CODEMIE_API_DOMAIN`; see `tests/utils/user_lifecycle_utils.py`). Each one
+creates a fresh user, yields a `LoggedInUser` (`.email`, `.password`, `.user_id`, `.client`),
+and deletes the user after the test, also when the test fails.
+
+| Fixture | Role |
+|---|---|
+| `platform_user` | no platform role, only their own personal project |
+| `admin_user` | platform admin, not maintainer |
+| `maintainer_user` | maintainer flag only |
+| `auditor_user` | auditor flag only; module-scoped, shared within a module (and xdist worker) |
+| `project_admin_user` | `platform_user` made project admin of `default_project_member`'s project |
+| `platform_project_user` (`tests/user/conftest.py`) | `platform_user` who is a plain member (not project admin) of its own fresh `temp_project` |
+| `second_platform_user`, `second_admin_user` | a second, distinct user of that role — take one of these instead of requesting the base fixture twice |
+
+Use `admin_client`, `maintainer_client`, `verified_maintainer_client` or `verified_auditor_client`
+when a test only needs the client, not the email or password; they wrap the fixtures above and
+add a wait (`admin_client`, `maintainer_client`) or a real-role assertion (`verified_*`).
+
+`budgets/conftest.py` has its own `budget_project_admin_user`: a platform *admin* who is also
+project admin of the budget project, not a `project_admin_user` (plain user). Do not conflate
+the two — the budgets tests rely on the admin role, the root fixture's tests rely on its absence.
+
 ## Anti-patterns
 
 | Bad | Better | Why |

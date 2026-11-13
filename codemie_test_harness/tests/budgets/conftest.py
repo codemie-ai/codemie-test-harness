@@ -14,6 +14,7 @@
 
 import logging
 import secrets
+from contextlib import ExitStack
 from datetime import datetime, timedelta
 from time import sleep
 
@@ -62,6 +63,11 @@ from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
 from codemie_test_harness.tests.utils.proxy_utils import ProxyUtils
 from codemie_test_harness.tests.utils.skill_utils import SkillsUtils
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    new_logged_in_user,
+    new_user,
+    user_email,
+)
 from codemie_test_harness.tests.utils.user_utils import UserUtils
 from codemie_test_harness.tests.utils.workflow_utils import WorkflowUtils
 from codemie_test_harness.tests.utils.yaml_utils import (
@@ -74,19 +80,25 @@ from codemie_test_harness.tests.utils.yaml_utils import (
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="function")
-def keycloak_user(keycloak_utils, lite_llm_budget_utils):
-    uid = secrets.token_hex(4)
-    email = f"autotest_budget_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=email)
-    yield email, password
-    keycloak_utils.delete_user(email)
+def _budget_user(keycloak_utils, lite_llm_budget_utils):
+    """Platform admin for budget tests, never logged in here; yields (email, password).
+
+    After the user is deleted, the LiteLLM customers the budgets created for it are removed.
+    """
+    email = user_email("budget")
+    with new_user(keycloak_utils, email, admin=True, strict=True) as password:
+        yield email, password
     for customer_id in (
         email,
         f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
         f"{email}_{DEFAULT_CLI_BUDGET_ID}",
     ):
         lite_llm_budget_utils.delete_customer(customer_id)
+
+
+@pytest.fixture(scope="function")
+def keycloak_user(keycloak_utils, lite_llm_budget_utils):
+    yield from _budget_user(keycloak_utils, lite_llm_budget_utils)
 
 
 @pytest.fixture(scope="function")
@@ -118,45 +130,39 @@ def budget_creator(keycloak_utils, user_utils):
     tests only, on this environment). On a local-auth stand (``LocalUserUtils``, no
     such resync), the admin API update is sufficient and is used directly.
     """
-    created_emails = []
+    with ExitStack() as created_users:
 
-    def _create(name: str):
-        uid = secrets.token_hex(4)
-        email = f"autotest_budgetcreator_{uid}@email.com"
-        password = keycloak_utils.create_platform_user(email=email)
-        created_emails.append(email)
+        def _create(name: str):
+            email = user_email("budgetcreator")
+            password = created_users.enter_context(
+                new_user(keycloak_utils, email, admin=False)
+            )
 
-        if EnvironmentResolver.is_localhost():
+            if EnvironmentResolver.uses_local_auth():
+                user_client = get_client(username=email, password=password)
+                user_id = user_client.users.about_me().user_id
+                user_utils.update_admin_user(user_id, is_maintainer=True)
+                UserUtils(user_client).wait_until_user_management_effective()
+                detail = user_utils.update_admin_user(user_id, name=name)
+                return user_client, (detail.name or detail.username)
+
+            # IDP-backed stand: set the Keycloak claim source before any authenticated call.
+            keycloak_utils.set_profile_name(email, first_name=name, last_name="")
             user_client = get_client(username=email, password=password)
             user_id = user_client.users.about_me().user_id
             user_utils.update_admin_user(user_id, is_maintainer=True)
             UserUtils(user_client).wait_until_user_management_effective()
-            detail = user_utils.update_admin_user(user_id, name=name)
+            detail = user_utils.get_admin_user(user_id)
+
+            if detail.name != name:
+                raise AssertionError(
+                    f"Expected the Keycloak-synced display name to equal {name!r} "
+                    f"(firstName set, lastName empty); got {detail.name!r} instead — "
+                    "this realm's full-name claim did not resolve to just the firstName."
+                )
             return user_client, (detail.name or detail.username)
 
-        # IDP-backed stand: set the Keycloak claim source before any authenticated call.
-        keycloak_utils.set_profile_name(email, first_name=name, last_name="")
-        user_client = get_client(username=email, password=password)
-        user_id = user_client.users.about_me().user_id
-        user_utils.update_admin_user(user_id, is_maintainer=True)
-        UserUtils(user_client).wait_until_user_management_effective()
-        detail = user_utils.get_admin_user(user_id)
-
-        if detail.name != name:
-            raise AssertionError(
-                f"Expected the Keycloak-synced display name to equal {name!r} "
-                f"(firstName set, lastName empty); got {detail.name!r} instead — "
-                "this realm's full-name claim did not resolve to just the firstName."
-            )
-        return user_client, (detail.name or detail.username)
-
-    yield _create
-
-    for email in created_emails:
-        try:
-            keycloak_utils.delete_user(email)
-        except Exception as e:
-            logger.warning(f"Failed to delete user {email}: {e}")
+        yield _create
 
 
 @pytest.fixture(scope="function")
@@ -453,32 +459,12 @@ def project_setup(user_client, admin_project_utils, lite_llm_budget_utils):
 
 @pytest.fixture(scope="function")
 def keycloak_user_1(keycloak_utils, lite_llm_budget_utils):
-    uid = secrets.token_hex(4)
-    email = f"autotest_budget_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=email)
-    yield email, password
-    keycloak_utils.delete_user(email)
-    for customer_id in (
-        email,
-        f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
-        f"{email}_{DEFAULT_CLI_BUDGET_ID}",
-    ):
-        lite_llm_budget_utils.delete_customer(customer_id)
+    yield from _budget_user(keycloak_utils, lite_llm_budget_utils)
 
 
 @pytest.fixture(scope="function")
 def keycloak_user_2(keycloak_utils, lite_llm_budget_utils):
-    uid = secrets.token_hex(4)
-    email = f"autotest_budget_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=email)
-    yield email, password
-    keycloak_utils.delete_user(email)
-    for customer_id in (
-        email,
-        f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
-        f"{email}_{DEFAULT_CLI_BUDGET_ID}",
-    ):
-        lite_llm_budget_utils.delete_customer(customer_id)
+    yield from _budget_user(keycloak_utils, lite_llm_budget_utils)
 
 
 @pytest.fixture(scope="function")
@@ -831,39 +817,29 @@ def project_budget_group(admin_project_utils, lite_llm_budget_utils):
 
 
 @pytest.fixture(scope="function")
-def project_admin_client(
+def budget_project_admin_user(
     keycloak_utils,
     admin_project_utils,
     project_budget_group,
     lite_llm_budget_utils,
 ):
-    """Create a user with project-admin role for the project_budget_group project."""
+    """Platform admin who is also project admin of the project_budget_group project.
+
+    Not the root project_admin_user (a platform user without a platform role).
+    """
     project_name, _ = project_budget_group
-    uid = secrets.token_hex(4)
-    email = f"autotest_pa_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=project_name)
-    try:
-        user_c = get_client(username=email, password=password)
-        user_id = user_c.users.about_me().user_id
+    email = user_email("pa")
+    with new_logged_in_user(
+        keycloak_utils, email, admin=True, project_name=project_name
+    ) as user:
         admin_project_utils.assign_user_to_project(
-            project_name, user_id, is_project_admin=True
+            project_name, user.user_id, is_project_admin=True
         )
-    except Exception:
+        yield user
         try:
-            keycloak_utils.delete_user(email)
+            admin_project_utils.remove_user_from_project(project_name, user.user_id)
         except Exception:
             pass
-        raise
-    yield user_c
-    if user_id is not None:
-        try:
-            admin_project_utils.remove_user_from_project(project_name, user_id)
-        except Exception:
-            pass
-    try:
-        keycloak_utils.delete_user(email)
-    except Exception:
-        pass
     for customer_id in (
         email,
         f"{email}_{DEFAULT_CLI_BUDGET_ID}",
@@ -876,9 +852,9 @@ def project_admin_client(
 
 
 @pytest.fixture(scope="function")
-def project_admin_budget_group_utils(project_admin_client):
+def project_admin_budget_group_utils(budget_project_admin_user):
     """Return AdminProjectBudgetGroupUtils authenticated as the project admin."""
-    return AdminProjectBudgetGroupUtils(project_admin_client)
+    return AdminProjectBudgetGroupUtils(budget_project_admin_user.client)
 
 
 # ---------------------------------------------------------------------------
@@ -935,53 +911,39 @@ def cross_project_admin_client(
         name=other_project, description="Cross-project for PA distribution tests"
     )
     try:
-        password = keycloak_utils.create_platform_user(email=email)
-        user_c = get_client(username=email, password=password)
-        user_id = user_c.users.about_me().user_id
-        admin_project_utils.assign_user_to_project(
-            other_project, user_id, is_project_admin=True
-        )
-    except Exception:
-        try:
-            keycloak_utils.delete_user(email)
-        except Exception:
-            pass
+        with new_logged_in_user(keycloak_utils, email, admin=False) as user:
+            admin_project_utils.assign_user_to_project(
+                other_project, user.user_id, is_project_admin=True
+            )
+            yield user.client
+            try:
+                admin_project_utils.remove_user_from_project(
+                    other_project, user.user_id
+                )
+            except Exception:
+                pass
+        for customer_id in (
+            email,
+            f"{email}_{DEFAULT_CLI_BUDGET_ID}",
+            f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
+        ):
+            try:
+                lite_llm_budget_utils.delete_customer(customer_id)
+            except Exception:
+                pass
+    finally:
         try:
             admin_project_utils.delete_project(other_project)
         except Exception:
             pass
-        raise
-    yield user_c
-    if user_id is not None:
-        try:
-            admin_project_utils.remove_user_from_project(other_project, user_id)
-        except Exception:
-            pass
-    try:
-        keycloak_utils.delete_user(email)
-    except Exception:
-        pass
-    for customer_id in (
-        email,
-        f"{email}_{DEFAULT_CLI_BUDGET_ID}",
-        f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
-    ):
-        try:
-            lite_llm_budget_utils.delete_customer(customer_id)
-        except Exception:
-            pass
-    try:
-        admin_project_utils.delete_project(other_project)
-    except Exception:
-        pass
 
 
 @pytest.fixture(scope="function")
 def member_override_project(
     project_budget_group,
-    project_admin_client,
+    budget_project_admin_user,
     project_admin_budget_group_utils,
-    keycloak_regular_user,
+    platform_user,
     admin_project_utils,
 ):
     """Project with a budget group, a project admin and a developer-only member.
@@ -994,7 +956,7 @@ def member_override_project(
         ``budget_id`` is the platform category budget of the project's budget group.
     """
     project_name, group_id = project_budget_group
-    email, password = keycloak_regular_user
+    email, password = platform_user.email, platform_user.password
     member_client = get_client(username=email, password=password)
     member_id = member_client.users.about_me().user_id
     admin_project_utils.enable_member_budget_tracking(project_name)
@@ -1003,7 +965,13 @@ def member_override_project(
     )
     group = project_admin_budget_group_utils.get_group(group_id)
     budget_id = AdminProjectBudgetUtils.budget_ids_by_category(group)["platform"]
-    yield project_name, budget_id, project_admin_client, member_id, member_client
+    yield (
+        project_name,
+        budget_id,
+        budget_project_admin_user.client,
+        member_id,
+        member_client,
+    )
     try:
         admin_project_utils.remove_user_from_project(project_name, member_id)
     except Exception:
@@ -1057,9 +1025,9 @@ def regular_member_client(member_override_project):
 
 
 @pytest.fixture(scope="function")
-def plain_admin_client(promoted_admin_user):
+def plain_admin_client(admin_user):
     """Client of a platform Admin who is neither maintainer nor project admin."""
-    return promoted_admin_user[2]
+    return admin_user.client
 
 
 @pytest.fixture(

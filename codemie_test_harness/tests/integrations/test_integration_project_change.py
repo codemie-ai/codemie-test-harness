@@ -186,14 +186,14 @@ def test_change_integration_project_moves_integration_keeping_id(
 
 
 @pytest.fixture
-def source_project_admin_member(project, user_utils, non_admin_user):
+def source_project_admin_member(project, user_utils, platform_user):
     """Plain user (no platform role) who is admin of a fresh source project but not of a fresh target.
 
     The project integration is created by the platform admin, so the user owns nothing: the
     backend lets them update it only because they are admin of its (source) project
     (``ProjectSetting.is_managed_by``). They hold no membership at all in the target project.
     """
-    _, member_id, member_client = non_admin_user
+    member_id, member_client = platform_user.user_id, platform_user.client
     source = project()
     target = project()
     user_utils.assign_user_to_project(member_id, source.name, is_project_admin=True)

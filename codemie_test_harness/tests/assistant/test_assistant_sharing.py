@@ -104,12 +104,12 @@ def _find_active_external_user(user_utils):
 @pytest.mark.assistant
 @pytest.mark.api
 def test_owner_can_share_assistant_with_multiple_internal_users(
-    assistant_factory, client, regular_client, non_admin_user
+    assistant_factory, client, regular_client, platform_user
 ):
     """@case share-an-assistant-with-selected_TC_001"""
     assistant = assistant_factory.create()
     grantee_b = regular_client.users.about_me().user_id
-    _, grantee_c, _ = non_admin_user
+    grantee_c = platform_user.user_id
 
     response = client.assistants.share(assistant.id, [grantee_b, grantee_c])
     assert_that(
@@ -169,11 +169,11 @@ def test_shared_assistant_visible_only_to_granted_user(
 @pytest.mark.assistant
 @pytest.mark.api
 def test_shared_only_recipient_cannot_update_assistant(
-    assistant_factory, client, non_admin_user, user_utils
+    assistant_factory, client, platform_user, user_utils
 ):
     """@case share-an-assistant-with-selected_TC_004"""
     assistant = assistant_factory.create()
-    _, grantee_id, member_client = non_admin_user
+    grantee_id, member_client = platform_user.user_id, platform_user.client
     # A plain project member (not just a named grant) is required so the request clears
     # project_access_check before the WRITE-ability check this case targets is reached.
     user_utils.assign_user_to_project(grantee_id, PROJECT)

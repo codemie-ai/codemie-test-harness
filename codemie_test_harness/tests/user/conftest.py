@@ -14,17 +14,20 @@
 
 import pytest
 
-from codemie_test_harness.tests.conftest import _disposable_user
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.user_utils import UserUtils
 from codemie_test_harness.tests.utils.base_utils import get_random_name
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    new_logged_in_user,
+    user_email,
+)
 
 
 @pytest.fixture
-def disposable_user_utils(disposable_user):
-    _, _, user_client = disposable_user
-    return UserUtils(user_client)
+def admin_user_utils(admin_user):
+    """UserUtils acting as admin_user (a platform admin who is not a maintainer)."""
+    return UserUtils(admin_user.client)
 
 
 @pytest.fixture(scope="session")
@@ -34,12 +37,6 @@ def default_user_utils():
         password=CredentialsManager.get_parameter("AUTH_PASSWORD_DEFAULT"),
     )
     return UserUtils(client)
-
-
-@pytest.fixture
-def admin_only_user_utils(promoted_admin_user):
-    _, _, user_client = promoted_admin_user
-    return UserUtils(user_client)
 
 
 @pytest.fixture
@@ -70,18 +67,22 @@ def temp_project_with_me(user_utils, temp_project):
 
 
 @pytest.fixture
-def deactivated_user(user_utils, disposable_user):
-    """(email, user_id, client) of a disposable user that the admin has already deactivated."""
-    _, user_id, _ = disposable_user
-    user_utils.deactivate_user(user_id)
-    return disposable_user
+def deactivated_user(user_utils, admin_user):
+    """(email, user_id, client) of an admin_user that the harness admin has already deactivated."""
+    user_utils.deactivate_user(admin_user.user_id)
+    return admin_user.email, admin_user.user_id, admin_user.client
 
 
 @pytest.fixture
-def disposable_project_member(user_utils, disposable_user, temp_project):
-    """(email, user_id, client, project) of a disposable user who administers a temporary project."""
-    email, user_id, user_client = disposable_user
-    user_utils.assign_user_to_project(user_id, temp_project, is_project_admin=True)
+def platform_project_user(user_utils, platform_user, temp_project):
+    """(email, user_id, client, project) of a platform_user who is a plain member of a
+    temporary project."""
+    email, user_id, user_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
+    user_utils.assign_user_to_project(user_id, temp_project)
     yield email, user_id, user_client, temp_project
     try:
         user_utils.remove_user_from_project(user_id, temp_project)
@@ -90,16 +91,11 @@ def disposable_project_member(user_utils, disposable_user, temp_project):
 
 
 @pytest.fixture
-def second_disposable_user(keycloak_utils):
-    """A second, independent function-scoped fresh user; deleted after the test.
-
-    Unlike fixtures that reuse `disposable_user`, this is a distinct fixture so a test
-    needing two distinct existing users (e.g. a remap conflict case) cannot request the
-    same fixture twice in one test. Shares `disposable_user`'s setup/teardown via
-    `_disposable_user`, including its try/except around client creation and its
-    logged (not swallowed) teardown failures.
-    """
-    yield from _disposable_user(keycloak_utils, "user2")
+def second_admin_user(keycloak_utils, user_utils):
+    """A second admin_user, for tests that need two distinct ones (e.g. a remap conflict)."""
+    with new_logged_in_user(keycloak_utils, user_email("user2"), admin=True) as user:
+        user_utils.update_admin_user(user.user_id, is_admin=True)
+        yield user
 
 
 ACTOR_FIXTURES = {

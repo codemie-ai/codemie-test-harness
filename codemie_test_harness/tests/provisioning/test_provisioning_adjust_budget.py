@@ -146,14 +146,14 @@ def test_adjust_budget_creates_project_and_budget_and_answers_200(
 @pytest.mark.api
 def test_adjust_budget_below_fixed_member_limits_is_rejected_and_changes_nothing(
     provisioning_full,
-    non_admin_user,
+    platform_user,
     user_utils,
     admin_project_budget_utils,
     lite_llm_budget_utils,
     provisioning_utils,
 ):
     # @case provisioning-api-for-third-party_TC_004
-    _, member_id, _ = non_admin_user
+    member_id = platform_user.user_id
     project_name = provisioning_utils.create_project()
     user_utils.assign_user_to_project(member_id, project_name)
     budget = provisioning_utils.create_budget(project_name, PLATFORM_BUDGET_CATEGORIES)

@@ -114,11 +114,9 @@ def test_admin_user_can_get_user_by_id(user_utils):
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
 @pytest.mark.oss_standalone
-def test_admin_cannot_promote_user_to_admin(
-    admin_only_user_utils, disposable_platform_user
-):
-    _, user_id, _ = disposable_platform_user
-    status = admin_only_user_utils.update_admin_user_status_code(user_id, is_admin=True)
+def test_admin_cannot_promote_user_to_admin(admin_user_utils, platform_user):
+    user_id = platform_user.user_id
+    status = admin_user_utils.update_admin_user_status_code(user_id, is_admin=True)
 
     assert_that(
         status,
@@ -131,13 +129,9 @@ def test_admin_cannot_promote_user_to_admin(
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
 @pytest.mark.oss_standalone
-def test_admin_cannot_set_maintainer_flag(
-    admin_only_user_utils, disposable_platform_user
-):
-    _, user_id, _ = disposable_platform_user
-    status = admin_only_user_utils.update_admin_user_status_code(
-        user_id, is_maintainer=True
-    )
+def test_admin_cannot_set_maintainer_flag(admin_user_utils, platform_user):
+    user_id = platform_user.user_id
+    status = admin_user_utils.update_admin_user_status_code(user_id, is_maintainer=True)
 
     assert_that(
         status,
@@ -150,8 +144,8 @@ def test_admin_cannot_set_maintainer_flag(
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
 @pytest.mark.oss_standalone
-def test_maintainer_can_promote_user_to_admin(user_utils, disposable_platform_user):
-    _, user_id, _ = disposable_platform_user
+def test_maintainer_can_promote_user_to_admin(user_utils, platform_user):
+    user_id = platform_user.user_id
     user_utils.update_admin_user(user_id, is_admin=True)
 
     detail = user_utils.get_admin_user(user_id)
@@ -166,8 +160,8 @@ def test_maintainer_can_promote_user_to_admin(user_utils, disposable_platform_us
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
 @pytest.mark.oss_standalone
-def test_maintainer_can_set_maintainer_flag(user_utils, disposable_platform_user):
-    _, user_id, _ = disposable_platform_user
+def test_maintainer_can_set_maintainer_flag(user_utils, platform_user):
+    user_id = platform_user.user_id
     user_utils.update_admin_user(user_id, is_maintainer=True)
 
     detail = user_utils.get_admin_user(user_id)

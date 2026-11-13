@@ -101,14 +101,14 @@ def test_set_budget_links_cost_center_once_and_never_changes_an_existing_link(
 @pytest.mark.api
 def test_set_budget_only_adds_admins_and_reports_unknown_emails(
     provisioning_full,
-    non_admin_user,
-    disposable_user,
+    platform_user,
+    admin_user,
     user_utils,
     provisioning_utils,
 ):
     # @case provisioning-api-for-third-party_TC_014
-    member_email, member_id, _ = non_admin_user
-    _, admin_id, _ = disposable_user
+    member_email, member_id = platform_user.email, platform_user.user_id
+    admin_id = admin_user.user_id
     unknown = unknown_email()
     project_name = provisioning_utils.create_project()
     user_utils.assign_user_to_project(admin_id, project_name, is_project_admin=True)

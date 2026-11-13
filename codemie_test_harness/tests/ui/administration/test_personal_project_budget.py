@@ -19,7 +19,7 @@ Covers:
           offered a Create Budget control
 
 The maintainer (and the personal project named after their email) is created by the
-`maintainer_credentials` fixture; the browser logs in as that maintainer.
+`maintainer_user` fixture; the browser logs in as that maintainer.
 """
 
 import pytest

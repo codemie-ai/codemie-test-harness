@@ -119,12 +119,12 @@ def test_budget_deleted_audit_record_stored(activity_utils):
 @pytest.mark.activity
 @pytest.mark.api
 def test_budget_user_assignment_created_and_deleted_audit_records_stored(
-    activity_utils, admin_budget_utils, disposable_budget, disposable_user
+    activity_utils, admin_budget_utils, disposable_budget, admin_user
 ):
     """TC-014: budget.user_assignment.created and budget.user_assignment.deleted events
     are stored when a budget is assigned to and unassigned from a user."""
     budget_id = disposable_budget
-    _, user_id, _ = disposable_user
+    user_id = admin_user.user_id
 
     admin_budget_utils.assign_user_budget(user_id, "platform", budget_id)
 
@@ -375,13 +375,13 @@ def test_budget_member_allocation_overridden_and_cleared_audit_records_stored(
     admin_project_budget_utils,
     disposable_project_budget,
     project_utils,
-    disposable_user,
+    admin_user,
     activity_project,
 ):
     """TC-018: budget.member_allocation.overridden and budget.member_allocation.override_cleared
     audit records are stored in sequence for project member budget allocation lifecycle."""
     budget_id = disposable_project_budget
-    _, user_id, _ = disposable_user
+    user_id = admin_user.user_id
     project_name = activity_project
 
     project_utils.assign_user_to_project(project_name, user_id, is_project_admin=False)

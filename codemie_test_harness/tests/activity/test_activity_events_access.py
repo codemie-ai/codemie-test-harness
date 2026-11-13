@@ -31,9 +31,9 @@ from codemie_test_harness.tests.utils.activity_utils import ActivityUtils
 
 @pytest.mark.activity
 @pytest.mark.api
-def test_non_maintainer_receives_403_on_activity_endpoints(disposable_user):
+def test_non_maintainer_receives_403_on_activity_endpoints(admin_user):
     """TC-010: A non-maintainer user gets HTTP 403 on both activity endpoints."""
-    _, _, user_client = disposable_user
+    user_client = admin_user.client
 
     non_maintainer_utils = ActivityUtils(user_client)
 

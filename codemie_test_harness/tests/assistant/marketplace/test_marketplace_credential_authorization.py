@@ -22,7 +22,7 @@ for this endpoint role/access-driven, same as everywhere else (admin/
 maintainer -> all projects; applications admin -> their admin projects;
 everyone else -> their own project_names).
 
-Uses the shared `non_admin_user` fixture (root conftest.py — disposable
+Uses the shared `platform_user` fixture (root conftest.py — disposable
 `create_platform_user`, developer role only, "applications" attribute =
 their own personal project) rather than the static AUTH_USERNAME_DEFAULT
 persona: that persona has a pre-existing ProjectMember row for the default
@@ -49,7 +49,7 @@ from codemie_test_harness.tests.utils.credentials_manager import CredentialsMana
 @pytest.fixture
 def isolated_project_credential(admin_utils, integration_utils, project_utils):
     """A fresh project (only the admin `client` is a member of) with one
-    PROJECT-scoped credential in it — a credential `non_admin_user` has no
+    PROJECT-scoped credential in it — a credential `platform_user` has no
     legitimate access to."""
     project_name = get_random_name()
     admin_utils.create_project(project_name)
@@ -64,10 +64,14 @@ def isolated_project_credential(admin_utils, integration_utils, project_utils):
 
 
 @pytest.fixture
-def accessible_project_credential(non_admin_user, integration_utils):
-    """A PROJECT-scoped credential in `non_admin_user`'s own personal
+def accessible_project_credential(platform_user, integration_utils):
+    """A PROJECT-scoped credential in `platform_user`'s own personal
     project — a credential they genuinely have access to."""
-    email, _member_id, _member_client = non_admin_user
+    email, _member_id, _member_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
     integration = integration_utils.create_project_integration(
         CredentialTypes.FILESYSTEM,
         CredentialsManager.file_system_credentials(),
@@ -81,12 +85,16 @@ def accessible_project_credential(non_admin_user, integration_utils):
 @pytest.mark.assistant
 @pytest.mark.api
 def test_marketplace_credential_picker_excludes_inaccessible_project(
-    non_admin_user, isolated_project_credential
+    platform_user, isolated_project_credential
 ):
     """TC-01: a user with no access to a project must not see that project's
     PROJECT credential in the marketplace credential picker — the exact
     cross-project leak this ticket fixes."""
-    _email, _member_id, member_client = non_admin_user
+    _email, _member_id, member_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
     leaked_integration = isolated_project_credential
 
     available = member_client.integrations.list_available(scope="marketplace")
@@ -103,13 +111,17 @@ def test_marketplace_credential_picker_excludes_inaccessible_project(
 @pytest.mark.assistant
 @pytest.mark.api
 def test_marketplace_credential_picker_includes_accessible_project_integration(
-    non_admin_user, accessible_project_credential
+    platform_user, accessible_project_credential
 ):
     """TC-02 (regression guard, AC-8): a PROJECT credential from a project
     the caller genuinely has access to (their own personal project) must
     still appear in the marketplace credential picker — the fix must not
     over-correct into hiding legitimately accessible credentials."""
-    _email, _member_id, member_client = non_admin_user
+    _email, _member_id, member_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
 
     available = member_client.integrations.list_available(scope="marketplace")
 

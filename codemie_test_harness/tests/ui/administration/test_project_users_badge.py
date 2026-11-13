@@ -60,12 +60,12 @@ def test_users_cell_shows_badge_with_user_count(page, project_utils, project):
 @pytest.mark.project
 @pytest.mark.oss_standalone
 def test_users_badge_opens_user_management_filtered_by_project(
-    page, project_utils, non_admin_user, keycloak_regular_user, project
+    page, project_utils, platform_user, second_platform_user, project
 ):
     """Clicking the Users badge opens User Management with
     ?projects=<project name>; the assigned user is listed and the unassigned one is not."""
-    assigned_email, assigned_id, _ = non_admin_user
-    unassigned_email, _ = keycloak_regular_user
+    assigned_email, assigned_id = platform_user.email, platform_user.user_id
+    unassigned_email = second_platform_user.email
     created = project()
     project_utils.assign_user_to_project(
         created.name, assigned_id, is_project_admin=False
