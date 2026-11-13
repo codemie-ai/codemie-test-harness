@@ -72,6 +72,8 @@ MODEL_RESPONSES = [
     LlmResponseData(ModelTypes.GEMINI_3_7_FLASH, GCP_ENVS),
     LlmResponseData(ModelTypes.GEMINI_3_8_FLASH, GCP_ENVS),
     LlmResponseData(ModelTypes.GEMINI_4_ARGON, GCP_ENVS),
+    LlmResponseData(ModelTypes.GEMINI_4_HYDROGEN, GCP_ENVS),
+    LlmResponseData(ModelTypes.GEMINI_4_CARBON, GCP_ENVS),
     LlmResponseData(ModelTypes.GEMINI_31_PRO, GCP_ENVS),
     LlmResponseData(ModelTypes.CLAUDE_SONNET_4_6_VERTEX, GCP_ENVS),
     LlmResponseData(ModelTypes.CLAUDE_OPUS_4_6_VERTEX, GCP_ENVS),
