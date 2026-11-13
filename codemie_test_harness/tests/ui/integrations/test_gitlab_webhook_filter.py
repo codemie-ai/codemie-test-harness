@@ -49,6 +49,7 @@ from codemie_test_harness.tests.ui.test_data.integration_test_data import (
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_gitlab_mr_filter_defaults_to_all_actions_checked(page: Page):
     """A freshly created Webhook integration shows every MR action checked.
 
@@ -190,6 +191,7 @@ def test_gitlab_mr_filter_selection_persists_after_save_and_reload(
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_gitlab_mr_filter_blocks_unchecking_last_action(page: Page):
     """Unchecking the last remaining MR action is rejected with an inline error."""
     integrations_page = IntegrationsPage(page)

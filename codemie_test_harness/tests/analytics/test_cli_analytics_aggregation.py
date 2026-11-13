@@ -38,6 +38,7 @@ def aggregation_sessions(seed_cli_sessions):
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 @pytest.mark.parametrize("window_name", AGGREGATION_WINDOWS)
 def test_totals_match_seeded_sessions(
@@ -56,6 +57,7 @@ def test_totals_match_seeded_sessions(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 @pytest.mark.parametrize("window_name", AGGREGATION_WINDOWS)
 def test_user_rows_match_each_users_sessions(
@@ -89,6 +91,7 @@ def test_user_rows_match_each_users_sessions(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 @pytest.mark.parametrize("window_name", AGGREGATION_WINDOWS)
 def test_session_list_matches_seeded_sessions(
@@ -114,6 +117,7 @@ def test_session_list_matches_seeded_sessions(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_session_pages_together_hold_every_session_once(
     analytics_utils, cli_analytics_project, aggregation_sessions
@@ -146,6 +150,7 @@ def test_session_pages_together_hold_every_session_once(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 @pytest.mark.parametrize("identifier", ["email", "user_id"])
 @pytest.mark.parametrize("user", CLI_ANALYTICS_USERS)

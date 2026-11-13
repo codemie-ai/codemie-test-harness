@@ -147,6 +147,11 @@ from codemie_test_harness.tests.utils.project_budget_groups import ProjectBudget
 from codemie_test_harness.tests.utils.llm_utils import LLMUtils
 from codemie_test_harness.tests.utils.local_user_utils import LocalUserUtils
 from codemie_test_harness.tests.utils.ordered_users_utils import OrderedUsersBuilder
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    get_user_lifecycle_utils,
+    new_logged_in_user,
+    user_email,
+)
 from codemie_test_harness.tests.utils.logger_util import setup_logger
 from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
     CORE_GATE_MINIMUM,
@@ -771,51 +776,80 @@ def ensure_test_project(admin_utils):
 
 @pytest.fixture(scope="session")
 def keycloak_utils(client):
-    """Session-scoped user-lifecycle helper. Uses LocalUserUtils on localhost, KeycloakUtils elsewhere."""
-    if EnvironmentResolver.is_localhost():
-        return LocalUserUtils(client)
-    return KeycloakUtils()
+    """Session-scoped user-lifecycle helper, chosen by domain: LocalUserUtils on
+    localhost and OSS standalone (local IdP), KeycloakUtils elsewhere."""
+    return get_user_lifecycle_utils(client)
 
 
-def _disposable_user(keycloak_utils, label):
-    """Shared body for the disposable-user fixtures below: create a fresh user with
-    `label` in its email, yield (email, user_id, client), delete it afterwards.
-    """
-    uid = secrets.token_hex(4)
-    email = f"autotest_{label}_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=email)
-    try:
-        user_client = get_client(username=email, password=password)
-        user_id = user_client.users.about_me().user_id
-    except Exception:
-        try:
-            keycloak_utils.delete_user(email)
-        except Exception as e:
-            logger.warning(f"Failed to delete user {email} after setup failure: {e}")
-        raise
-    yield email, user_id, user_client
-    try:
-        keycloak_utils.delete_user(email)
-    except Exception as e:
-        logger.warning(f"Failed to delete user {email}: {e}")
+# Role fixtures. Each yields a LoggedInUser (email, password, user_id, client) of a fresh
+# user, created through keycloak_utils (local IdP or Keycloak, by domain) and deleted after
+# the test. A test that needs two users of one role takes the second_* fixture as well.
 
 
 @pytest.fixture
-def disposable_user(keycloak_utils):
-    """Function-scoped fresh user; deleted automatically after each test.
+def platform_user(keycloak_utils):
+    """User with no platform role and no project beyond their own personal project."""
+    with new_logged_in_user(keycloak_utils, user_email("member"), admin=False) as user:
+        yield user
 
-    NOTE (localhost only): LocalUserUtils.create_test_user creates users with
-    is_admin=True.  On localhost TC-010 may therefore receive HTTP 200 instead
-    of 403, giving false assurance for the access-control scenario.
+
+@pytest.fixture
+def second_platform_user(keycloak_utils):
+    """A second platform_user, for tests that need two distinct ones."""
+    with new_logged_in_user(keycloak_utils, user_email("extra"), admin=False) as user:
+        yield user
+
+
+@pytest.fixture
+def admin_user(keycloak_utils, user_utils):
+    """User with the platform admin role (not maintainer)."""
+    with new_logged_in_user(keycloak_utils, user_email("admin"), admin=True) as user:
+        user_utils.update_admin_user(user.user_id, is_admin=True)
+        yield user
+
+
+@pytest.fixture
+def maintainer_user(keycloak_utils, user_utils):
+    """User with the maintainer flag only; the backend stores is_admin as true for it."""
+    with new_logged_in_user(
+        keycloak_utils, user_email("maintainer"), admin=False
+    ) as user:
+        user_utils.update_admin_user(user.user_id, is_maintainer=True)
+        UserUtils(user.client).wait_until_user_management_effective()
+        yield user
+
+
+@pytest.fixture(scope="module")
+def auditor_user(keycloak_utils, user_utils):
+    """User with the auditor flag only, shared within a module (and xdist worker).
+
+    Read/denial-only, so one per module avoids creating a user per parametrized case.
     """
-    yield from _disposable_user(keycloak_utils, "user")
+    with new_logged_in_user(
+        keycloak_utils, user_email("cliauditor"), admin=False
+    ) as user:
+        user_utils.update_admin_user(user.user_id, is_auditor=True)
+        wait_until_auditor_effective(user.client)
+        yield user
+
+
+@pytest.fixture
+def project_admin_user(keycloak_utils, user_utils, default_project_member):
+    """platform_user made project admin of default_project_member's first project."""
+    with new_logged_in_user(
+        keycloak_utils, user_email("projadmin"), admin=False
+    ) as user:
+        user_utils.assign_user_to_project(
+            user.user_id, default_project_member.project_a, is_project_admin=True
+        )
+        yield user
 
 
 @pytest.fixture
 def new_user_id_factory(user_utils):
     """Factory for a fresh id to remap a disposable user onto.
 
-    A remap rewrites the row's own id, so the Keycloak-side cleanup `disposable_user`
+    A remap rewrites the row's own id, so the Keycloak-side cleanup `admin_user`
     performs (by email, against the IDP) no longer reaches the backend row by its
     original id. The SDK has no admin delete-user call, only deactivate, so this
     factory best-effort deactivates the backend row at each id it handed out, after
@@ -850,48 +884,6 @@ def ordered_users(client, user_utils):
     builder.delete_all()
 
 
-@pytest.fixture
-def promoted_admin_user(keycloak_utils, user_utils):
-    uid = secrets.token_hex(4)
-    email = f"autotest_admin_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=email)
-    user_client = get_client(username=email, password=password)
-    user_id = user_client.users.about_me().user_id
-    user_utils.update_admin_user(user_id, is_admin=True)
-    yield email, user_id, user_client
-    keycloak_utils.delete_user(email)
-
-
-@pytest.fixture
-def non_admin_user(keycloak_utils):
-    """Function-scoped, genuinely non-privileged secondary user (developer
-    role only, no admin/maintainer rights; "applications" attribute is
-    exactly their own personal project), deleted after each test.
-
-    Intentionally does NOT reuse `disposable_user`: that fixture is built via
-    `keycloak_utils.create_test_user`, which grants the Keycloak "admin"
-    realm role (see `KeycloakUtils.create_test_user`), so it is not
-    genuinely non-privileged.
-    """
-    uid = secrets.token_hex(4)
-    email = f"autotest_member_{uid}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    member_client = get_client(username=email, password=password)
-    member_id = member_client.users.about_me().user_id
-    yield email, member_id, member_client
-    keycloak_utils.delete_user(email)
-
-
-@pytest.fixture(scope="function")
-def keycloak_regular_user(keycloak_utils):
-    """Create a plain developer-role user with no admin or project-admin permissions."""
-    uid = secrets.token_hex(4)
-    email = f"autotest_regular_{uid}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    yield email, password
-    keycloak_utils.delete_user(email)
-
-
 @pytest.fixture(scope="session")
 def user_utils(client):
     return UserUtils(client)
@@ -922,10 +914,14 @@ def _delete_projects_with_members(project_utils, project_names):
 
 @pytest.fixture
 def default_project_member(
-    request, non_admin_user, admin_utils, project_utils, user_utils
+    request, platform_user, admin_utils, project_utils, user_utils
 ):
     """Plain user (no platform role) who owns a personal project and is a member of two extra projects."""
-    email, user_id, member_client = non_admin_user
+    email, user_id, member_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
     project_names = []
     request.addfinalizer(
         lambda: _delete_projects_with_members(project_utils, project_names)
@@ -946,29 +942,16 @@ def default_project_member(
 
 
 @pytest.fixture
-def admin_client(promoted_admin_user):
-    """Client of a user promoted to platform admin, once the role is active on all replicas."""
-    client = promoted_admin_user[2]
-    UserUtils(client).wait_until_user_management_effective()
-    return client
+def admin_client(admin_user):
+    """admin_user's client, once the role is active on all replicas."""
+    UserUtils(admin_user.client).wait_until_user_management_effective()
+    return admin_user.client
 
 
 @pytest.fixture
-def maintainer_credentials(request, keycloak_utils, user_utils):
-    """(email, password) of a user with the maintainer flag only (not a platform admin)."""
-    email = f"autotest_maintainer_{secrets.token_hex(4)}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    request.addfinalizer(lambda: keycloak_utils.delete_user(email))
-    client = get_client(username=email, password=password)
-    user_utils.update_admin_user(client.users.about_me().user_id, is_maintainer=True)
-    UserUtils(client).wait_until_user_management_effective()
-    return email, password
-
-
-@pytest.fixture
-def maintainer_client(maintainer_credentials):
-    email, password = maintainer_credentials
-    return get_client(username=email, password=password)
+def maintainer_client(maintainer_user):
+    """A fresh login of maintainer_user, made after the maintainer flag is set."""
+    return get_client(username=maintainer_user.email, password=maintainer_user.password)
 
 
 @pytest.fixture
@@ -985,63 +968,42 @@ def orphaned_creator_budget(keycloak_utils, user_utils, client):
     on ``POST /v1/admin/budgets``; a plain admin test user gets 403, confirmed live).
     """
     uid = secrets.token_hex(4)
-    email = f"autotest_orphan_{uid}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    user_client = get_client(username=email, password=password)
-    user_id = user_client.users.about_me().user_id
-    try:
-        user_utils.update_admin_user(user_id, is_maintainer=True)
-        UserUtils(user_client).wait_until_user_management_effective()
-        budget_id = f"autotest-orphan-{uid}"
-        AdminBudgetUtils(user_client).create_budget(budget_id, "platform")
-    finally:
-        LocalUserUtils(client).delete_user_by_id(user_id)
+    with new_logged_in_user(
+        keycloak_utils, f"autotest_orphan_{uid}@email.com", admin=False
+    ) as user:
         try:
-            keycloak_utils.delete_user(email)
-        except Exception as e:
-            logger.warning(f"Failed to delete auth-server user {email}: {e}")
+            user_utils.update_admin_user(user.user_id, is_maintainer=True)
+            UserUtils(user.client).wait_until_user_management_effective()
+            budget_id = f"autotest-orphan-{uid}"
+            AdminBudgetUtils(user.client).create_budget(budget_id, "platform")
+        finally:
+            # The backend row goes first; leaving the block then removes the auth-server user.
+            LocalUserUtils(client).delete_user_by_id(user.user_id)
     return budget_id
 
 
 @pytest.fixture
-def project_admin_client(request, keycloak_utils, user_utils, default_project_member):
-    """Plain user who is project admin of the member's project, but holds no platform role."""
-    email = f"autotest_projadmin_{secrets.token_hex(4)}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    request.addfinalizer(lambda: keycloak_utils.delete_user(email))
-    client = get_client(username=email, password=password)
-    user_utils.assign_user_to_project(
-        client.users.about_me().user_id,
-        default_project_member.project_a,
-        is_project_admin=True,
-    )
-    return client
+def project_admin_client(project_admin_user):
+    """project_admin_user's client."""
+    return project_admin_user.client
 
 
 @pytest.fixture
-def unrelated_client(request, keycloak_utils):
+def unrelated_client(keycloak_utils):
     """Fresh plain user with no project membership beyond their own personal project."""
-    email = f"autotest_unrelated_{secrets.token_hex(4)}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    request.addfinalizer(lambda: keycloak_utils.delete_user(email))
-    return get_client(username=email, password=password)
+    with new_logged_in_user(
+        keycloak_utils, user_email("unrelated"), admin=False
+    ) as user:
+        yield user.client
 
 
 def _module_user_client(keycloak_utils, user_utils, label, **role):
     """Generator body of the module-scoped sender fixtures: optional global role, deleted at the end."""
-    email = f"autotest_{label}_{secrets.token_hex(4)}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    try:
-        client = get_client(username=email, password=password)
+    with new_logged_in_user(keycloak_utils, user_email(label), admin=False) as user:
         if role:
-            user_utils.update_admin_user(client.users.about_me().user_id, **role)
-            UserUtils(client).wait_until_user_management_effective()
-        yield client
-    finally:
-        try:
-            keycloak_utils.delete_user(email)
-        except Exception as e:
-            logger.warning(f"Failed to delete user {email}: {e}")
+            user_utils.update_admin_user(user.user_id, **role)
+            UserUtils(user.client).wait_until_user_management_effective()
+        yield user.client
 
 
 @pytest.fixture(scope="module")
@@ -1073,16 +1035,17 @@ def gate_outsider_client(keycloak_utils, user_utils):
 
 
 @pytest.fixture
-def verified_maintainer_client(maintainer_credentials, user_utils):
+def verified_maintainer_client(maintainer_user, user_utils):
     """Client of a user provisioned for this test through `create_platform_user` and promoted
-    ONLY to maintainer (see `maintainer_credentials`), never a pre-existing manual account.
+    ONLY to maintainer (see `maintainer_user`), never a pre-existing manual account.
     Asserts the principal and the stored roles. Only the maintainer flag is set by the test; the
     backend's role normalization (UserManagementService._normalize_role_updates: a maintainer
     update sets is_admin to true, "maintainer implies admin") stores is_admin as true, so that is
     the expected stored state, not a second promotion."""
-    email, password = maintainer_credentials
-    client = get_client(username=email, password=password)
-    assert_principal_is(client, email)
+    client = get_client(
+        username=maintainer_user.email, password=maintainer_user.password
+    )
+    assert_principal_is(client, maintainer_user.email)
     assert_stored_roles(
         user_utils, client.users.about_me().user_id, is_maintainer=True, is_admin=True
     )
@@ -1090,30 +1053,10 @@ def verified_maintainer_client(maintainer_credentials, user_utils):
 
 
 @pytest.fixture(scope="module")
-def cli_auditor_credentials(request, keycloak_utils, user_utils):
-    """Create one dedicated auditor per module/worker using the maintainer provisioning flow.
-
-    Unlike function-scoped maintainer_credentials, this read/denial-only role is shared within
-    a module to avoid creating one user per parametrized case. Each worker owns its account.
-    The administrative harness account creates the user and assigns only the auditor flag.
-    Register deletion before login/role setup so a setup failure also cleans up the user.
-    Shared AUDITOR_* credentials and the existing shared account are never used or modified.
-    """
-    email = f"autotest_cliauditor_{secrets.token_hex(4)}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    request.addfinalizer(lambda: keycloak_utils.delete_user(email))
-    client = get_client(username=email, password=password)
-    user_utils.update_admin_user(client.users.about_me().user_id, is_auditor=True)
-    wait_until_auditor_effective(client)
-    return email, password
-
-
-@pytest.fixture(scope="module")
-def verified_auditor_client(cli_auditor_credentials):
+def verified_auditor_client(auditor_user):
     """Verified client of the freshly provisioned auditor, never a shared configured user."""
-    username, password = cli_auditor_credentials
-    client = get_client(username=username, password=password)
-    assert_principal_is(client, username, not_admin=True)
+    client = get_client(username=auditor_user.email, password=auditor_user.password)
+    assert_principal_is(client, auditor_user.email, not_admin=True)
     assert_auditor_without_admin_roles(client)
     return client
 
@@ -2232,7 +2175,7 @@ def ownership_project(project, project_utils):
 
     Cascade cleanup of ``project`` only works while the creator is the owner, so the
     teardown gives ownership back before the cascade runs. Request the user fixtures a
-    test needs (``non_admin_user`` ...) before this one so those users outlive the
+    test needs (``platform_user`` ...) before this one so those users outlive the
     project teardown and can still be unassigned from it.
     """
     created = project()
@@ -2678,6 +2621,11 @@ def pytest_sessionfinish(session):
     retry: see delete_cost_centers' own docstring. Jira/Confluence/ADO
     cleanup is intentionally NOT done here — see test_clean_all_entities
     for that.
+
+    OSS standalone only has integrations: assistants, skills, datasources,
+    workflows and cost centers don't exist there (404/403 on every call), so
+    those five are skipped outright instead of hitting the API and logging
+    an error every run.
     """
     if not hasattr(session.config, "workerinput"):
         _release_marketplace_core_gates()
@@ -2689,6 +2637,7 @@ def pytest_sessionfinish(session):
     client = get_client()
     prefix = autotest_entity_prefix
     common_filters = {"created_by": TEST_USER}
+    has_full_platform = not EnvironmentResolver.is_oss_standalone()
 
     try:
         cleanup_utils.delete_integrations(
@@ -2710,34 +2659,35 @@ def pytest_sessionfinish(session):
     except Exception as e:
         logger.error(f"Failed to clean up user integrations: {e}")
 
-    try:
-        cleanup_utils.delete_assistants(
-            client, {**common_filters, "search": prefix}, name_contains=prefix
-        )
-    except Exception as e:
-        logger.error(f"Failed to clean up assistants: {e}")
+    if has_full_platform:
+        try:
+            cleanup_utils.delete_assistants(
+                client, {**common_filters, "search": prefix}, name_contains=prefix
+            )
+        except Exception as e:
+            logger.error(f"Failed to clean up assistants: {e}")
 
-    try:
-        cleanup_utils.delete_skills(
-            client,
-            {**common_filters, "search": prefix},
-        )
-    except Exception as e:
-        logger.error(f"Failed to clean up skills: {e}")
+        try:
+            cleanup_utils.delete_skills(
+                client,
+                {**common_filters, "search": prefix},
+            )
+        except Exception as e:
+            logger.error(f"Failed to clean up skills: {e}")
 
-    try:
-        cleanup_utils.delete_datasources(
-            client, {**common_filters, "name": prefix}, name_contains=prefix
-        )
-    except Exception as e:
-        logger.error(f"Failed to clean up datasources: {e}")
+        try:
+            cleanup_utils.delete_datasources(
+                client, {**common_filters, "name": prefix}, name_contains=prefix
+            )
+        except Exception as e:
+            logger.error(f"Failed to clean up datasources: {e}")
 
-    try:
-        cleanup_utils.delete_workflows(
-            client, {**common_filters, "name": prefix}, name_contains=prefix
-        )
-    except Exception as e:
-        logger.error(f"Failed to clean up workflows: {e}")
+        try:
+            cleanup_utils.delete_workflows(
+                client, {**common_filters, "name": prefix}, name_contains=prefix
+            )
+        except Exception as e:
+            logger.error(f"Failed to clean up workflows: {e}")
 
     try:
         # search="autotest-" narrows the listing server-side (fast); the
@@ -2757,10 +2707,11 @@ def pytest_sessionfinish(session):
     except Exception as e:
         logger.error(f"Failed to cleanup providers: {e}")
 
-    try:
-        cleanup_utils.delete_cost_centers(client, prefix=prefix)
-    except Exception as e:
-        logger.error(f"Failed to cleanup cost centers: {e}")
+    if has_full_platform:
+        try:
+            cleanup_utils.delete_cost_centers(client, prefix=prefix)
+        except Exception as e:
+            logger.error(f"Failed to cleanup cost centers: {e}")
 
     logger.info("Session cleanup completed.")
 
@@ -2981,17 +2932,13 @@ def marketplace_submitter(request, default_llm, marketplace_core_gates):
         yield _persona_submitter(default_llm.base_name)
         return
     keycloak_utils = request.getfixturevalue("keycloak_utils")
-    email = f"autotest_submitter_{secrets.token_hex(4)}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    try:
-        user_client = get_client(username=email, password=password)
-        assert_principal_is(user_client, email, not_admin=True)
-        yield MarketplaceSubmitter(email, password, user_client, default_llm.base_name)
-    finally:
-        try:
-            keycloak_utils.delete_user(email)
-        except Exception as e:
-            logger.warning(f"Failed to delete user {email}: {e}")
+    with new_logged_in_user(
+        keycloak_utils, user_email("submitter"), admin=False
+    ) as user:
+        assert_principal_is(user.client, user.email, not_admin=True)
+        yield MarketplaceSubmitter(
+            user.email, user.password, user.client, default_llm.base_name
+        )
 
 
 def _delete_submitter_assistant(submitter, admin_client, assistant_id) -> None:

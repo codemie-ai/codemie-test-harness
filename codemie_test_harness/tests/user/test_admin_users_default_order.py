@@ -33,6 +33,7 @@ from codemie_test_harness.tests.test_data.admin_users_order_test_data import (
     "scenario", default_order_scenarios, ids=lambda scenario: scenario.id
 )
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_admin_users_default_order_is_name_a_to_z(
     user_utils, ordered_users, scenario
 ):
@@ -51,6 +52,7 @@ def test_list_admin_users_default_order_is_name_a_to_z(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_admin_client_list_users_returns_a_to_z(admin_utils, ordered_users):
     # @case admin-users-default-name-order_TC_004
     users = ordered_users(UNNAMED_USERS_BY_USERNAME)

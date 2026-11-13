@@ -611,6 +611,10 @@ integration_update_data = [
         SERVICENOW_RESPONSE,
         marks=[
             pytest.mark.servicenow,
+            pytest.mark.xfail(
+                reason="ServiceNow environment is temporary not available",
+                strict=False,
+            ),
         ],
         id=CredentialTypes.SERVICE_NOW,
     ),

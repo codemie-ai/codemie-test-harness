@@ -52,6 +52,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.project
 @pytest.mark.api
 @pytest.mark.smoke
+@pytest.mark.oss_standalone
 def test_create_project(project_utils, project):
     """Test creating a new project with basic fields.
 
@@ -105,6 +106,7 @@ def created_project_names(project_utils):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_create_project_without_description_succeeds(
     project_utils, created_project_names
 ):
@@ -149,6 +151,7 @@ def test_create_project_without_description_succeeds(
     ["   ", "\n\n\n"],
     ids=["spaces_only", "newline_only"],
 )
+@pytest.mark.oss_standalone
 def test_create_project_with_whitespace_only_description_normalizes_to_none(
     project_utils, created_project_names, whitespace_description
 ):
@@ -179,6 +182,7 @@ def test_create_project_with_whitespace_only_description_normalizes_to_none(
     ["   ", "\n\n\n"],
     ids=["spaces_only", "newline_only"],
 )
+@pytest.mark.oss_standalone
 def test_update_project_with_whitespace_only_description_normalizes_to_none(
     project_utils, project, whitespace_description
 ):
@@ -216,6 +220,7 @@ def test_update_project_with_whitespace_only_description_normalizes_to_none(
 @pytest.mark.api
 @pytest.mark.smoke
 @pytest.mark.sanity
+@pytest.mark.oss_standalone
 def test_list_projects(project_utils):
     """Test listing projects with default parameters."""
     response = project_utils.list_projects()
@@ -229,6 +234,7 @@ def test_list_projects(project_utils):
 @pytest.mark.project
 @pytest.mark.api
 @pytest.mark.parametrize("params", list_projects_test_data)
+@pytest.mark.oss_standalone
 def test_list_projects_with_params(project_utils, params):
     """Test listing projects with different parameters."""
     response = project_utils.list_projects(**params)
@@ -240,6 +246,7 @@ def test_list_projects_with_params(project_utils, params):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_projects_pagination_last_page(project_utils):
     """Test listing projects - navigating to last page."""
     per_page = 10
@@ -259,6 +266,7 @@ def test_list_projects_pagination_last_page(project_utils):
 @pytest.mark.project
 @pytest.mark.api
 @pytest.mark.smoke
+@pytest.mark.oss_standalone
 def test_list_projects_with_search(project_utils, project):
     """Test listing projects with search filter."""
     created_project = project()
@@ -273,6 +281,7 @@ def test_list_projects_with_search(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_projects_with_search_finds_project_by_name_when_display_name_set(
     project_utils, project
 ):
@@ -298,6 +307,7 @@ def test_list_projects_with_search_finds_project_by_name_when_display_name_set(
 @pytest.mark.project
 @pytest.mark.api
 @pytest.mark.smoke
+@pytest.mark.oss_standalone
 def test_get_project_detail(project_utils, project):
     """Test getting project details."""
     created_project = project()
@@ -312,6 +322,7 @@ def test_get_project_detail(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_get_project_detail_members_list(project_utils, project):
     """Test that project detail includes members list."""
     created_project = project()
@@ -330,6 +341,7 @@ def test_get_project_detail_members_list(project_utils, project):
 @pytest.mark.project
 @pytest.mark.api
 @pytest.mark.smoke
+@pytest.mark.oss_standalone
 def test_update_project(project_utils, project):
     """Test updating a project's description."""
     created_project = project()
@@ -363,6 +375,7 @@ def _snapshot_immutable_fields(detail):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_project_adds_description_when_previously_none(
     project_utils, created_project_names
 ):
@@ -406,6 +419,7 @@ def test_update_project_adds_description_when_previously_none(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_project_clear_description_removes_it_immediately(
     project_utils, project
 ):
@@ -456,6 +470,7 @@ def test_update_project_clear_description_removes_it_immediately(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_project_display_name_only_leaves_description_untouched(
     project_utils, project
 ):
@@ -498,6 +513,7 @@ def test_update_project_display_name_only_leaves_description_untouched(
 @pytest.mark.project
 @pytest.mark.api
 @pytest.mark.smoke
+@pytest.mark.oss_standalone
 def test_delete_project(project_utils):
     """Test deleting a project."""
     # Create a project to delete
@@ -516,6 +532,7 @@ def test_delete_project(project_utils):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_delete_project_same_name_recreate_denies_old_creator_admin(project_utils):
     """Regression: recreating a deleted project under the same name
     must not inherit membership/Project Admin access from the deleted project's creator.
@@ -655,6 +672,7 @@ def test_delete_project_same_name_recreate_denies_old_creator_admin(project_util
 @pytest.mark.api
 @pytest.mark.smoke
 @pytest.mark.parametrize("is_project_admin", user_assignment_test_data)
+@pytest.mark.oss_standalone
 def test_assign_user_to_project(project_utils, project, user_utils, is_project_admin):
     """Test assigning a user to a project.
 
@@ -699,6 +717,7 @@ def test_assign_user_to_project(project_utils, project, user_utils, is_project_a
 @pytest.mark.project
 @pytest.mark.api
 @pytest.mark.smoke
+@pytest.mark.oss_standalone
 def test_update_user_project_assignment(project_utils, project, user_utils):
     """Test updating a user's project admin role."""
     created_project = project()
@@ -732,6 +751,7 @@ def test_update_user_project_assignment(project_utils, project, user_utils):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_bulk_assign_users_to_project(project_utils, project, user_utils):
     """Test bulk assigning users to a project.
 
@@ -760,41 +780,15 @@ def test_bulk_assign_users_to_project(project_utils, project, user_utils):
 @pytest.mark.project
 @pytest.mark.api
 @pytest.mark.smoke
-def test_assign_and_remove_user_from_project(project_utils, project, user_utils):
-    """Test complete flow: assign a user to project and then remove them.
-
-    Finds a non-creator user from existing projects and uses them for testing.
-    """
-    # Get current user (who will be the project creator)
-    current_user = user_utils.get_about_me()
-    current_user_id = current_user.user_id
-
-    # Find a user from existing projects who is not the current user
-    # Limit to 10 projects to avoid excessive API calls (minimum per_page is 10)
-    projects_response = project_utils.list_projects(per_page=10)
-    test_user_id = None
-
-    for proj in projects_response.data:
-        # Get project details with members
-        project_detail = project_utils.get_project_detail(proj.name)
-
-        # Look for a member who is not the current user
-        for member in project_detail.members:
-            if member.user_id != current_user_id:
-                test_user_id = member.user_id
-                break
-
-        if test_user_id:
-            break
-
-    # Skip test if no other user found (e.g., fresh environment, single-user setup)
-    if not test_user_id:
-        pytest.skip("No other users found in existing projects to test with")
+@pytest.mark.oss_standalone
+def test_assign_and_remove_user_from_project(project_utils, project, platform_user):
+    """Test complete flow: assign a non-admin user to project and then remove them."""
+    test_user_id = platform_user.user_id
 
     # Create a new project for testing
     test_project = project()
 
-    # Assign the found user to the project
+    # Assign the non-admin user to the project
     assign_response = project_utils.assign_user_to_project(
         project_name=test_project.name,
         user_id=test_user_id,
@@ -831,6 +825,7 @@ def test_assign_and_remove_user_from_project(project_utils, project, user_utils)
 @pytest.mark.project
 @pytest.mark.api
 @pytest.mark.parametrize("csv_content,filename", csv_import_test_data)
+@pytest.mark.oss_standalone
 def test_validate_users_from_csv(project_utils, project, csv_content, filename):
     """Test CSV validation returns per-row errors for invalid/unknown-user data."""
     created_project = project()
@@ -847,6 +842,7 @@ def test_validate_users_from_csv(project_utils, project, csv_content, filename):
 @pytest.mark.project
 @pytest.mark.api
 @pytest.mark.smoke
+@pytest.mark.oss_standalone
 def test_import_users_from_csv(project_utils, project, user_utils):
     """Test importing users from CSV file.
 

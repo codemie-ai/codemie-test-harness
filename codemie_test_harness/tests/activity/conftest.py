@@ -26,10 +26,10 @@ from codemie_test_harness.tests.utils.admin_project_budget_utils import (
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
-from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
-from codemie_test_harness.tests.utils.keycloak_utils import KeycloakUtils
-from codemie_test_harness.tests.utils.local_user_utils import LocalUserUtils
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    get_user_lifecycle_utils,
+)
 from codemie_test_harness.tests.test_data.budget_test_data import (
     project_key_alias,
 )
@@ -74,11 +74,10 @@ def activity_project(maintainer_client):
 def keycloak_utils(maintainer_client):
     """Session-scoped user-lifecycle helper.
 
-    Uses LocalUserUtils on localhost, KeycloakUtils elsewhere.
+    Same choice as the root fixture (by domain), but local-IdP users are created
+    through the maintainer client.
     """
-    if EnvironmentResolver.is_localhost():
-        return LocalUserUtils(maintainer_client)
-    return KeycloakUtils()
+    return get_user_lifecycle_utils(maintainer_client)
 
 
 @pytest.fixture(scope="session")

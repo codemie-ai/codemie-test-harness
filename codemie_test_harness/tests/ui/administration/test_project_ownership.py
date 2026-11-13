@@ -19,7 +19,7 @@ Covers:
           project admin of the project, hidden from a plain member
   TC-002  Changing the owner through the popup: toast, closed popup, new owner on the details page
 
-Projects and users are created through the API (`ownership_project`, `non_admin_user`) and
+Projects and users are created through the API (`ownership_project`, `platform_user`) and
 removed by their fixtures; the browser only drives the flow under test.
 """
 
@@ -49,6 +49,7 @@ from codemie_test_harness.tests.ui.test_data.project_ownership_ui_test_data impo
     ids=CHANGE_OWNERSHIP_VISIBILITY_IDS,
     indirect=["acting_credentials"],
 )
+@pytest.mark.oss_standalone
 def test_change_ownership_menu_item_visibility(
     page, ownership_project, acting_credentials, change_ownership_visible
 ):
@@ -65,14 +66,19 @@ def test_change_ownership_menu_item_visibility(
 
 @pytest.mark.ui
 @pytest.mark.project
+@pytest.mark.oss_standalone
 def test_change_project_owner_through_popup(
-    page, client, project_utils, non_admin_user, ownership_project
+    page, client, project_utils, platform_user, ownership_project
 ):
     """
     until a new owner is picked, confirming shows the toast and closes the popup, and the new
     owner is persisted and shown as "Owned by" on the project details page.
     """
-    new_owner_email, new_owner_id, new_owner_client = non_admin_user
+    new_owner_email, new_owner_id, new_owner_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
     current_owner = client.users.about_me()
     new_owner_name = new_owner_client.users.about_me().name
     projects_page = ProjectManagementPage(page).navigate_to()

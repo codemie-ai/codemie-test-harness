@@ -26,7 +26,7 @@ Expected behaviour after the fix:
 - the public "Share chat" flow keeps working, but only for files that belong
   to the shared conversation.
 
-Uses the shared `non_admin_user` fixture (developer role only) as the attacker
+Uses the shared `platform_user` fixture (developer role only) as the attacker
 (account B) and the default admin `client` as the file owner (account A).
 """
 
@@ -133,10 +133,14 @@ def test_download_file_by_owner_returns_content(client, owner_file):
 @pytest.mark.smoke
 @pytest.mark.conversations
 @pytest.mark.api
-def test_download_foreign_file_by_other_user_is_denied(non_admin_user, owner_file):
+def test_download_foreign_file_by_other_user_is_denied(platform_user, owner_file):
     """TC-02: account B must not read account A's private file by reusing its URL —
     the exact cross-user disclosure from the ticket's steps to reproduce."""
-    _email, _member_id, member_client = non_admin_user
+    _email, _member_id, member_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
 
     _assert_download_denied(member_client, owner_file.file_url, owner_file.marker)
 
@@ -144,10 +148,14 @@ def test_download_foreign_file_by_other_user_is_denied(non_admin_user, owner_fil
 @pytest.mark.smoke
 @pytest.mark.conversations
 @pytest.mark.api
-def test_download_file_with_forged_token_is_denied(client, non_admin_user, owner_file):
+def test_download_file_with_forged_token_is_denied(client, platform_user, owner_file):
     """TC-03: a token fabricated from a known owner user-id + filename must not
     grant access, even though the encoding itself is unsigned and forgeable."""
-    _email, _member_id, member_client = non_admin_user
+    _email, _member_id, member_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
     owner_id = client.users.about_me().user_id
     forged = _serialize_token(owner_file.mime_type, owner_id, owner_file.name)
 
@@ -158,11 +166,15 @@ def test_download_file_with_forged_token_is_denied(client, non_admin_user, owner
 @pytest.mark.conversations
 @pytest.mark.api
 def test_download_file_with_path_traversal_token_is_denied(
-    client, non_admin_user, owner_file
+    client, platform_user, owner_file
 ):
     """TC-04: a token whose owner is the attacker's own id but whose name climbs
     into the victim's directory must not bypass the ownership rule."""
-    _email, member_id, member_client = non_admin_user
+    _email, member_id, member_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
     owner_id = client.users.about_me().user_id
     traversal = _serialize_token(
         owner_file.mime_type, member_id, f"../{owner_id}/{owner_file.name}"
@@ -174,9 +186,13 @@ def test_download_file_with_path_traversal_token_is_denied(
 @pytest.mark.smoke
 @pytest.mark.conversations
 @pytest.mark.api
-def test_download_file_with_malformed_token_returns_bad_request(non_admin_user):
+def test_download_file_with_malformed_token_returns_bad_request(platform_user):
     """TC-05: an undecodable token is a client error, not a 500."""
-    _email, _member_id, member_client = non_admin_user
+    _email, _member_id, member_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
 
     with pytest.raises(HTTPError) as exc_info:
         _download(member_client, "!!not-a-valid-token!!")
@@ -192,11 +208,15 @@ def test_download_file_with_malformed_token_returns_bad_request(non_admin_user):
 @pytest.mark.conversations
 @pytest.mark.api
 def test_download_shared_file_with_share_token_returns_content(
-    non_admin_user, owner_file, shared_conversation
+    platform_user, owner_file, shared_conversation
 ):
     """TC-06 (regression guard): the public "Share chat" flow keeps working — a
     recipient can render a file of the shared conversation using the share token."""
-    _email, _member_id, member_client = non_admin_user
+    _email, _member_id, member_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
     share_token, _unshared = shared_conversation
 
     content = _download(member_client, owner_file.file_url, share_token=share_token)
@@ -208,11 +228,15 @@ def test_download_shared_file_with_share_token_returns_content(
 @pytest.mark.conversations
 @pytest.mark.api
 def test_download_shared_file_without_share_token_is_denied(
-    non_admin_user, owner_file, shared_conversation
+    platform_user, owner_file, shared_conversation
 ):
     """TC-07: sharing a conversation must not make its files public — without the
     share token the recipient is still denied."""
-    _email, _member_id, member_client = non_admin_user
+    _email, _member_id, member_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
 
     _assert_download_denied(member_client, owner_file.file_url, owner_file.marker)
 
@@ -221,11 +245,15 @@ def test_download_shared_file_without_share_token_is_denied(
 @pytest.mark.conversations
 @pytest.mark.api
 def test_download_unshared_file_with_share_token_is_denied(
-    non_admin_user, shared_conversation
+    platform_user, shared_conversation
 ):
     """TC-08: a valid share token is scoped to the shared conversation — it must
     not unlock another private file of the same owner."""
-    _email, _member_id, member_client = non_admin_user
+    _email, _member_id, member_client = (
+        platform_user.email,
+        platform_user.user_id,
+        platform_user.client,
+    )
     share_token, unshared_file = shared_conversation
 
     _assert_download_denied(

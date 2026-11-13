@@ -18,6 +18,7 @@ from hamcrest import assert_that, equal_to, is_not, empty
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_default_user_cannot_get_admin_user_by_id(user_utils, default_user_utils):
     me = user_utils.get_about_me()
     status = default_user_utils.get_admin_user_status_code(me.user_id)
@@ -32,6 +33,7 @@ def test_default_user_cannot_get_admin_user_by_id(user_utils, default_user_utils
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
+@pytest.mark.oss_standalone
 def test_default_user_cannot_update_user(user_utils, default_user_utils):
     me = user_utils.get_about_me()
     status = default_user_utils.update_admin_user_status_code(me.user_id, name="hacker")
@@ -46,6 +48,7 @@ def test_default_user_cannot_update_user(user_utils, default_user_utils):
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
+@pytest.mark.oss_standalone
 def test_default_user_cannot_deactivate_user(user_utils, default_user_utils):
     me = user_utils.get_about_me()
     status = default_user_utils.deactivate_user_status_code(me.user_id)
@@ -59,6 +62,7 @@ def test_default_user_cannot_deactivate_user(user_utils, default_user_utils):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_default_user_cannot_reactivate_user(
     user_utils, default_user_utils, deactivated_user
 ):
@@ -81,6 +85,7 @@ def test_default_user_cannot_reactivate_user(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_admin_user_can_list_users(user_utils):
     response = user_utils.list_admin_users()
 
@@ -93,6 +98,7 @@ def test_admin_user_can_list_users(user_utils):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_admin_user_can_get_user_by_id(user_utils):
     me = user_utils.get_about_me()
     status = user_utils.get_admin_user_status_code(me.user_id)
@@ -107,9 +113,10 @@ def test_admin_user_can_get_user_by_id(user_utils):
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
-def test_admin_cannot_promote_user_to_admin(admin_only_user_utils, disposable_user):
-    _, user_id, _ = disposable_user
-    status = admin_only_user_utils.update_admin_user_status_code(user_id, is_admin=True)
+@pytest.mark.oss_standalone
+def test_admin_cannot_promote_user_to_admin(admin_user_utils, platform_user):
+    user_id = platform_user.user_id
+    status = admin_user_utils.update_admin_user_status_code(user_id, is_admin=True)
 
     assert_that(
         status,
@@ -121,11 +128,10 @@ def test_admin_cannot_promote_user_to_admin(admin_only_user_utils, disposable_us
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
-def test_admin_cannot_set_maintainer_flag(admin_only_user_utils, disposable_user):
-    _, user_id, _ = disposable_user
-    status = admin_only_user_utils.update_admin_user_status_code(
-        user_id, is_maintainer=True
-    )
+@pytest.mark.oss_standalone
+def test_admin_cannot_set_maintainer_flag(admin_user_utils, platform_user):
+    user_id = platform_user.user_id
+    status = admin_user_utils.update_admin_user_status_code(user_id, is_maintainer=True)
 
     assert_that(
         status,
@@ -137,8 +143,9 @@ def test_admin_cannot_set_maintainer_flag(admin_only_user_utils, disposable_user
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
-def test_maintainer_can_promote_user_to_admin(user_utils, disposable_user):
-    _, user_id, _ = disposable_user
+@pytest.mark.oss_standalone
+def test_maintainer_can_promote_user_to_admin(user_utils, platform_user):
+    user_id = platform_user.user_id
     user_utils.update_admin_user(user_id, is_admin=True)
 
     detail = user_utils.get_admin_user(user_id)
@@ -152,8 +159,9 @@ def test_maintainer_can_promote_user_to_admin(user_utils, disposable_user):
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.not_for_parallel_run
-def test_maintainer_can_set_maintainer_flag(user_utils, disposable_user):
-    _, user_id, _ = disposable_user
+@pytest.mark.oss_standalone
+def test_maintainer_can_set_maintainer_flag(user_utils, platform_user):
+    user_id = platform_user.user_id
     user_utils.update_admin_user(user_id, is_maintainer=True)
 
     detail = user_utils.get_admin_user(user_id)

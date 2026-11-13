@@ -19,11 +19,12 @@
 identical to tests/ui/conftest.py (the default AUTH_USERNAME user).
 
 Users and projects with a default project come from the shared fixtures of tests/conftest.py
-(`default_project_member`, `maintainer_credentials`).
+(`default_project_member`, `maintainer_user`).
 """
 
 import os
 import secrets
+from contextlib import ExitStack
 from dataclasses import dataclass
 
 import pytest
@@ -47,6 +48,10 @@ from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     wait_until_accessible,
 )
 from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    new_logged_in_user,
+    user_email,
+)
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.logger_util import setup_logger
 from codemie_test_harness.tests.utils.project_visibility_utils import ProjectFlagUtils
@@ -80,22 +85,24 @@ def _project_member_credentials(request, is_project_admin):
     project_utils = request.getfixturevalue("project_utils")
     project = request.getfixturevalue("ownership_project")
 
-    email = f"autotest_member_{secrets.token_hex(4)}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    user_id = get_client(username=email, password=password).users.about_me().user_id
+    # acting_credentials returns rather than yields, so the user's cleanup goes to a finalizer.
+    cleanup = ExitStack()
+    request.addfinalizer(cleanup.close)
+    user = cleanup.enter_context(
+        new_logged_in_user(keycloak_utils, user_email("member"), admin=False)
+    )
     project_utils.assign_user_to_project(
-        project.name, user_id, is_project_admin=is_project_admin
+        project.name, user.user_id, is_project_admin=is_project_admin
     )
 
-    def _cleanup():
+    @cleanup.callback
+    def _unassign():
         try:
-            project_utils.remove_user_from_project(project.name, user_id)
+            project_utils.remove_user_from_project(project.name, user.user_id)
         except Exception as e:
-            logger.warning(f"Failed to unassign {email} from {project.name}: {e}")
-        keycloak_utils.delete_user(email)
+            logger.warning(f"Failed to unassign {user.email} from {project.name}: {e}")
 
-    request.addfinalizer(_cleanup)
-    return email, password
+    return user.email, user.password
 
 
 @pytest.fixture
@@ -123,13 +130,9 @@ def acting_credentials(request):
     """
     role = getattr(request, "param", "admin")
     if role == "cli_auditor":
-        auditor = request.getfixturevalue("verified_auditor_client")
-        username, password = request.getfixturevalue("cli_auditor_credentials")
-        return (
-            username,
-            password,
-            auditor.users.about_me().user_id,
-        )
+        request.getfixturevalue("verified_auditor_client")  # asserts the role is real
+        auditor = request.getfixturevalue("auditor_user")
+        return auditor.email, auditor.password, auditor.user_id
     if role.startswith("cli_"):
         return request.getfixturevalue("cli_ui_world").credentials[role]
     if role == "project_admin_member":
@@ -137,7 +140,8 @@ def acting_credentials(request):
     if role == "plain_member":
         return _project_member_credentials(request, is_project_admin=False)
     if role == "maintainer":
-        return request.getfixturevalue("maintainer_credentials")
+        maintainer = request.getfixturevalue("maintainer_user")
+        return maintainer.email, maintainer.password
     if role == "auditor":
         # Existing user-management tests retain their configured auditor. CLI Analytics
         # uses cli_auditor above, with a separately provisioned and verified account.
@@ -185,66 +189,63 @@ class CliAnalyticsUiWorld:
     own_project: dict  # role -> a project that role sees in the list
 
 
-def _new_user(keycloak_utils, label):
-    """Create a plain platform user; returns (email, password, client, user_id)."""
-    email = f"autotest_{label}_{secrets.token_hex(4)}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    client = get_client(username=email, password=password)
-    return email, password, client, client.users.about_me().user_id
-
-
 @pytest.fixture(scope="module")
 def cli_ui_world(keycloak_utils, user_utils, admin_utils, project_utils, client):
     """Projects `target` and `other` and one account per role, created once per module (and per
     xdist worker) so the browser logs in once per test. Real roles are asserted before any
     grant: an unrelated user must get 404 (ENV=local makes everyone a global admin), the
     maintainer holds the maintainer flag only."""
-    emails = []
     names = [get_random_name() for _ in range(2)]
-    try:
-        accounts = {}
-        for role, label in (
-            ("cli_maintainer", "uimaint"),
-            ("cli_project_admin", "uipa"),
-            ("cli_other_project_admin", "uipa2"),
-            ("cli_member", "uimember"),
-            ("cli_unrelated_user", "uiunrelated"),
-        ):
-            email, password, user_client, user_id = _new_user(keycloak_utils, label)
-            emails.append(email)
-            accounts[role] = (email, password, user_client, user_id)
+    with ExitStack() as cleanup:
+        accounts = {
+            role: cleanup.enter_context(
+                new_logged_in_user(keycloak_utils, user_email(label), admin=False)
+            )
+            for role, label in (
+                ("cli_maintainer", "uimaint"),
+                ("cli_project_admin", "uipa"),
+                ("cli_other_project_admin", "uipa2"),
+                ("cli_member", "uimember"),
+                ("cli_unrelated_user", "uiunrelated"),
+            )
+        }
+        # Registered after the users, so it runs first: projects, then users.
+        for name in names:
+            cleanup.callback(_delete_project_with_members, project_utils, name)
         for name in names:
             admin_utils.create_project(name)
-        assert_roles_are_real(accounts["cli_unrelated_user"][2], names[0])
+        assert_roles_are_real(accounts["cli_unrelated_user"].client, names[0])
         maintainer = accounts["cli_maintainer"]
-        user_utils.update_admin_user(maintainer[3], is_maintainer=True)
-        UserUtils(maintainer[2]).wait_until_user_management_effective()
-        assert_principal_is(maintainer[2], maintainer[0])
+        user_utils.update_admin_user(maintainer.user_id, is_maintainer=True)
+        UserUtils(maintainer.client).wait_until_user_management_effective()
+        assert_principal_is(maintainer.client, maintainer.email)
         # the backend stores is_admin=true for every maintainer ("maintainer implies admin")
         assert_stored_roles(
-            user_utils, maintainer[3], is_maintainer=True, is_admin=True
+            user_utils, maintainer.user_id, is_maintainer=True, is_admin=True
         )
         for role in ("cli_project_admin", "cli_other_project_admin", "cli_member"):
             assert_stored_roles(
-                user_utils, accounts[role][3], is_maintainer=False, is_admin=False
+                user_utils, accounts[role].user_id, is_maintainer=False, is_admin=False
             )
         user_utils.assign_user_to_project(
-            accounts["cli_project_admin"][3], names[0], is_project_admin=True
+            accounts["cli_project_admin"].user_id, names[0], is_project_admin=True
         )
         user_utils.assign_user_to_project(
-            accounts["cli_other_project_admin"][3], names[1], is_project_admin=True
+            accounts["cli_other_project_admin"].user_id, names[1], is_project_admin=True
         )
-        user_utils.assign_user_to_project(accounts["cli_member"][3], names[0])
-        wait_until_accessible(accounts["cli_project_admin"][2], names[:1])
-        wait_until_accessible(accounts["cli_other_project_admin"][2], names[1:])
-        wait_until_accessible(accounts["cli_member"][2], names[:1])
-        credentials = {role: (a[0], a[1], a[3]) for role, a in accounts.items()}
+        user_utils.assign_user_to_project(accounts["cli_member"].user_id, names[0])
+        wait_until_accessible(accounts["cli_project_admin"].client, names[:1])
+        wait_until_accessible(accounts["cli_other_project_admin"].client, names[1:])
+        wait_until_accessible(accounts["cli_member"].client, names[:1])
+        credentials = {
+            role: (a.email, a.password, a.user_id) for role, a in accounts.items()
+        }
         credentials["cli_global_admin"] = (
             CredentialsManager.get_parameter("AUTH_USERNAME"),
             CredentialsManager.get_parameter("AUTH_PASSWORD"),
             client.users.about_me().user_id,
         )
-        personal = accounts["cli_unrelated_user"][0]
+        personal = accounts["cli_unrelated_user"].email
         yield CliAnalyticsUiWorld(
             target=names[0],
             other=names[1],
@@ -259,14 +260,6 @@ def cli_ui_world(keycloak_utils, user_utils, admin_utils, project_utils, client)
                 "cli_unrelated_user": personal,
             },
         )
-    finally:
-        for name in names:
-            _delete_project_with_members(project_utils, name)
-        for email in emails:
-            try:
-                keycloak_utils.delete_user(email)
-            except Exception as e:
-                logger.warning(f"Failed to delete user {email}: {e}")
 
 
 @pytest.fixture

@@ -60,6 +60,7 @@ pytestmark = [
     pytest.mark.api,
     pytest.mark.cli_analytics,
     pytest.mark.project,
+    pytest.mark.oss_standalone,
 ]
 
 

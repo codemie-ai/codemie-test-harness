@@ -35,14 +35,14 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 @pytest.mark.api
 def test_lookup_returns_union_of_shared_projects_sorted_by_name(
     provisioning_read,
-    non_admin_user,
-    disposable_user,
+    platform_user,
+    admin_user,
     user_utils,
     provisioning_utils,
 ):
     # @case provisioning-api-for-third-party_TC_006
-    first_email, first_id, _ = non_admin_user
-    second_email, second_id, _ = disposable_user
+    first_email, first_id = platform_user.email, platform_user.user_id
+    second_email, second_id = admin_user.email, admin_user.user_id
     base = get_random_name()
     first_only = provisioning_utils.create_project(
         name=f"{base}-b", display_name=f"Display of {base}-b"
@@ -110,10 +110,10 @@ def test_lookup_of_emails_matching_no_user_returns_an_empty_list(provisioning_re
 @pytest.mark.requires_setting(*PROVISIONING_READ_CLIENT_KEYS)
 @pytest.mark.api
 def test_lookup_matches_member_email_in_any_letter_case(
-    provisioning_read, non_admin_user, user_utils, provisioning_utils
+    provisioning_read, platform_user, user_utils, provisioning_utils
 ):
     # @case provisioning-api-for-third-party_TC_006
-    member_email, member_id, _ = non_admin_user
+    member_email, member_id = platform_user.email, platform_user.user_id
     project_name = provisioning_utils.create_project()
     user_utils.assign_user_to_project(member_id, project_name)
 
@@ -136,12 +136,12 @@ def test_lookup_skips_the_email_of_a_registered_client(
     provisioning_read,
     provisioning_client_email,
     provisioning_client_user_id,
-    non_admin_user,
+    platform_user,
     user_utils,
     provisioning_utils,
 ):
     # @case provisioning-api-for-third-party_TC_006
-    member_email, member_id, _ = non_admin_user
+    member_email, member_id = platform_user.email, platform_user.user_id
     project_name = provisioning_utils.create_project()
     user_utils.assign_user_to_project(member_id, project_name)
     user_utils.assign_user_to_project(
