@@ -471,6 +471,15 @@ class UserManagementPage(BasePage):
         return self
 
     @step
+    def should_see_single_project_in_details(self, project: str):
+        """Assert the User Details projects table lists exactly one project: the given one."""
+        expect(self.details_projects_table.locator("tbody tr")).to_have_count(
+            1, timeout=10000
+        )
+        expect(self._details_project_row(project)).to_have_count(1, timeout=10000)
+        return self
+
+    @step
     def should_see_default_controls_enabled(self):
         """Assert the details dialog exposes project-management controls.
 

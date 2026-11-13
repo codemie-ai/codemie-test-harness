@@ -43,11 +43,13 @@ from hamcrest import (
     assert_that,
     contains_exactly,
     equal_to,
+    greater_than_or_equal_to,
     has_item,
     is_in,
     not_,
 )
 
+from codemie_test_harness.tests.utils.activity_utils import ActivityUtils
 from codemie_test_harness.tests.utils.user_utils import UserUtils
 
 
@@ -478,3 +480,49 @@ def test_set_default_project_for_unknown_user_returns_404(
     )
 
     assert_that(status_code, equal_to(404), "Unknown user must be rejected")
+
+
+@pytest.mark.user
+@pytest.mark.api
+def test_mixed_case_email_user_gets_one_membership_and_one_default_project(
+    user_utils, maintainer_client, mixed_case_personal_user
+):
+    """@case user-management-shows-no-default_TC_001
+
+    A user whose email contains uppercase letters must end up with exactly one
+    personal membership and exactly one default project, both under the
+    application's real (mixed-case) name rather than a lowercase orphan, and the
+    project.created activity event for it must carry that same canonical name.
+    """
+    email, user_id, _ = mixed_case_personal_user
+    activity_utils = ActivityUtils(maintainer_client)
+
+    assert_that(
+        user_utils.get_user_project_names(user_id),
+        contains_exactly(email),
+        "Exactly one membership must exist, named after the real mixed-case project",
+    )
+    assert_that(
+        user_utils.get_default_project_names_from_detail(user_id),
+        contains_exactly(email),
+        "The real mixed-case personal project must be the only one marked default (detail)",
+    )
+    assert_that(
+        user_utils.get_default_project_names_from_list(user_id, email),
+        contains_exactly(email),
+        "The real mixed-case personal project must be the only one marked default (list)",
+    )
+
+    events = activity_utils.list_activity_events(
+        event_type=["project.created"], entity_id=email
+    )
+    assert_that(
+        len(events.data),
+        greater_than_or_equal_to(1),
+        "A project.created event must exist for the real mixed-case project name",
+    )
+    assert_that(
+        events.data[0].entity_id,
+        equal_to(email),
+        "project.created must carry the application's real (mixed-case) name as entity_id",
+    )

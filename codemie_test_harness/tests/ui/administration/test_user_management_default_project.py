@@ -227,3 +227,22 @@ def test_unassigning_default_project_falls_back_to_personal_project(
         "The default must fall back to the personal project",
     )
     users_page.should_see_default_in_users_list(member.email, member.personal_project)
+
+
+@pytest.mark.ui
+@pytest.mark.user
+def test_user_details_popup_shows_mixed_case_personal_project_as_default(
+    page, mixed_case_personal_user
+):
+    """@case user-management-shows-no-default_TC_002
+
+    A mixed-case-email user's User Details popup must list exactly one project --
+    the real mixed-case personal project -- with its Default radio selected, never
+    an empty default or a lowercase orphan row."""
+    email, _, _ = mixed_case_personal_user
+    users_page = UserManagementPage(page).navigate_to()
+
+    users_page.open_user_details(email)
+
+    users_page.should_see_single_project_in_details(email)
+    users_page.should_see_default_selected_only_for(email)

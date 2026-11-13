@@ -396,3 +396,53 @@ def test_changing_and_removing_default_project_moves_only_new_spend(
         contains_exactly(email),
         "Without a stored default the personal project is reported as the default",
     )
+
+
+# ── user-management-shows-no-default_TC_003 ────────────────────────────────
+
+
+@pytest.mark.budget
+@pytest.mark.api
+@pytest.mark.enterprise
+@pytest.mark.timeout(1500)
+def test_mixed_case_personal_project_is_charged_under_its_real_name(
+    mixed_case_keycloak_user,
+    mixed_case_skills_utils,
+    mixed_case_proxy_utils,
+    default_llm,
+    lite_llm_budget_utils,
+):
+    """@case user-management-shows-no-default_TC_003
+
+    A mixed-case personal project must be charged under its real casing, and
+    requesting the user's own identity under a different casing must still
+    resolve to that same personal budget -- never a fallback destination.
+    """
+    email, _ = mixed_case_keycloak_user
+    customers = {"personal": email}
+
+    logger.info("Phase 1: unbound flow charges the real mixed-case personal project")
+    before = lite_llm_budget_utils.get_spends({}, customers)
+    mixed_case_skills_utils.generate_instructions(budget_skill_description())
+    assert_that(
+        lite_llm_budget_utils.wait_for_charged_sources(before, {}, customers),
+        equal_to({"personal"}),
+        "Spend must be charged to the personal budget key under the project's real "
+        "mixed-case name",
+    )
+
+    logger.info(
+        "Phase 2: requesting the user's own identity in another casing is not a fallback"
+    )
+    before = lite_llm_budget_utils.get_spends({}, customers)
+    mixed_case_proxy_utils.send_messages_request(
+        model=default_llm.base_name,
+        messages=[{"role": "user", "content": budget_chat_prompt()}],
+        extra_headers={**CLI_CLIENT_HEADER, CLI_PROJECT_HEADER: email.upper()},
+    ).raise_for_status()
+    assert_that(
+        lite_llm_budget_utils.wait_for_charged_sources(before, {}, customers),
+        equal_to({"personal"}),
+        "Requesting the user's own identity in another casing must still charge the "
+        "real personal project, not a fallback destination",
+    )
