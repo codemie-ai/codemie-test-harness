@@ -2294,6 +2294,16 @@ class ChatPage(BasePage):
         return self
 
     @step
+    def should_not_have_in_progress_thought_visible(self, timeout: int = 15000):
+        """Wait for the assistant message and verify no thought is in progress."""
+        assistant_turn = self.chat_history_container.locator(
+            '[data-onboarding="chat-ai-message"]'
+        )
+        expect(assistant_turn.last).to_be_visible(timeout=timeout)
+        expect(self.in_progress_thought_status).to_have_count(0, timeout=timeout)
+        return self
+
+    @step
     def should_have_non_blank_workflow_progress(self, timeout: int = 15000):
         """Verify the answer node shows workflow progress rather than being empty (AC-4).
 
@@ -2315,17 +2325,39 @@ class ChatPage(BasePage):
         return self
 
     @step
+    def should_not_have_workflow_restore_failed_message(self, timeout: int = 15000):
+        """Verify the restore-failed fallback copy is not rendered."""
+        expect(self.workflow_restore_failed_message).to_have_count(0, timeout=timeout)
+        return self
+
+    @step
     def intercept_unrestorable_conversation(
         self, conversation_id: str, workflow_id: str
     ):
         """Intercept GET v1/conversations/{id} with a payload whose workflow turn
         cannot be restored (AC-3): executionStatus "Not Started", no thoughts, no output.
 
-        The exact combination of fields required to trigger this fallback (a workflow
-        turn stuck in a non-running, non-terminal execution status with empty thoughts
-        and output) is not reliably reproducible through timing alone, so the response
-        is replaced with this real, schema-valid payload shape (verbatim field
-        names/casing taken from
+        See `intercept_conversation_with_execution_status` for the payload shape.
+        """
+        return self.intercept_conversation_with_execution_status(
+            conversation_id, workflow_id, "Not Started"
+        )
+
+    @step
+    def intercept_conversation_with_execution_status(
+        self,
+        conversation_id: str,
+        workflow_id: str,
+        execution_status: str,
+        thoughts: list | None = None,
+    ):
+        """Intercept GET v1/conversations/{id} with a workflow turn that has the given
+        executionStatus, no output and, by default, no thoughts.
+
+        The exact combination of fields required to trigger these states (a workflow
+        turn in a given execution status with empty thoughts and output) is not
+        reliably reproducible through timing alone, so the response is replaced with
+        this real, schema-valid payload shape (verbatim field names/casing taken from
         src/store/__tests__/chats.refreshWorkflowExecutionIds.test.ts) — the actual
         shipped frontend code (ChatAiMessage/chatHelpers) still does all the rendering.
         """
@@ -2335,7 +2367,7 @@ class ChatPage(BasePage):
                 status=200,
                 json={
                     "id": conversation_id,
-                    "conversation_name": "restore-failed repro",
+                    "conversation_name": "execution status repro",
                     "assistant_ids": [],
                     "initial_assistant_id": workflow_id,
                     "assistant_data": [],
@@ -2351,10 +2383,10 @@ class ChatPage(BasePage):
                             "historyIndex": 0,
                             "message": "",
                             "date": "2026-09-08T00:00:01Z",
-                            "executionId": "unrestorable-exec-1",
+                            "executionId": "mocked-exec-1",
                             "workflowExecutionRef": True,
-                            "executionStatus": "Not Started",
-                            "thoughts": [],
+                            "executionStatus": execution_status,
+                            "thoughts": thoughts or [],
                         },
                     ],
                 },

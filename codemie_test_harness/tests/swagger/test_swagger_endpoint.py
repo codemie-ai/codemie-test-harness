@@ -20,7 +20,7 @@ This module tests the health and accessibility of the Swagger/OpenAPI documentat
 
 import pytest
 import requests
-from hamcrest import assert_that, equal_to, is_in, less_than
+from hamcrest import assert_that, equal_to, has_items, is_in, less_than
 
 
 @pytest.mark.api
@@ -111,4 +111,23 @@ def test_openapi_json_endpoint(swagger_utils):
     assert_that(
         openapi_spec.get("info", {}).get("description"),
         equal_to("Smart AI assistant 'CodeMie'"),
+    )
+
+
+@pytest.mark.api
+@pytest.mark.swagger
+def test_openapi_workflow_execution_status_includes_recovery_values(swagger_utils):
+    """
+    Test that the OpenAPI specification lists the recovery execution statuses.
+
+    The test verifies:
+    1. The WorkflowExecutionStatusEnum schema is present in components.schemas
+    2. Its enum contains "RECOVERING" and "NEEDS_TRIAGE"
+    """
+    values = swagger_utils.get_schema_enum_values("WorkflowExecutionStatusEnum")
+
+    assert_that(
+        values,
+        has_items("RECOVERING", "NEEDS_TRIAGE"),
+        "workflow execution status enum in openapi.json lacks the recovery values",
     )

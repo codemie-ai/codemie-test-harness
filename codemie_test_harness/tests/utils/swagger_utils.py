@@ -19,7 +19,7 @@ This module provides utilities for testing Swagger/OpenAPI documentation endpoin
 """
 
 import requests
-from typing import Dict, Any
+from typing import Any, Dict, List
 
 from codemie_test_harness.tests import API_DOMAIN, VERIFY_SSL
 from codemie_test_harness.tests.utils.base_utils import BaseUtils
@@ -89,3 +89,16 @@ class SwaggerUtils(BaseUtils):
         response = self.get_openapi_json()
         response.raise_for_status()
         return response.json()
+
+    def get_schema_enum_values(self, schema_name: str) -> List[Any]:
+        """
+        Get the enum values of a named schema from the OpenAPI specification.
+
+        Args:
+            schema_name: Key of the schema in components.schemas
+
+        Returns:
+            List of enum values declared by the schema
+        """
+        schema = self.get_openapi_spec()["components"]["schemas"][schema_name]
+        return schema["enum"]
