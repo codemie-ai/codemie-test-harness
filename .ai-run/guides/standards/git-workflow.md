@@ -4,6 +4,8 @@ The repository is public. Pull requests target `main`. One approval from a colla
 
 ## Branch Naming Convention
 
+- base branch: main
+
 Pattern: `<type>/<slug>`, for example `test/cost-center-rollup` or `docs/harness-agent-guides`. Use the same types as the commit types below. No ticket key in the branch name. No CI job checks branch names.
 
 ## Commit Message Format
@@ -13,6 +15,8 @@ Use Conventional Commits. The PR title is the checked format (`.github/workflows
 ```
 <type>(<optional scope>): <description>
 ```
+
+Examples: `test(test-harness): cover user deactivation and reactivation` · `fix(test-harness): stop CLI analytics seeding from doubling sessions on rerun` · `ci(workflows): add scheduled codemie-sdk-python version bump`
 
 - Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert` (`CONTRIBUTING.md`).
 - Repository convention for commits and PR titles: `<type>(test-harness): <subject>`, for example `test(test-harness): add cost center rollup tests` (`.ai-run/guides/testing/config.json`, `git_conventions`). The scope is a convention; whether the external title lint accepts every scope is not verified.
