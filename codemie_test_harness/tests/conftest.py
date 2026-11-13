@@ -78,6 +78,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name, wait_fo
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.customer_config_utils import CustomerConfigUtils
 from codemie_test_harness.tests.utils.constants import (
+    ADO_FIELD_REFERENCE_SKILL_NAME,
     FILES_PATH,
 )
 from codemie_test_harness.tests.utils.ado_seed import AdoSeed, SeedTestPlan
@@ -1207,6 +1208,19 @@ def skill_utils(client):
     from codemie_test_harness.tests.utils.skill_utils import SkillsUtils
 
     return SkillsUtils(client)
+
+
+@pytest.fixture(scope="session")
+def ado_field_reference_skill(skill_utils):
+    """The preconfigured azure-devops-work-item-fields Skill, seeded at
+    startup — fetched (never created or deleted) so ADO field-reference
+    tests exercise the real shipped Skill content."""
+    found = skill_utils.get_skill_by_name(ADO_FIELD_REFERENCE_SKILL_NAME)
+    assert found is not None, (
+        f"Preconfigured skill '{ADO_FIELD_REFERENCE_SKILL_NAME}' not found; "
+        "expected to be seeded at startup"
+    )
+    return skill_utils.get_skill_by_id(found.id)
 
 
 @pytest.fixture(scope="session")
