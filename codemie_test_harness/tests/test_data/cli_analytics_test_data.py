@@ -359,8 +359,11 @@ class CliSessionSeed:
 
     ``started_at`` is the instant of the session; ``utc_offset_hours`` only changes
     how that instant is written in the events. With ``duration`` the session also
-    ends, that long after its start. With ``cost_usd`` the request is reported as
-    an OTel ``api_request`` log record, the only form that carries a cost.
+    does real work at its end, a turn stop, and ends that long after its start: the
+    backend ends a session at its last real-work event, so a lifecycle event such
+    as the session end alone does not move it. With ``cost_usd`` the request is
+    reported as an OTel ``api_request`` log record, the only form that carries a
+    cost.
     ``model`` is the model the request names; a cost-checking seed needs one priced
     in the platform catalog, since money is tokens × catalog price.
     """
@@ -398,12 +401,19 @@ class CliSessionSeed:
             }
         ]
         if self.duration is not None:
+            ended_at = to_iso(self.started_at + self.duration, self.utc_offset_hours)
             events.append(
                 {
                     **envelope,
-                    "timestamp": to_iso(
-                        self.started_at + self.duration, self.utc_offset_hours
-                    ),
+                    "timestamp": ended_at,
+                    "type": "agent.session.stop",
+                    "event_id": f"stop:{self.session_id}",
+                }
+            )
+            events.append(
+                {
+                    **envelope,
+                    "timestamp": ended_at,
                     "type": "agent.session.end",
                     "event_id": f"end:{self.session_id}",
                 }
@@ -551,8 +561,8 @@ def get_replay_session_seeds() -> list[CliSessionSeed]:
 
 
 def with_session_end(seed: CliSessionSeed) -> CliSessionSeed:
-    """The same session, now ended: its events are those of ``seed`` plus the
-    session end."""
+    """The same session, now ended: its events are those of ``seed`` plus the turn
+    stop and the session end."""
     return replace(seed, duration=timedelta(minutes=5))
 
 
