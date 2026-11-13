@@ -40,6 +40,9 @@ from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.pageobject.components.export_conversation_dialog import (
     ExportConversationDialog,
 )
+from codemie_test_harness.tests.ui.pageobject.components.tool_output_preview import (
+    ToolOutputPreview,
+)
 from codemie_test_harness.tests.ui.pageobject.chats.configuration_panel import (
     ConfigurationPanel,
 )
@@ -1380,6 +1383,44 @@ class ChatPage(BasePage):
         tool_block = self.tool_blocks.filter(has_text=tool_name_pattern)
         expect(tool_block.first).to_be_visible(timeout=timeout)
         return self
+
+    def tool_card_button(self, tool_name: str) -> Locator:
+        """Header button of a tool card; its accessible name is the tool's display name
+        (e.g. "Code Executor") and aria-expanded tells whether the card is open.
+
+        Takes the first card: the model may call the tool more than once in a turn,
+        and every call renders its own header."""
+        return self.chat_history_container.get_by_role(
+            "button", name=tool_name, exact=True
+        ).first
+
+    def tool_card(self, tool_name: str) -> Locator:
+        """Tool card of a tool: the thought container (data-thought-id) that holds the
+        card header button, the Input section and the Result section. The first such
+        card, matching tool_card_button()."""
+        # The inner locator is page-rooted: filter(has=...) queries it relative to each card.
+        return (
+            self.chat_history_container.locator("[data-thought-id]")
+            .filter(has=self.page.get_by_role("button", name=tool_name, exact=True))
+            .first
+        )
+
+    @step
+    def open_tool_output(self, tool_name: str) -> ToolOutputPreview:
+        """
+        Open the tool card of a tool and return its plain-text Result component.
+
+        A card starts closed (aria-expanded=false); one click on its header opens it.
+
+        Args:
+            tool_name: Display name of the tool (e.g., "Code Executor")
+        """
+        header = self.tool_card_button(tool_name)
+        expect(header).to_be_visible()
+        if header.get_attribute("aria-expanded") != "true":
+            header.click()
+        expect(header).to_have_attribute("aria-expanded", "true")
+        return ToolOutputPreview(self.tool_card(tool_name))
 
     @step
     def should_have_any_tool_used(self, *tool_name_patterns: str, timeout: int = 30000):

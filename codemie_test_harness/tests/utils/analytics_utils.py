@@ -517,7 +517,8 @@ class AnalyticsUtils(BaseUtils):
     def wait_for_cli_session_end(
         self, trace_id: str, timeout: float = CLI_SESSION_ROLLUP_TIMEOUT
     ) -> CliAnalyticsSessionRow:
-        """Wait until the rollup of a session includes its end event.
+        """Wait until the rollup of a session includes its last real-work event (the
+        turn stop at its end).
 
         Raises:
             AssertionError: If the session has no duration within timeout.

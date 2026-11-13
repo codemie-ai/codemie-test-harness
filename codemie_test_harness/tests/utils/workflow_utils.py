@@ -429,8 +429,13 @@ class WorkflowUtils(BaseUtils):
         mode=None,
         shared=None,
         categories=None,
+        wait=True,
     ):
-        """Update a workflow; ``categories=None`` leaves the stored categories untouched."""
+        """Update a workflow; ``categories=None`` leaves the stored categories untouched.
+
+        With ``wait=False`` it returns the update response at once, without waiting for
+        the workflow list to show the change.
+        """
         name = name if name else workflow.name
         request = WorkflowUpdateRequest(
             name=name,
@@ -441,7 +446,9 @@ class WorkflowUtils(BaseUtils):
             shared=shared if shared else workflow.shared,
             categories=categories,
         )
-        self.send_update_workflow_request(workflow.id, request=request)
+        response = self.send_update_workflow_request(workflow.id, request=request)
+        if not wait:
+            return response
 
         return wait_for_entity(
             lambda: self.client.workflows.list(per_page=200),

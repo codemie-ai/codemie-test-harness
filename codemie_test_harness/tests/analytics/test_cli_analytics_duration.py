@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""CLI Analytics session duration: from a session's start to its last event."""
+"""CLI Analytics session duration: from a session's start to its last real-work
+event."""
 
 import pytest
 from hamcrest import assert_that, equal_to
@@ -26,7 +27,7 @@ from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
 
 @pytest.fixture(scope="module")
 def duration_sessions(seed_cli_sessions):
-    """Sessions of known length, and one that never reported an end."""
+    """Sessions of known length, and one that never reported an end or later work."""
     return list(seed_cli_sessions(get_duration_session_seeds()).values())
 
 
@@ -36,8 +37,8 @@ def duration_sessions(seed_cli_sessions):
 def test_session_duration_is_time_from_start_to_end(
     analytics_utils, cli_analytics_project, duration_sessions
 ):
-    """Each session lasts from its start to its end event; a session that reported
-    no end lasts 0."""
+    """Each session lasts from its start to its last real-work event, the turn stop
+    at its end; a session that reported no end and no later work lasts 0."""
     sessions = analytics_utils.get_cli_analytics_sessions(
         projects=cli_analytics_project, **day_window().params()
     ).data.sessions

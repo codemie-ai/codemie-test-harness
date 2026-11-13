@@ -13,7 +13,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.12"
-codemie-sdk-python = "0.1.713"
+codemie-sdk-python = "0.1.714"
 pytest = "^8.4.1"
 python-dotenv = "^1.1.0"
 PyHamcrest = "^2.1.0"
