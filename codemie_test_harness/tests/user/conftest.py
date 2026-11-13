@@ -14,6 +14,7 @@
 
 import pytest
 
+from codemie_test_harness.tests.conftest import _disposable_user
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.user_utils import UserUtils
@@ -86,6 +87,19 @@ def disposable_project_member(user_utils, disposable_user, temp_project):
         user_utils.remove_user_from_project(user_id, temp_project)
     except Exception:
         pass
+
+
+@pytest.fixture
+def second_disposable_user(keycloak_utils):
+    """A second, independent function-scoped fresh user; deleted after the test.
+
+    Unlike fixtures that reuse `disposable_user`, this is a distinct fixture so a test
+    needing two distinct existing users (e.g. a remap conflict case) cannot request the
+    same fixture twice in one test. Shares `disposable_user`'s setup/teardown via
+    `_disposable_user`, including its try/except around client creation and its
+    logged (not swallowed) teardown failures.
+    """
+    yield from _disposable_user(keycloak_utils, "user2")
 
 
 ACTOR_FIXTURES = {

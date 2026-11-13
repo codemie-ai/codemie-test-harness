@@ -17,7 +17,6 @@
 import json
 import logging
 import time
-from datetime import datetime
 from typing import Callable, List, Optional
 from uuid import UUID
 
@@ -92,6 +91,7 @@ class ProjectUtils(BaseUtils):
         has_assigned_budgets: bool = False,
         sort_by: Optional[str] = None,
         sort_order: str = "asc",
+        cost_center_ids: Optional[List[UUID]] = None,
     ) -> PaginatedProjectListResponse:
         """List projects with pagination and filters.
 
@@ -105,10 +105,16 @@ class ProjectUtils(BaseUtils):
                 assigned project budget
             sort_by: Field to sort by ('name' or 'created_at')
             sort_order: Sort order ('asc' or 'desc')
+            cost_center_ids: Return only projects assigned to any of these cost centers
 
         Returns:
             PaginatedProjectListResponse with list of projects and pagination info
         """
+        # Forwarded only when set, so callers that do not filter keep working on an SDK
+        # release that predates the cost_center_ids parameter.
+        optional_filters = (
+            {"cost_center_ids": cost_center_ids} if cost_center_ids else {}
+        )
         return self.client.projects.list_projects(
             search=search,
             page=page,
@@ -118,6 +124,7 @@ class ProjectUtils(BaseUtils):
             has_assigned_budgets=has_assigned_budgets,
             sort_by=sort_by,
             sort_order=sort_order,
+            **optional_filters,
         )
 
     def list_all_projects(
@@ -129,6 +136,7 @@ class ProjectUtils(BaseUtils):
         has_assigned_budgets: bool = False,
         sort_by: Optional[str] = None,
         sort_order: str = "asc",
+        cost_center_ids: Optional[List[UUID]] = None,
     ) -> List[ProjectListItem]:
         """List every project matching the given filters, across all pages.
 
@@ -141,6 +149,7 @@ class ProjectUtils(BaseUtils):
                 assigned project budget
             sort_by: Field to sort by ('name' or 'created_at')
             sort_order: Sort order ('asc' or 'desc')
+            cost_center_ids: Return only projects assigned to any of these cost centers
 
         Returns:
             All matching projects, collected across every page
@@ -157,6 +166,7 @@ class ProjectUtils(BaseUtils):
                 has_assigned_budgets=has_assigned_budgets,
                 sort_by=sort_by,
                 sort_order=sort_order,
+                cost_center_ids=cost_center_ids,
             )
             all_projects.extend(response.data)
             if len(all_projects) >= response.pagination.total:
@@ -591,16 +601,25 @@ class ProjectUtils(BaseUtils):
         )
 
     def remove_extra_project_members(self, project_name: str) -> None:
-        """Unassign every project member except the earliest-added one,
-        treated as the creator (there's no reliable created_by on
-        test-created projects).
+        """Unassign every project member except the creator.
+
+        created_by is the reliable signal here, confirmed live: it is set to
+        whoever called create_project and still reads back correctly on a
+        later get_project_detail. When it is unset, or no longer among the
+        members (e.g. the creator was already removed, directly or by an
+        earlier partial run of this method), there is no member left to
+        spare — every one is extra. Admin-created projects always have
+        created_by=None (see delete_project_with_all_members), so a single
+        remaining member there is a leftover assignment, not a creator to
+        protect; the previous "spare whoever is left when <=1 member remains"
+        shortcut treated that member as the creator and left DELETE
+        /v1/projects/{name} 409ing on "assigned users" forever.
         """
         detail = self.get_project_detail(project_name)
-        if len(detail.members) <= 1:
-            return
-        creator = min(detail.members, key=lambda m: m.date or datetime.min)
+        member_ids = {m.user_id for m in detail.members}
+        creator_id = detail.created_by if detail.created_by in member_ids else None
         for member in detail.members:
-            if member.user_id == creator.user_id:
+            if member.user_id == creator_id:
                 continue
             try:
                 self.remove_user_from_project(project_name, member.user_id)
