@@ -238,11 +238,50 @@ def build_hook_events(
     repository: str,
     prompt: str,
     now: Optional[datetime] = None,
+    *,
+    batch_id: str = "",
+    input_tokens: int = 1,
+    output_tokens: int = 1,
+    cache_read_tokens: int = 0,
+    cache_creation_tokens: int = 0,
+    session_start: bool = True,
+    session_end: bool = True,
+    tool_calls: Iterable[dict] = (),
+    min_session_end_offset_s: float = 0.0,
 ) -> list[dict]:
     """The four events of one CLI session; every event carries codemie_project_name=project.
 
     project=None omits the key. event_ids are unique per session id, so a re-send of the
     same events is a duplicate for the BE, a new session id is new data.
+
+    batch_id disambiguates event ids across repeated calls with the same session_id (a
+    resumed session's later batch): "" (the default) keeps every existing call site's ids
+    unchanged; a non-empty value makes the same event type ingested again in a later batch
+    stored as new data instead of being deduplicated as a resend (the BE keys a record's
+    identity by (event type, session, event_id), see record_hash/_event_identity).
+
+    input_tokens / output_tokens / cache_read_tokens / cache_creation_tokens: carried on the
+    usage.request event (cache_creation_tokens as cache_creation_1h_tokens, summed
+    server-side into cache_creation_tokens alongside cache_creation_5m_tokens).
+
+    session_start / session_end: include the agent.session.start / agent.session.end
+    events. A resumed batch (same session_id as an earlier call) should pass
+    session_start=False to avoid re-opening the session that is already running.
+
+    tool_calls: iterable of {"tool_name": str, "tool_use_id": str, "outcome": "success" |
+    "error"}. Each emits an agent.tool.start paired with an agent.tool.end (success) or
+    agent.tool.error (error), between the usage event and session.end so neither can ever
+    become the session's last dimension event (see DIMENSION_HOOK_TYPES; these hook pairs
+    have no bearing on tool_call_count once the session also has OTLP tool spans: the BE's
+    hook-based tool_facts_daily fallback is used only for a session/day with no span of
+    kind TOOL/TOOL_EXECUTION/INTERACTION, see _NO_SPAN_OF_KIND in rollups.py).
+
+    min_session_end_offset_s: floors the agent.session.end offset (default: right after the
+    last tool pair, same as before this parameter existed). A session that also sends OTLP
+    spans (build_tool_spans / build_interaction_spans) alongside its hook events should set
+    this past every span's own timestamp, so the hook session.end event -- not a span -- is
+    unambiguously the session's last dimension event regardless of whether span timestamps
+    also factor into the environment's computed session duration.
     """
     now = now or datetime.now(timezone.utc)
     common = {
@@ -256,11 +295,11 @@ def build_hook_events(
     if project is not None:
         common[PROJECT_KEY] = project
 
-    def event(event_type: str, offset_s: int, **fields) -> dict:
+    def event(event_type: str, offset_s: float, event_id: str, **fields) -> dict:
         timestamp = now + timedelta(seconds=offset_s)
         return {
             "type": event_type,
-            "event_id": f"{event_type}:{session_id}",
+            "event_id": event_id,
             "timestamp": timestamp.isoformat(timespec="milliseconds").replace(
                 "+00:00", "Z"
             ),
@@ -268,23 +307,181 @@ def build_hook_events(
             **fields,
         }
 
-    return [
-        event("agent.session.start", 0),
-        event("agent.prompt.submit", 1, prompt_body=prompt),
+    def dim_event(event_type: str, offset_s: float, **fields) -> dict:
+        return event(
+            event_type, offset_s, f"{event_type}:{session_id}{batch_id}", **fields
+        )
+
+    events = []
+    offset = 0
+    if session_start:
+        events.append(dim_event("agent.session.start", offset))
+        offset += 1
+    events.append(dim_event("agent.prompt.submit", offset, prompt_body=prompt))
+    offset += 1
+    events.append(
         event(
             "agent.usage.request",
-            2,
-            request_id=f"req-{session_id}",
+            offset,
+            f"agent.usage.request:{session_id}{batch_id}",
+            request_id=f"req-{session_id}{batch_id}",
             model_raw="claude-sonnet-5-5",
             model="claude-sonnet-5-5",
-            input_tokens=1,
-            output_tokens=1,
-            cache_read_tokens=0,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_1h_tokens=cache_creation_tokens,
             stop_reason="end_turn",
             is_api_error=False,
-        ),
-        event("agent.session.end", 3),
-    ]
+        )
+    )
+    offset += 1
+    for call in tool_calls:
+        tool_name, tool_use_id = call["tool_name"], call["tool_use_id"]
+        outcome = call.get("outcome", "success")
+        end_type = "agent.tool.end" if outcome == "success" else "agent.tool.error"
+        events.append(
+            event(
+                "agent.tool.start",
+                offset,
+                f"agent.tool.start:{session_id}{batch_id}:{tool_use_id}",
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+            )
+        )
+        offset += 0.1
+        events.append(
+            event(
+                end_type,
+                offset,
+                f"{end_type}:{session_id}{batch_id}:{tool_use_id}",
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+            )
+        )
+        offset += 0.1
+    if session_end:
+        events.append(
+            dim_event("agent.session.end", max(offset, min_session_end_offset_s))
+        )
+    return events
+
+
+def build_tool_spans(
+    session_id: str,
+    calls: Iterable[dict],
+    resource_project: Optional[str] = None,
+    now: Optional[datetime] = None,
+) -> OtlpPayload:
+    """One `claude_code.tool` span plus one `claude_code.tool.execution` span per call.
+
+    `calls`: iterable of {"tool_name": str, "tool_use_id": str, "success": bool}. The two
+    spans of a call share its tool_use_id, the join key the BE's reader uses to pair a
+    tool call with its outcome (see get_session_detail_tools / invocations_hourly kind=1);
+    `success` becomes the execution span's "true"/"false" `success` attribute.
+
+    Unlike hook events (agent.tool.start/end/error), whose tool-call facts only ever reach
+    the aggregate tool_facts_daily/invocations_hourly rollups, real OTLP tool spans are the
+    only source of the per-session, per-tool success/failure breakdown a session detail
+    response exposes (`tools`, `tool_calls_success`): that reader query selects from the
+    `spans` table alone, with no hook-event fallback.
+
+    Each span's own "session.id" attribute (not just the resource's) is what the BE's span
+    decoder reads to attribute it to `session_id` (see decode_traces/_SESSION_ID_KEY).
+    """
+    now = now or datetime.now(timezone.utc)
+    spans = []
+    offset = 0
+    for call in calls:
+        tool_name = call["tool_name"]
+        tool_use_id = call["tool_use_id"]
+        success = call.get("success", True)
+        start = now + timedelta(seconds=offset)
+        end = start + timedelta(seconds=1)
+        spans.append(
+            trace.Span(
+                trace_id=_trace_id(),
+                span_id=_span_id(),
+                name="claude_code.tool",
+                kind=trace.Span.SpanKind.SPAN_KIND_CLIENT,
+                start_time_unix_nano=int(start.timestamp() * 1_000_000_000),
+                end_time_unix_nano=int(end.timestamp() * 1_000_000_000),
+                attributes=[
+                    _str_attr("session.id", session_id),
+                    _str_attr("tool_name", tool_name),
+                    _str_attr("tool_use_id", tool_use_id),
+                ],
+            )
+        )
+        exec_end = end + timedelta(milliseconds=500)
+        spans.append(
+            trace.Span(
+                trace_id=_trace_id(),
+                span_id=_span_id(),
+                name="claude_code.tool.execution",
+                kind=trace.Span.SpanKind.SPAN_KIND_CLIENT,
+                start_time_unix_nano=int(end.timestamp() * 1_000_000_000),
+                end_time_unix_nano=int(exec_end.timestamp() * 1_000_000_000),
+                attributes=[
+                    _str_attr("session.id", session_id),
+                    _str_attr("tool_use_id", tool_use_id),
+                    _str_attr("success", "true" if success else "false"),
+                ],
+            )
+        )
+        offset += 2
+    message = trace_svc.ExportTraceServiceRequest(
+        resource_spans=[
+            trace.ResourceSpans(
+                resource=_resource(session_id, resource_project),
+                scope_spans=[trace.ScopeSpans(spans=spans)],
+            )
+        ]
+    )
+    return _payload(message, len(spans))
+
+
+def build_interaction_spans(
+    session_id: str,
+    count: int,
+    resource_project: Optional[str] = None,
+    now: Optional[datetime] = None,
+) -> OtlpPayload:
+    """`count` `claude_code.interaction` spans (span_kind INTERACTION) of one session.
+
+    This is the only source of a session's `turns`/prompt count once it also has any
+    TOOL or TOOL_EXECUTION span (as build_tool_spans sends): the BE's turns_daily
+    hook-based fallback (counting agent.prompt.submit) only runs for a session/day with
+    no span of kind TOOL, TOOL_EXECUTION or INTERACTION at all (_NO_SPAN_OF_KIND in
+    rollups.py), so a session with tool spans needs its own interaction spans to have a
+    non-zero turn count; count(*) of this kind is `turns`, no attribute required beyond
+    session.id.
+    """
+    now = now or datetime.now(timezone.utc)
+    spans = []
+    for i in range(count):
+        start = now + timedelta(seconds=i)
+        end = start + timedelta(milliseconds=500)
+        spans.append(
+            trace.Span(
+                trace_id=_trace_id(),
+                span_id=_span_id(),
+                name="claude_code.interaction",
+                kind=trace.Span.SpanKind.SPAN_KIND_CLIENT,
+                start_time_unix_nano=int(start.timestamp() * 1_000_000_000),
+                end_time_unix_nano=int(end.timestamp() * 1_000_000_000),
+                attributes=[_str_attr("session.id", session_id)],
+            )
+        )
+    message = trace_svc.ExportTraceServiceRequest(
+        resource_spans=[
+            trace.ResourceSpans(
+                resource=_resource(session_id, resource_project),
+                scope_spans=[trace.ScopeSpans(spans=spans)],
+            )
+        ]
+    )
+    return _payload(message, len(spans))
 
 
 def ndjson_bytes(events: Iterable[dict]) -> bytes:

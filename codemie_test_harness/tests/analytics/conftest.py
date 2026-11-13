@@ -71,7 +71,9 @@ def cli_analytics_enabled(analytics_utils):
 
 
 @pytest.fixture(scope="module")
-def create_cli_analytics_project(cli_analytics_enabled, project_utils):
+def create_cli_analytics_project(
+    cli_analytics_state_changes_allowed, cli_analytics_enabled, project_utils
+):
     """Factory of projects that live as long as the test module."""
     names = []
 
