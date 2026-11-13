@@ -17,10 +17,18 @@
 URL: /settings/administration/projects
 """
 
+import re
+from itertools import permutations
+from urllib.parse import parse_qs, urlparse
+
 from playwright.sync_api import expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+
+
+COST_CENTER_PLACEHOLDER = "All cost centers"
+NO_COST_CENTER_MATCH_TEXT = "No cost centers match your search"
 
 
 class ProjectManagementPage(BasePage):
@@ -356,4 +364,245 @@ class ProjectManagementPage(BasePage):
         expect(badge.locator("svg")).to_be_visible()
         expect(badge).to_have_text(str(count), timeout=15000)
         expect(self._users_badge_links(project_name)).to_have_count(1 if as_link else 0)
+        return self
+
+    # ── Cost center filter ────────────────────────────────────────────────────
+    # FE: src/pages/settings/administration/projectsManagement/components/CostCenterFilter.tsx
+    #     src/components/Filters/FilterMultiSelect.tsx
+    # A checkbox multi-select with a search box. The selection is sent to the list as one
+    # repeated `cost_center_ids` query parameter per id and kept in the stored project filters.
+
+    @property
+    def cost_center_filter(self):
+        """Root of the Cost center multi-select (a DIV with an id, not a test id)."""
+        return self.page.locator("#cost-center-filter")
+
+    @property
+    def cost_center_filter_combobox(self):
+        """The combobox named 'Cost center' inside the filter."""
+        return self.cost_center_filter.get_by_role("combobox", name="Cost center")
+
+    @property
+    def cost_center_search_input(self):
+        """Search box of the open Cost center dropdown."""
+        return self.page.get_by_role("searchbox", name="Search cost centers")
+
+    @property
+    def cost_center_clear_button(self):
+        """Inline clear (cross) control, present only while a cost center is selected."""
+        return self.page.locator(".multiselect-clear")
+
+    def _cost_center_option(self, name: str):
+        """The option of the open dropdown whose label is the cost center name."""
+        return self.page.get_by_role("option", name=name)
+
+    def _dropdown_label(self, text: str):
+        """The visible label of a single-select dropdown showing `text`. A bare text match
+        also hits the same text as a native <option> inside the hidden <select>."""
+        return self.page.locator("span.p-dropdown-label").filter(
+            has_text=re.compile(rf"^{re.escape(text)}$")
+        )
+
+    @property
+    def _cost_center_panel(self):
+        """The open Cost center dropdown panel: the multi-select overlay holding the search box."""
+        return self.page.locator(".p-multiselect-panel").filter(
+            has=self.cost_center_search_input
+        )
+
+    @property
+    def _no_cost_center_match_message(self):
+        """Empty-filter message of the open dropdown."""
+        return self.page.get_by_text(NO_COST_CENTER_MATCH_TEXT, exact=True)
+
+    @property
+    def _no_data_cell(self):
+        """Empty-state cell of the projects table."""
+        return self.page.get_by_role("cell", name="No data available")
+
+    @staticmethod
+    def _is_projects_list_request(request) -> bool:
+        return request.method == "GET" and urlparse(request.url).path.endswith(
+            "/v1/projects"
+        )
+
+    @staticmethod
+    def _requested_cost_center_ids(request) -> list[str]:
+        return sorted(parse_qs(urlparse(request.url).query).get("cost_center_ids", []))
+
+    def _is_list_request_for(self, cost_center_ids):
+        """Predicate: a project list request carrying exactly these cost center ids, one
+        `cost_center_ids` parameter per id (none at all for an empty list)."""
+        expected = sorted(str(cost_center_id) for cost_center_id in cost_center_ids)
+        return lambda request: (
+            self._is_projects_list_request(request)
+            and self._requested_cost_center_ids(request) == expected
+        )
+
+    @step
+    def reload(self):
+        """Reload the page and wait for it to render."""
+        self.page.reload()
+        self.page.wait_for_load_state("networkidle", timeout=30000)
+        expect(self.page_heading).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def open_cost_center_filter(self):
+        """Open the Cost center dropdown."""
+        expect(self.cost_center_filter).to_be_visible(timeout=15000)
+        self.cost_center_filter.click()
+        expect(self.cost_center_search_input).to_be_visible(timeout=5000)
+        return self
+
+    @step
+    def close_cost_center_filter(self):
+        """Close the Cost center dropdown."""
+        self.page.keyboard.press("Escape")
+        expect(self.cost_center_search_input).to_be_hidden(timeout=5000)
+        return self
+
+    @step
+    def search_cost_centers(self, text: str):
+        """Replace the text of the dropdown search box."""
+        expect(self.cost_center_search_input).to_be_visible(timeout=5000)
+        self.cost_center_search_input.fill(text)
+        return self
+
+    @step
+    def clear_cost_center_search(self):
+        """Empty the dropdown search box."""
+        return self.search_cost_centers("")
+
+    @step
+    def select_cost_center(self, name: str):
+        """Check the option of an open dropdown and wait for it to show as checked."""
+        option = self._cost_center_option(name)
+        expect(option).to_be_visible(timeout=15000)
+        option.click()
+        expect(option.get_by_role("checkbox")).to_be_checked()
+        return self
+
+    @step
+    def deselect_cost_center(self, name: str):
+        """Uncheck the option of an open dropdown and wait for it to show as unchecked."""
+        option = self._cost_center_option(name)
+        expect(option).to_be_visible(timeout=15000)
+        option.click()
+        expect(option.get_by_role("checkbox")).not_to_be_checked()
+        return self
+
+    @step
+    def filter_by_cost_centers(self, names: list[str], cost_center_ids: list):
+        """Open the filter, search for and check each cost center, close the filter, and
+        wait for the list request that carries exactly these ids."""
+        with self.page.expect_request(self._is_list_request_for(cost_center_ids)):
+            self.open_cost_center_filter()
+            for name in names:
+                self.search_cost_centers(name)
+                self.select_cost_center(name)
+            self.close_cost_center_filter()
+        return self
+
+    @step
+    def remove_cost_center_from_filter(self, name: str, remaining_ids: list):
+        """Open the filter, uncheck one cost center, close the filter, and wait for the
+        list request that carries exactly the remaining ids."""
+        with self.page.expect_request(self._is_list_request_for(remaining_ids)):
+            self.open_cost_center_filter()
+            self.search_cost_centers(name)
+            self.deselect_cost_center(name)
+            self.close_cost_center_filter()
+        return self
+
+    @step
+    def clear_cost_center_filter(self):
+        """Click the clear (cross) control and wait for a list request without any
+        `cost_center_ids` parameter."""
+        with self.page.expect_request(self._is_list_request_for([])):
+            expect(self.cost_center_clear_button).to_be_visible(timeout=5000)
+            self.cost_center_clear_button.click()
+        return self
+
+    @step
+    def should_see_search_and_budget_filters(self):
+        """Verify the Search box and the Budgets / Budget category filters (shown with their
+        'All ...' placeholders while nothing is selected) are in the filter row."""
+        expect(self.search_input).to_be_visible(timeout=15000)
+        expect(self._dropdown_label("All projects")).to_be_visible()
+        expect(self._dropdown_label("All categories")).to_be_visible()
+        return self
+
+    @step
+    def should_see_cost_center_filter(self):
+        """Verify the Cost center multi-select is shown with its label and its
+        'All cost centers' placeholder."""
+        expect(self.cost_center_filter).to_be_visible(timeout=15000)
+        expect(self.cost_center_filter_combobox).to_be_visible()
+        expect(self.cost_center_filter).to_contain_text(COST_CENTER_PLACEHOLDER)
+        return self
+
+    @step
+    def should_offer_cost_center_option(self, name: str):
+        """Verify the open dropdown lists the cost center."""
+        expect(self._cost_center_option(name)).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_not_offer_cost_center_option(self, name: str):
+        """Verify the open dropdown does not list the cost center."""
+        expect(self._cost_center_option(name)).to_have_count(0, timeout=15000)
+        return self
+
+    @step
+    def should_see_no_cost_center_match_message(self):
+        """Verify the open dropdown shows the empty-search message and no options."""
+        expect(self._no_cost_center_match_message).to_be_visible(timeout=15000)
+        expect(self._cost_center_panel).to_be_visible()
+        expect(self._cost_center_panel.get_by_role("option")).to_have_count(0)
+        return self
+
+    @step
+    def should_show_selected_cost_centers(self, names: list[str]):
+        """Verify the filter input shows the selected names as comma-separated text, in
+        either order (the order is the component's, not the selection's)."""
+        joined = "|".join(
+            ", ".join(re.escape(name) for name in order)
+            for order in permutations(names)
+        )
+        expect(self.cost_center_filter).to_contain_text(
+            re.compile(joined), timeout=15000
+        )
+        return self
+
+    @step
+    def should_show_no_cost_center_selected(self):
+        """Verify the filter shows its 'All cost centers' placeholder: nothing is selected."""
+        expect(self.cost_center_filter).to_contain_text(
+            COST_CENTER_PLACEHOLDER, timeout=15000
+        )
+        expect(self.cost_center_clear_button).to_have_count(0)
+        return self
+
+    @step
+    def should_list_only_projects(self, project_names: list[str]):
+        """Verify the table holds exactly these projects, one row each."""
+        expect(self.project_rows).to_have_count(len(project_names), timeout=15000)
+        for project_name in project_names:
+            expect(self._project_row_by_name(project_name)).to_be_visible()
+        return self
+
+    @step
+    def should_list_more_than(self, count: int):
+        """Verify the table holds more than `count` project rows."""
+        expect(self.project_rows.nth(count)).to_be_visible(timeout=15000)
+        expect(self._no_data_cell).to_have_count(0)
+        return self
+
+    @step
+    def should_see_projects_listed(self):
+        """Verify the table loaded and holds projects, not its empty state."""
+        expect(self.project_table).to_be_visible(timeout=15000)
+        expect(self._no_data_cell).to_have_count(0, timeout=15000)
+        expect(self.project_rows.first).to_be_visible(timeout=15000)
         return self

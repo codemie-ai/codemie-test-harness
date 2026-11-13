@@ -91,6 +91,7 @@ class ProjectUtils(BaseUtils):
         has_assigned_budgets: bool = False,
         sort_by: Optional[str] = None,
         sort_order: str = "asc",
+        cost_center_ids: Optional[List[UUID]] = None,
     ) -> PaginatedProjectListResponse:
         """List projects with pagination and filters.
 
@@ -104,10 +105,16 @@ class ProjectUtils(BaseUtils):
                 assigned project budget
             sort_by: Field to sort by ('name' or 'created_at')
             sort_order: Sort order ('asc' or 'desc')
+            cost_center_ids: Return only projects assigned to any of these cost centers
 
         Returns:
             PaginatedProjectListResponse with list of projects and pagination info
         """
+        # Forwarded only when set, so callers that do not filter keep working on an SDK
+        # release that predates the cost_center_ids parameter.
+        optional_filters = (
+            {"cost_center_ids": cost_center_ids} if cost_center_ids else {}
+        )
         return self.client.projects.list_projects(
             search=search,
             page=page,
@@ -117,6 +124,7 @@ class ProjectUtils(BaseUtils):
             has_assigned_budgets=has_assigned_budgets,
             sort_by=sort_by,
             sort_order=sort_order,
+            **optional_filters,
         )
 
     def list_all_projects(
@@ -128,6 +136,7 @@ class ProjectUtils(BaseUtils):
         has_assigned_budgets: bool = False,
         sort_by: Optional[str] = None,
         sort_order: str = "asc",
+        cost_center_ids: Optional[List[UUID]] = None,
     ) -> List[ProjectListItem]:
         """List every project matching the given filters, across all pages.
 
@@ -140,6 +149,7 @@ class ProjectUtils(BaseUtils):
                 assigned project budget
             sort_by: Field to sort by ('name' or 'created_at')
             sort_order: Sort order ('asc' or 'desc')
+            cost_center_ids: Return only projects assigned to any of these cost centers
 
         Returns:
             All matching projects, collected across every page
@@ -156,6 +166,7 @@ class ProjectUtils(BaseUtils):
                 has_assigned_budgets=has_assigned_budgets,
                 sort_by=sort_by,
                 sort_order=sort_order,
+                cost_center_ids=cost_center_ids,
             )
             all_projects.extend(response.data)
             if len(all_projects) >= response.pagination.total:
