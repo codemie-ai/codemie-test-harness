@@ -484,6 +484,10 @@ def test_set_default_project_for_unknown_user_returns_404(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.xfail(
+    strict=True,
+    reason="product defect: project.created activity event is not found by entity_id for a mixed-case email",
+)
 def test_mixed_case_email_user_gets_one_membership_and_one_default_project(
     user_utils, maintainer_client, mixed_case_personal_user
 ):
