@@ -38,8 +38,10 @@ from hamcrest import (
     close_to,
     contains_exactly,
     equal_to,
+    greater_than,
     has_length,
     none,
+    not_none,
 )
 
 from codemie_test_harness.tests.test_data.budget_test_data import (
@@ -48,6 +50,7 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
     CLI_CLIENT_HEADER,
     CLI_PROJECT_HEADER,
     DEFAULT_CLI_BUDGET_ID,
+    DEFAULT_PLATFORM_BUDGET_ID,
     PLATFORM_BUDGET_CATEGORIES,
     budget_chat_prompt,
     budget_skill_description,
@@ -55,6 +58,9 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
 )
 
 logger = logging.getLogger(__name__)
+
+# How long the ledger may take to show a charge made through the proxy.
+LEDGER_CHARGE_TIMEOUT = 300
 
 
 # ── TC-14 ──────────────────────────────────────────────────────────────────────
@@ -407,9 +413,11 @@ def test_changing_and_removing_default_project_moves_only_new_spend(
 @pytest.mark.timeout(1500)
 def test_mixed_case_personal_project_is_charged_under_its_real_name(
     mixed_case_keycloak_user,
+    mixed_case_user_id,
     mixed_case_skills_utils,
     mixed_case_proxy_utils,
     default_llm,
+    admin_project_utils,
     lite_llm_budget_utils,
 ):
     """@case user-management-shows-no-default_TC_003
@@ -417,12 +425,29 @@ def test_mixed_case_personal_project_is_charged_under_its_real_name(
     A mixed-case personal project must be charged under its real casing, and
     requesting the user's own identity under a different casing must still
     resolve to that same personal budget -- never a fallback destination.
+
+    Each charge is checked twice: on the LiteLLM personal customer, and in the
+    ledger by user id.
     """
     email, _ = mixed_case_keycloak_user
-    customers = {"personal": email}
+    # LiteLLM keys the personal customer by the username, which the identity provider
+    # lowercases; the project itself keeps the real mixed-case name.
+    customers = {"personal": email.lower()}
+
+    logger.info("Phase 0: the project carries the real mixed-case name and is personal")
+    project = admin_project_utils.get_project_detail(email)
+    assert_that(project.name, equal_to(email), "The project keeps its real casing")
+    assert_that(
+        project.project_type,
+        equal_to("personal"),
+        "A mixed-case email must get a personal project, not a regular one",
+    )
 
     logger.info("Phase 1: unbound flow charges the real mixed-case personal project")
     before = lite_llm_budget_utils.get_spends({}, customers)
+    ledger_before = admin_project_utils.get_member_budget_spending(
+        DEFAULT_PLATFORM_BUDGET_ID, "platform", mixed_case_user_id
+    )
     mixed_case_skills_utils.generate_instructions(budget_skill_description())
     assert_that(
         lite_llm_budget_utils.wait_for_charged_sources(before, {}, customers),
@@ -430,19 +455,52 @@ def test_mixed_case_personal_project_is_charged_under_its_real_name(
         "Spend must be charged to the personal budget key under the project's real "
         "mixed-case name",
     )
+    charged = admin_project_utils.wait_for_member_budget_spending_above(
+        DEFAULT_PLATFORM_BUDGET_ID,
+        "platform",
+        ledger_before,
+        user_id=mixed_case_user_id,
+        timeout=LEDGER_CHARGE_TIMEOUT,
+    )
+    assert_that(charged, not_none(), "No personal platform spend in the ledger")
+    assert_that(
+        charged.current_spending,
+        greater_than(ledger_before),
+        "The ledger must show the spend on the personal platform budget",
+    )
 
     logger.info(
         "Phase 2: requesting the user's own identity in another casing is not a fallback"
     )
-    before = lite_llm_budget_utils.get_spends({}, customers)
+    cli_customers = {
+        **customers,
+        "personal_cli": f"{customers['personal']}_{DEFAULT_CLI_BUDGET_ID}",
+    }
+    before = lite_llm_budget_utils.get_spends({}, cli_customers)
+    ledger_before = admin_project_utils.get_member_budget_spending(
+        DEFAULT_CLI_BUDGET_ID, "cli", mixed_case_user_id
+    )
     mixed_case_proxy_utils.send_messages_request(
         model=default_llm.base_name,
         messages=[{"role": "user", "content": budget_chat_prompt()}],
         extra_headers={**CLI_CLIENT_HEADER, CLI_PROJECT_HEADER: email.upper()},
     ).raise_for_status()
     assert_that(
-        lite_llm_budget_utils.wait_for_charged_sources(before, {}, customers),
-        equal_to({"personal"}),
+        lite_llm_budget_utils.wait_for_charged_sources(before, {}, cli_customers),
+        equal_to({"personal_cli"}),
         "Requesting the user's own identity in another casing must still charge the "
-        "real personal project, not a fallback destination",
+        "real personal CLI budget, not a fallback destination",
+    )
+    charged = admin_project_utils.wait_for_member_budget_spending_above(
+        DEFAULT_CLI_BUDGET_ID,
+        "cli",
+        ledger_before,
+        user_id=mixed_case_user_id,
+        timeout=LEDGER_CHARGE_TIMEOUT,
+    )
+    assert_that(charged, not_none(), "No personal CLI spend in the ledger")
+    assert_that(
+        charged.current_spending,
+        greater_than(ledger_before),
+        "The ledger must show the spend on the personal CLI budget",
     )

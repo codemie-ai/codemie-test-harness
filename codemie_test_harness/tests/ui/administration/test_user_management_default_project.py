@@ -251,7 +251,9 @@ def test_user_details_popup_shows_mixed_case_personal_project_as_default(
     email, _, _ = mixed_case_personal_user
     users_page = UserManagementPage(page).navigate_to()
 
-    users_page.open_user_details(email)
+    # The identity provider lowercases the email, so the users list shows it lowercased;
+    # only the personal project keeps the mixed-case name.
+    users_page.open_user_details(email.lower())
 
     users_page.should_see_single_project_in_details(email)
     users_page.should_see_default_selected_only_for(email)

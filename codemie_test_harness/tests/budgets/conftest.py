@@ -475,10 +475,12 @@ def mixed_case_keycloak_user(keycloak_utils, lite_llm_budget_utils):
     password = keycloak_utils.create_test_user(email=email, project_name=email)
     yield email, password
     keycloak_utils.delete_user(email)
+    # LiteLLM customers are keyed by the lowercased username, not by the mixed-case email.
+    username = email.lower()
     for customer_id in (
-        email,
-        f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
-        f"{email}_{DEFAULT_CLI_BUDGET_ID}",
+        username,
+        f"{username}_{DEFAULT_PREMIUM_BUDGET_ID}",
+        f"{username}_{DEFAULT_CLI_BUDGET_ID}",
     ):
         lite_llm_budget_utils.delete_customer(customer_id)
 
@@ -1105,6 +1107,12 @@ def user2_id(user2_client):
 @pytest.fixture(scope="function")
 def user2_skills_utils(user2_client):
     return SkillsUtils(user2_client)
+
+
+@pytest.fixture(scope="function")
+def mixed_case_user_id(mixed_case_client):
+    """Id of the mixed-case user; the first request is the login that creates the personal project."""
+    return mixed_case_client.users.about_me().user_id
 
 
 @pytest.fixture(scope="function")
