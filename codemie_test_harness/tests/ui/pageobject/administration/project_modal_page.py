@@ -98,12 +98,12 @@ class ProjectModal(BasePage):
     )
 
     @property
-    def cli_analytics_switch(self) -> Locator:
-        """The 'Enable CLI Analytics' switch input (id='cli_analytics_enabled', role=switch)."""
+    def enable_ai_attribution_switch(self) -> Locator:
+        """The 'Enable AI Attribution' switch input (id='cli_analytics_enabled', role=switch)."""
         return self.modal.locator("#cli_analytics_enabled")
 
     @property
-    def cli_analytics_row(self) -> Locator:
+    def enable_ai_attribution_row(self) -> Locator:
         """The <label> that wraps the switch, its text and the hint button."""
         # `has` must be relative to the label (not rooted at the dialog), hence page.locator here
         return self.modal.locator("label").filter(
@@ -111,19 +111,23 @@ class ProjectModal(BasePage):
         )
 
     @property
-    def cli_analytics_label_text(self) -> Locator:
-        """The visible 'Enable CLI Analytics' text."""
-        return self.cli_analytics_row.get_by_text("Enable CLI Analytics", exact=True)
+    def enable_ai_attribution_label_text(self) -> Locator:
+        """The visible 'Enable AI Attribution' text."""
+        return self.enable_ai_attribution_row.get_by_text(
+            "Enable AI Attribution", exact=True
+        )
 
     @property
     def cli_analytics_hint_button(self) -> Locator:
         """The info button whose data-tooltip-content carries the hint."""
-        return self.cli_analytics_row.get_by_role("button", name="More information")
+        return self.enable_ai_attribution_row.get_by_role(
+            "button", name="More information"
+        )
 
     @property
     def cli_analytics_hint_status(self) -> Locator:
         """The screen-reader copy of the hint (role=status)."""
-        return self.cli_analytics_row.get_by_role("status")
+        return self.enable_ai_attribution_row.get_by_role("status")
 
     @property
     def cli_analytics_read_only_tooltip(self) -> Locator:
@@ -151,7 +155,7 @@ class ProjectModal(BasePage):
     @step
     def toggle_cli_analytics(self):
         """Click the switch's label (the input itself is visually hidden)."""
-        self.cli_analytics_label_text.click()
+        self.enable_ai_attribution_label_text.click()
         return self
 
     @step
@@ -262,38 +266,38 @@ class ProjectModal(BasePage):
     @step
     def should_show_cli_analytics_switch(self):
         """Verify the 'Enable CLI Analytics' switch and its label are shown."""
-        expect(self.cli_analytics_switch).to_be_attached(timeout=10000)
-        expect(self.cli_analytics_label_text).to_be_visible()
+        expect(self.enable_ai_attribution_switch).to_be_attached(timeout=10000)
+        expect(self.enable_ai_attribution_label_text).to_be_visible()
         return self
 
     @step
     def should_not_show_cli_analytics_switch(self):
         """Verify the switch is not rendered at all (a hidden field, not a disabled one)."""
         expect(self.modal).to_be_visible()
-        expect(self.cli_analytics_switch).to_have_count(0)
-        expect(self.cli_analytics_label_text).to_have_count(0)
+        expect(self.enable_ai_attribution_switch).to_have_count(0)
+        expect(self.enable_ai_attribution_label_text).to_have_count(0)
         return self
 
     @step
     def should_have_cli_analytics_value(self, enabled: bool):
         """Verify the switch state (checked == enabled)."""
         if enabled:
-            expect(self.cli_analytics_switch).to_be_checked()
+            expect(self.enable_ai_attribution_switch).to_be_checked()
         else:
-            expect(self.cli_analytics_switch).not_to_be_checked()
+            expect(self.enable_ai_attribution_switch).not_to_be_checked()
         return self
 
     @step
     def should_have_cli_analytics_editable(self):
         """Verify the switch can be changed (writer view)."""
-        expect(self.cli_analytics_switch).to_be_enabled()
+        expect(self.enable_ai_attribution_switch).to_be_enabled()
         expect(self.cli_analytics_read_only_tooltip).to_have_count(0)
         return self
 
     @step
     def should_have_cli_analytics_read_only(self):
         """Verify the switch is disabled and carries the read-only tooltip (Project Admin view)."""
-        expect(self.cli_analytics_switch).to_be_disabled()
+        expect(self.enable_ai_attribution_switch).to_be_disabled()
         expect(self.cli_analytics_read_only_tooltip).to_have_count(1)
         return self
 
