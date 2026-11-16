@@ -14,7 +14,7 @@
 
 """Fixtures for the project API tests."""
 
-import secrets
+from contextlib import ExitStack
 
 import pytest
 
@@ -25,27 +25,14 @@ from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     delete_projects_strict,
     wait_until_accessible,
 )
-from codemie_test_harness.tests.utils.client_factory import get_client
-from codemie_test_harness.tests.utils.logger_util import setup_logger
 from codemie_test_harness.tests.utils.project_visibility_utils import (
     ProjectFlagUtils,
     RolesWorld,
 )
-
-logger = setup_logger(__name__)
-
-
-@pytest.fixture
-def extra_platform_user(keycloak_utils):
-    """Second plain developer-role user (besides `non_admin_user`); deleted after the test.
-
-    Yields (email, user_id).
-    """
-    email = f"autotest_extra_{secrets.token_hex(4)}@email.com"
-    password = keycloak_utils.create_platform_user(email=email)
-    user_id = get_client(username=email, password=password).users.about_me().user_id
-    yield email, user_id
-    keycloak_utils.delete_user(email)
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    new_logged_in_user,
+    user_email,
+)
 
 
 @pytest.fixture(scope="module")
@@ -66,21 +53,21 @@ def roles_world(
     auditor is not part of the world: `role_api` requests a dedicated module-scoped auditor
     only for cases that need it.
     """
-    admin_email = f"autotest_roles_pa_{secrets.token_hex(4)}@email.com"
-    other_admin_email = f"autotest_roles_pa2_{secrets.token_hex(4)}@email.com"
     names = [get_random_name() for _ in range(2)]
-    try:
+    with ExitStack() as cleanup:
+        project_admin, other_project_admin = (
+            cleanup.enter_context(
+                new_logged_in_user(keycloak_utils, user_email(label), admin=False)
+            )
+            for label in ("roles_pa", "roles_pa2")
+        )
+        # Registered after the users, so it runs first: projects, then users.
+        cleanup.callback(delete_projects_strict, project_utils, names)
         clients = {
             "global_admin": gate_admin_client,
             "maintainer": gate_maintainer_client,
-            "project_admin": get_client(
-                username=admin_email,
-                password=keycloak_utils.create_platform_user(email=admin_email),
-            ),
-            "other_project_admin": get_client(
-                username=other_admin_email,
-                password=keycloak_utils.create_platform_user(email=other_admin_email),
-            ),
+            "project_admin": project_admin.client,
+            "other_project_admin": other_project_admin.client,
             "member": gate_member_client,
             "unrelated_user": gate_outsider_client,
         }
@@ -119,15 +106,6 @@ def roles_world(
             other=names[1],
             member_email=clients["member"].users.about_me().email,
         )
-    finally:
-        try:
-            delete_projects_strict(project_utils, names)
-        finally:
-            for email in (admin_email, other_admin_email):
-                try:
-                    keycloak_utils.delete_user(email)
-                except Exception as e:
-                    logger.warning(f"Failed to delete user {email}: {e}")
 
 
 @pytest.fixture

@@ -32,11 +32,11 @@ def test_registered_client_gets_no_personal_project_from_its_calls(
     provisioning_full,
     provisioning_client_id,
     provisioning_client_user_id,
-    non_admin_user,
+    platform_user,
     provisioning_utils,
 ):
     # @case provisioning-api-for-third-party_TC_028
-    member_email, member_id, _ = non_admin_user
+    member_email, member_id = platform_user.email, platform_user.user_id
     assert_that(
         provisioning_utils.personal_projects(member_id, member_email),
         equal_to([member_email]),

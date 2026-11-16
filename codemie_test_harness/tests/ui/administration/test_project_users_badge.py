@@ -37,6 +37,7 @@ from codemie_test_harness.tests.ui.pageobject.administration.user_management_pag
 
 @pytest.mark.ui
 @pytest.mark.project
+@pytest.mark.oss_standalone
 def test_users_cell_shows_badge_with_user_count(page, project_utils, project):
     """The Users cell holds a badge (svg icon + count) equal to
     the project's user count from the API; the Users column header remains.
@@ -57,13 +58,14 @@ def test_users_cell_shows_badge_with_user_count(page, project_utils, project):
 
 @pytest.mark.ui
 @pytest.mark.project
+@pytest.mark.oss_standalone
 def test_users_badge_opens_user_management_filtered_by_project(
-    page, project_utils, non_admin_user, keycloak_regular_user, project
+    page, project_utils, platform_user, second_platform_user, project
 ):
     """Clicking the Users badge opens User Management with
     ?projects=<project name>; the assigned user is listed and the unassigned one is not."""
-    assigned_email, assigned_id, _ = non_admin_user
-    unassigned_email, _ = keycloak_regular_user
+    assigned_email, assigned_id = platform_user.email, platform_user.user_id
+    unassigned_email = second_platform_user.email
     created = project()
     project_utils.assign_user_to_project(
         created.name, assigned_id, is_project_admin=False
@@ -82,6 +84,7 @@ def test_users_badge_opens_user_management_filtered_by_project(
 
 @pytest.mark.ui
 @pytest.mark.project
+@pytest.mark.oss_standalone
 def test_project_filter_shows_selected_project_after_badge_navigation(page, project):
     """After navigating through the Users badge the project is
     shown as selected in the User Management project filter, not only present in the URL."""
@@ -106,6 +109,7 @@ def test_project_filter_shows_selected_project_after_badge_navigation(page, proj
     ],
     indirect=["acting_credentials"],
 )
+@pytest.mark.oss_standalone
 def test_users_badge_is_a_link_only_for_platform_roles(
     page, project_utils, cli_ui_world, acting_credentials, badge_is_link
 ):

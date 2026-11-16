@@ -39,6 +39,7 @@ def framework_sessions(analytics_utils, cli_analytics_project):
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.parametrize("skill, expected_label", DELIVERY_FRAMEWORK_CASES)
 @pytest.mark.api
 def test_session_delivery_framework_follows_starting_skill(

@@ -13,11 +13,12 @@
 # limitations under the License.
 
 import secrets
+from contextlib import ExitStack
 
 import pytest
 from codemie_sdk.models.workflow import WorkflowMode
 
-from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.user_lifecycle_utils import new_logged_in_user
 from codemie_test_harness.tests.utils.workflow_utils import WorkflowUtils
 from codemie_test_harness.tests.utils.yaml_utils import (
     AssistantModel,
@@ -28,21 +29,10 @@ from codemie_test_harness.tests.utils.yaml_utils import (
 
 
 @pytest.fixture
-def non_admin_user(keycloak_utils):
-    uid = secrets.token_hex(4)
-    email = f"autotest_wh_member_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=email)
-    member_client = get_client(username=email, password=password)
-    member_id = member_client.users.about_me().user_id
-    yield email, member_id, member_client
-    keycloak_utils.delete_user(email)
-
-
-@pytest.fixture
-def project_with_non_admin_member(project_utils, non_admin_user):
+def project_with_non_admin_member(project_utils, platform_user):
     uid = secrets.token_hex(4)
     project_name = f"autotest-wh-member-{uid}"
-    _, member_id, member_client = non_admin_user
+    member_id, member_client = platform_user.user_id, platform_user.client
     project_utils.create_project(
         name=project_name,
         description="Autotest webhook cross-user scenario",
@@ -55,9 +45,9 @@ def project_with_non_admin_member(project_utils, non_admin_user):
 
 
 @pytest.fixture
-def member_workflow_with_virtual_assistant(non_admin_user, default_llm):
+def member_workflow_with_virtual_assistant(platform_user, default_llm):
     """Create a workflow using the non-admin member client."""
-    _, _, member_client = non_admin_user
+    member_client = platform_user.client
     member_workflow_utils = WorkflowUtils(member_client)
     created_workflow = None
 
@@ -100,34 +90,31 @@ def project_with_member_factory(project_utils, keycloak_utils):
     is_platform_admin=False → user created with developer role only
     Both users and the project are deleted in teardown.
     """
-    created = []  # list of (project_name, member_id, email)
+    with ExitStack() as cleanup:
 
-    def _create(is_platform_admin: bool, is_project_admin: bool):
-        uid = secrets.token_hex(4)
-        project_name = f"autotest-wh-member-{uid}"
-        project_utils.create_project(
-            name=project_name,
-            description="Autotest webhook cross-user scenario",
-        )
+        def _create(is_platform_admin: bool, is_project_admin: bool):
+            uid = secrets.token_hex(4)
+            project_name = f"autotest-wh-member-{uid}"
+            project_utils.create_project(
+                name=project_name,
+                description="Autotest webhook cross-user scenario",
+            )
+            cleanup.callback(project_utils.delete_project, project_name)
+            member = cleanup.enter_context(
+                new_logged_in_user(
+                    keycloak_utils,
+                    f"autotest_wh_member_{uid}@email.com",
+                    admin=is_platform_admin,
+                )
+            )
+            project_utils.assign_user_to_project(
+                project_name, member.user_id, is_project_admin=is_project_admin
+            )
+            # Runs first (last registered): unassign, delete the user, delete the project.
+            cleanup.callback(
+                project_utils.remove_user_from_project, project_name, member.user_id
+            )
+            member.client.refresh_token()
+            return project_name, WorkflowUtils(member.client)
 
-        email = f"autotest_wh_member_{uid}@email.com"
-        if is_platform_admin:
-            password = keycloak_utils.create_test_user(email=email, project_name=email)
-        else:
-            password = keycloak_utils.create_platform_user(email=email)
-
-        member_client = get_client(username=email, password=password)
-        member_id = member_client.users.about_me().user_id
-        project_utils.assign_user_to_project(
-            project_name, member_id, is_project_admin=is_project_admin
-        )
-        member_client.refresh_token()
-        created.append((project_name, member_id, email))
-        return project_name, WorkflowUtils(member_client)
-
-    yield _create
-
-    for project_name, member_id, email in created:
-        project_utils.remove_user_from_project(project_name, member_id)
-        project_utils.delete_project(project_name)
-        keycloak_utils.delete_user(email)
+        yield _create

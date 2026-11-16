@@ -47,6 +47,7 @@ from codemie_test_harness.tests.utils.cli_gate_utils import (
 pytestmark = [
     pytest.mark.api,
     pytest.mark.cli_analytics,
+    pytest.mark.oss_standalone,
 ]
 
 

@@ -23,7 +23,8 @@ _SPECIAL_CHARS = "!@#$%&*"
 
 
 class LocalUserUtils:
-    """Creates and deletes users via the backend admin API (localhost only)."""
+    """Creates and deletes users via the backend admin API (local-IdP stands: localhost,
+    OSS standalone). Pick it through get_user_lifecycle_utils, not directly."""
 
     def __init__(self, client: CodeMieClient) -> None:
         self._client = client
