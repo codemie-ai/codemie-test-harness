@@ -14,12 +14,14 @@
 
 import logging
 import secrets
+from time import sleep
 
 import pytest
 from hamcrest import assert_that, contains_string, equal_to, greater_than, not_none
 
 from codemie_test_harness.tests.enums.model_types import ModelTypes
 from codemie_test_harness.tests.test_data.budget_test_data import (
+    BUDGET_CACHE_DELAY,
     budget_chat_prompt,
     budget_chat_prompt_bigger,
     project_key_alias,
@@ -62,6 +64,9 @@ def project_with_1usd_platform_budget(
         },
         name_prefix="autotest-sharedkey",
     )
+    # The backend caches "no budget for this user" for up to a minute; until it expires the
+    # first chat falls back to the personal budget.
+    sleep(BUDGET_CACHE_DELAY)
     yield (
         project_name,
         user2_id,
@@ -109,6 +114,9 @@ def project_with_1usd_platform_budget_user_added_after(
     admin_project_utils.assign_user_to_project(
         project_name, user2_id, is_project_admin=False
     )
+    # The backend caches "no budget for this user" for up to a minute; until it expires the
+    # first chat falls back to the personal budget.
+    sleep(BUDGET_CACHE_DELAY)
     yield (
         project_name,
         user2_id,

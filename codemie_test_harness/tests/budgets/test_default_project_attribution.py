@@ -19,8 +19,9 @@ Observation channel (same as the other budget tests): LiteLLM spend on the proje
 After each request exactly the expected source must have grown.
 
 Covers:
-    TC-14  Marketplace assistant: non-member+default -> default; member+default -> assistant's
-           project; member, no default -> assistant's project; non-member, no default -> personal
+    TC-14  Marketplace assistant is charged to the user's default project whether or not the user
+           is a member of the assistant's project; without an assigned default the default is the
+           personal project, so the personal budget pays
     TC-15  A flow not bound to a project asset is charged to the default project of a multi-project user
     TC-16  Multi-project user without a default: the charged destination is the same every time
     TC-17  Default project without a budget: all spend goes to the personal budgets
@@ -69,8 +70,10 @@ logger = logging.getLogger(__name__)
     "is_member, has_default, expected_charged",
     [
         pytest.param(False, True, "default_project", id="non_member_with_default"),
-        pytest.param(True, True, "assistant_project", id="member_with_other_default"),
-        pytest.param(True, False, "assistant_project", id="member_without_default"),
+        # Discussion is in progress, probably will go to project if user is member and
+        # project has budget, rename test if needed
+        pytest.param(True, True, "default_project", id="member_with_other_default"),
+        pytest.param(True, False, "personal", id="member_without_default"),
         pytest.param(False, False, "personal", id="non_member_without_default"),
     ],
 )
