@@ -59,6 +59,11 @@ class SettingsSidebarPage(BasePage):
         """'Customer Configuration' navigation button in the Administration section."""
         return self.page.get_by_role("button", name="Customer Configuration")
 
+    @property
+    def model_management_item(self):
+        """'Model management' navigation button in the Administration section."""
+        return self.page.get_by_role("button", name="Model management")
+
     def _sidebar_item(self, item_name: str):
         """Locate a sidebar navigation button by its exact label."""
         return self.page.get_by_role("button", name=item_name)
@@ -105,4 +110,20 @@ class SettingsSidebarPage(BasePage):
         """
         self.expand_administration_section()
         self.customer_configuration_item.click()
+        return self
+
+    @step
+    def navigate_to_model_management(self):
+        """Click the 'Model management' item in the Administration section.
+
+        Expands the Administration group first when it is collapsed.
+
+        Returns:
+            ``self`` for chaining.
+        """
+        btn = self.administration_section_button
+        if btn.get_attribute("aria-expanded") == "false":
+            btn.click()
+        expect(self.model_management_item).to_be_visible(timeout=5000)
+        self.model_management_item.click()
         return self

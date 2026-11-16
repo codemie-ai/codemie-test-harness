@@ -82,6 +82,10 @@ class AvailableModelsPage(BasePage):
         """Premium status badge in the table row matching a model name."""
         return self.row_for_model(model_name).get_by_role("status", name="Premium")
 
+    def deprecated_mark_for_model(self, model_name: str) -> Locator:
+        """Deprecated status badge in the table row matching a model name."""
+        return self.row_for_model(model_name).get_by_role("status", name="Deprecated")
+
     def row_for_model(self, model_name: str) -> Locator:
         """Table row matching a given model name."""
         return self.model_table.get_by_role("row").filter(
@@ -179,4 +183,21 @@ class AvailableModelsPage(BasePage):
             f"Expected all {data_row_count} data rows to have premium marks, "
             f"but found only {premium_mark_count}",
         )
+        return self
+
+    @step
+    def should_show_model_with_deprecated_mark(self, model_name: str):
+        """Assert a specific model row carries a 'Deprecated' status badge."""
+        expect(self.deprecated_mark_for_model(model_name)).to_be_visible()
+        return self
+
+    @step
+    def should_not_list_model_once_catalog_is_loaded(self, model_name: str):
+        """Assert the catalog lists other models but no row for this one.
+
+        Waits for the first data row first, so an absent model is not mistaken for
+        a catalog that has not loaded yet.
+        """
+        expect(self.model_table.get_by_role("row").nth(1)).to_be_visible(timeout=10000)
+        expect(self.row_for_model(model_name)).to_have_count(0)
         return self
