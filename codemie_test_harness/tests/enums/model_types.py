@@ -49,6 +49,8 @@ class ModelTypes(str, Enum):
     GEMINI_3_7_FLASH = "gemini-3.7-flash"
     GEMINI_3_8_FLASH = "gemini-3.8-flash"
     GEMINI_4_ARGON = "gemini-4-argon"
+    GEMINI_4_HYDROGEN = "gemini-4-hydrogen"
+    GEMINI_4_CARBON = "gemini-4-carbon"
     GEMINI_31_PRO = "gemini-3.1-pro"
     CLAUDE_SONNET_4_6_VERTEX = "claude-sonnet-4-6-vertex"
     CLAUDE_OPUS_4_6_VERTEX = "claude-opus-4-6-vertex"
