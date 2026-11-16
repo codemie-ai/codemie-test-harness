@@ -508,9 +508,10 @@ class AssistantUtils(BaseUtils):
     ) -> dict:
         """Roll the assistant back to ``version_number``.
 
-        Returns the raw backend response: ``message`` plus ``disabled_mcp_servers``
-        (name, mcp_config_id, reason, address) for any link the restore disabled
-        because its catalog entry is unavailable.
+        Returns the raw backend response, unparsed: ``message`` plus
+        ``disabledMcpServers`` (camelCase at the top level; each entry's own
+        ``name``/``mcp_config_id``/``reason``/``address`` stays snake_case) for any
+        link the restore disabled because its catalog entry is unavailable.
         """
         return self.client.assistants.rollback_to_version(
             assistant_id, version_number, change_notes=change_notes

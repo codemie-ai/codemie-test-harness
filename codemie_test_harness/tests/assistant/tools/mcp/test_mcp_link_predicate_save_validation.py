@@ -67,7 +67,11 @@ def _update_mcp_servers(assistant_utils, assistant, mcp_servers):
     ],
 )
 def test_disabled_or_custom_config_dead_catalog_id_saves(
-    assistant_factory, dead_catalog_config_id, enabled, use_custom_config
+    assistant_factory,
+    assistant_utils,
+    dead_catalog_config_id,
+    enabled,
+    use_custom_config,
 ):
     # @case mcp-link-predicate-save-validation_TC_001
     server_name = get_random_name()
@@ -79,9 +83,13 @@ def test_disabled_or_custom_config_dead_catalog_id_saves(
     )
 
     created = assistant_factory.create(mcp_servers=[server])
+    # assistant_factory.create()/assistant_utils.create_assistant() returns the
+    # minimal list-response entity (client.assistants.list(minimal_response=True) by
+    # default); mcp_servers only exists on the full Assistant detail object.
+    full = assistant_utils.get_assistant_by_id(created.id)
 
-    assert_that(len(created.mcp_servers), equal_to(1))
-    stored = created.mcp_servers[0]
+    assert_that(len(full.mcp_servers), equal_to(1))
+    stored = full.mcp_servers[0]
     assert_that(stored.mcp_config_id, equal_to(dead_catalog_config_id))
     assert_that(stored.enabled, equal_to(enabled))
     assert_that(stored.use_custom_config, equal_to(use_custom_config))
@@ -99,12 +107,15 @@ def test_re_enabling_dead_catalog_id_entry_fails(
         name=server_name, mcp_config_id=dead_catalog_config_id, enabled=False
     )
     created = assistant_factory.create(mcp_servers=[disabled_server])
+    # _update_mcp_servers needs system_prompt/project/llm_model_type, which only the
+    # full Assistant detail carries (see test_disabled_or_custom_config_dead_catalog_id_saves).
+    full_created = assistant_utils.get_assistant_by_id(created.id)
     re_enabled_server = link_server(
         name=server_name, mcp_config_id=dead_catalog_config_id, enabled=True
     )
 
     with pytest.raises(HTTPError) as exc_info:
-        _update_mcp_servers(assistant_utils, created, [re_enabled_server])
+        _update_mcp_servers(assistant_utils, full_created, [re_enabled_server])
 
     response = exc_info.value.response
     assert_that(response.status_code, equal_to(400), response.text)

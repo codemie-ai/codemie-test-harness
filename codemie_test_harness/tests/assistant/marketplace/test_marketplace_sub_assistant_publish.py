@@ -23,7 +23,10 @@ import pytest
 from hamcrest import assert_that, equal_to, has_length
 from requests import HTTPError
 
-from codemie_sdk.models.assistant import SubAssistantPublishSettings
+from codemie_sdk.models.assistant import (
+    AssistantUpdateRequest,
+    SubAssistantPublishSettings,
+)
 from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
     build_marketplace_submission,
 )
@@ -63,6 +66,26 @@ def test_publish_rejects_unavailable_sub_assistant_mcp_link(
         assistant_ids=[sub.id],
     )
 
+    # The catalog config's usage_count only reaches zero once the sub-assistant's own
+    # stored mcp_servers no longer references it, so drop that stored link first; the
+    # publish call's own SubAssistantPublishSettings payload below re-asserts an
+    # enabled link to the (now dead) config id, which is what the publish-time catalog
+    # check actually validates -- confirmed live (the payload's mcp_servers are applied
+    # to the sub-assistant in-memory before the publish save, not the assistant's own
+    # pre-existing stored link).
+    full_sub = assistant_utils.get_assistant_by_id(sub.id)
+    assistant_utils.update_assistant(
+        sub.id,
+        AssistantUpdateRequest(
+            name=full_sub.name,
+            description=full_sub.description or "",
+            system_prompt=full_sub.system_prompt,
+            project=full_sub.project,
+            llm_model_type=full_sub.llm_model_type,
+            mcp_servers=[],
+        ),
+    )
+
     # The sub-assistant's linked catalog config is now unavailable.
     client.mcp_configs.delete(config.id)
 
@@ -82,10 +105,8 @@ def test_publish_rejects_unavailable_sub_assistant_mcp_link(
         equal_to(catalog_unavailable_message(server_name)),
     )
 
-    # No sub-assistant copy was saved: the stored link is exactly what it was before
-    # the rejected publish attempt (still a single enabled link to the dead config).
+    # No sub-assistant copy was saved: the rejected publish must not apply the
+    # payload's (dead-link) mcp_servers to the sub-assistant's stored state, which
+    # is still the empty list this test set above.
     stored_sub = assistant_utils.get_assistant_by_id(sub.id)
-    assert_that(stored_sub.mcp_servers, has_length(1))
-    assert_that(stored_sub.mcp_servers[0].name, equal_to(server_name))
-    assert_that(stored_sub.mcp_servers[0].mcp_config_id, equal_to(config.id))
-    assert_that(stored_sub.mcp_servers[0].enabled, equal_to(True))
+    assert_that(stored_sub.mcp_servers, has_length(0))

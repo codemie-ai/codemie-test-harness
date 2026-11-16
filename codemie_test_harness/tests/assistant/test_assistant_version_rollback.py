@@ -16,7 +16,9 @@
 
 A rollback never blocks on an unavailable catalog link the way a normal save does:
 ``MCPAccessControlService.restore_mcp_servers`` disables the link instead and the
-rollback response reports it in ``disabled_mcp_servers`` (name, mcp_config_id, reason).
+rollback response reports it in ``disabledMcpServers`` (camelCase at the top level;
+each entry's own ``name``/``mcp_config_id``/``reason`` stays snake_case) -- confirmed
+live against the backend's raw, unparsed response.
 """
 
 import pytest
@@ -57,17 +59,21 @@ def test_rollback_disables_and_reports_unavailable_link(
     server_name = get_random_name()
     server = link_server(name=server_name, mcp_config_id=config.id, enabled=True)
     created = assistant_factory.create(mcp_servers=[server])
+    # assistant_factory.create() returns the minimal list-response entity
+    # (client.assistants.list(minimal_response=True) by default); system_prompt/
+    # project/llm_model_type only exist on the full Assistant detail object.
+    full_created = assistant_utils.get_assistant_by_id(created.id)
 
     # Save a new version (version 2) while the catalog entry is still active, so the
     # update's own validate_on_save does not reject it; version 1 still holds the link.
     assistant_utils.update_assistant(
         created.id,
         AssistantUpdateRequest(
-            name=created.name,
+            name=full_created.name,
             description="Version 2 - unrelated change",
-            system_prompt=created.system_prompt,
-            project=created.project,
-            llm_model_type=created.llm_model_type,
+            system_prompt=full_created.system_prompt,
+            project=full_created.project,
+            llm_model_type=full_created.llm_model_type,
         ),
     )
 
@@ -81,11 +87,15 @@ def test_rollback_disables_and_reports_unavailable_link(
 
     response = assistant_utils.rollback_to_version(created.id, _INITIAL_VERSION_NUMBER)
 
+    # AssistantService.rollback_to_version() is pre-existing (out of this run's SDK
+    # scope) and returns the backend's raw dict unparsed: the wrapper's own field
+    # serializes as camelCase (disabledMcpServers) even though its nested entries
+    # stay snake_case (name, mcp_config_id, reason) -- confirmed live.
     if expected_reason is None:
-        assert_that(response["disabled_mcp_servers"], equal_to([]))
+        assert_that(response["disabledMcpServers"], equal_to([]))
     else:
-        assert_that(response["disabled_mcp_servers"], has_length(1))
-        disabled = response["disabled_mcp_servers"][0]
+        assert_that(response["disabledMcpServers"], has_length(1))
+        disabled = response["disabledMcpServers"][0]
         assert_that(disabled["name"], equal_to(server_name))
         assert_that(disabled["mcp_config_id"], equal_to(config.id))
         assert_that(disabled["reason"], equal_to(expected_reason))
