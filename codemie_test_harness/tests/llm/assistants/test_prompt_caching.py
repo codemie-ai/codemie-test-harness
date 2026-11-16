@@ -17,6 +17,11 @@ per-request SmartCacheCallbackHandler.
 
 Needs a Bedrock environment (``AWS_ENVS`` in ``llm_test_data.py``) because only
 Claude models on Bedrock/Anthropic/Vertex are cache-eligible.
+
+All ``ask_assistant`` calls below pass ``add_nonce=False``: the default
+behaviour appends a fresh ``REQUEST_UUID`` to every prompt, which would make
+each "identical, unchanged" repeated prefix actually differ by that nonce and
+defeat provider cache reuse by test design rather than exercising it.
 """
 
 import uuid
@@ -46,12 +51,23 @@ _SHORT_TURN_MESSAGE = (
 
 _SKIP_REASON = "Needs a Bedrock environment (AWS_ENVS in llm_test_data.py)"
 
+# Product defect, not a test defect: GeneratedMessage.cache_creation_input_tokens and
+# cache_read_input_tokens (backend rest_api/models/conversation.py) are declared but never
+# assigned, so the API always returns them as None. strict=True turns the fix into a
+# loud XPASS failure, which is the signal to remove this mark.
+_PRODUCT_DEFECT_XFAIL = pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="product defect: cache token counts never populated on the chat history response",
+)
+
 
 @pytest.mark.skipif(get_environment() not in AWS_ENVS, reason=_SKIP_REASON)
 @pytest.mark.llm
 @pytest.mark.assistant
 @pytest.mark.conversations
 @pytest.mark.api
+@_PRODUCT_DEFECT_XFAIL
 def test_repeated_stable_prefix_reuses_bedrock_claude_cache(
     assistant_factory, assistant_utils, conversation_utils
 ):
@@ -70,10 +86,16 @@ def test_repeated_stable_prefix_reuses_bedrock_claude_cache(
     )
 
     assistant_utils.ask_assistant(
-        created_assistant, prompt, conversation_id=conversation_id
+        created_assistant,
+        prompt,
+        conversation_id=conversation_id,
+        add_nonce=False,
     )
     assistant_utils.ask_assistant(
-        created_assistant, prompt, conversation_id=conversation_id
+        created_assistant,
+        prompt,
+        conversation_id=conversation_id,
+        add_nonce=False,
     )
 
     history = conversation_utils.get_conversation_by_id(conversation_id).history
@@ -98,6 +120,7 @@ def test_repeated_stable_prefix_reuses_bedrock_claude_cache(
 @pytest.mark.assistant
 @pytest.mark.conversations
 @pytest.mark.api
+@_PRODUCT_DEFECT_XFAIL
 def test_cumulative_short_turns_exceeding_minimum_get_cached(
     assistant_factory, assistant_utils, conversation_utils
 ):
@@ -114,7 +137,10 @@ def test_cumulative_short_turns_exceeding_minimum_get_cached(
     short_turns = 6
     for _ in range(short_turns):
         response = assistant_utils.ask_assistant(
-            created_assistant, _SHORT_TURN_MESSAGE, conversation_id=conversation_id
+            created_assistant,
+            _SHORT_TURN_MESSAGE,
+            conversation_id=conversation_id,
+            add_nonce=False,
         )
         assert_that(
             response,
@@ -125,7 +151,10 @@ def test_cumulative_short_turns_exceeding_minimum_get_cached(
 
     # One more short turn, reusing the accumulated history built up above.
     assistant_utils.ask_assistant(
-        created_assistant, _SHORT_TURN_MESSAGE, conversation_id=conversation_id
+        created_assistant,
+        _SHORT_TURN_MESSAGE,
+        conversation_id=conversation_id,
+        add_nonce=False,
     )
 
     history = conversation_utils.get_conversation_by_id(conversation_id).history
@@ -146,6 +175,7 @@ def test_cumulative_short_turns_exceeding_minimum_get_cached(
 @pytest.mark.assistant
 @pytest.mark.conversations
 @pytest.mark.api
+@_PRODUCT_DEFECT_XFAIL
 def test_cache_control_applied_identically_for_stream_and_non_stream(
     assistant_factory, assistant_utils, conversation_utils, stream
 ):
@@ -163,7 +193,11 @@ def test_cache_control_applied_identically_for_stream_and_non_stream(
     )
 
     assistant_utils.ask_assistant(
-        created_assistant, prompt, conversation_id=conversation_id, stream=stream
+        created_assistant,
+        prompt,
+        conversation_id=conversation_id,
+        stream=stream,
+        add_nonce=False,
     )
 
     history = conversation_utils.get_conversation_by_id(conversation_id).history

@@ -184,8 +184,10 @@ class AssistantUtils(BaseUtils):
         output_schema=None,
         extract_failed_tools=False,
         return_stream_metadata=False,
+        add_nonce=True,
     ):
-        user_prompt = f"{user_prompt}; REQUEST_UUID: {uuid.uuid4()};"
+        if add_nonce:
+            user_prompt = f"{user_prompt}; REQUEST_UUID: {uuid.uuid4()};"
         chat_request = AssistantChatRequest(
             content_raw=f"<p>{user_prompt}</p>",
             text=user_prompt,
