@@ -20,7 +20,7 @@ that: a user with no read access to the assistant must still be refused.
 """
 
 import pytest
-from hamcrest import assert_that, equal_to, not_none
+from hamcrest import assert_that, equal_to, is_not, not_none
 from requests import HTTPError
 
 from codemie_sdk.models.assistant import AssistantUpdateRequest
@@ -38,7 +38,12 @@ def test_shared_assistant_icon_downloads_for_member_not_for_outsider(
     """@case uploaded-assistant-icons-are-visible_TC_001"""
     icon_bytes = (FILES_PATH / "test.png").read_bytes()
     uploaded = client.files.bulk_upload([FILES_PATH / "test.png"])
-    uploaded_icon_url = uploaded.files[0].file_url
+    uploaded_file_token = uploaded.files[0].file_url
+    # AssistantIconService.localize_icon only treats a value as a backend-file
+    # reference worth localizing when "/v1/files/" is present (same construction
+    # the UI performs — filesStore.getFileURL — before saving icon_url); a bare
+    # upload token is stored unchanged and never localized.
+    uploaded_icon_url = f"/v1/files/{uploaded_file_token}"
 
     # user A: create the assistant, share it with the project, then set the uploaded
     # image as its icon_url (localization happens on update, same as on create).
@@ -63,8 +68,25 @@ def test_shared_assistant_icon_downloads_for_member_not_for_outsider(
         not_none(),
         "assistant should have an icon_url after the update sets one",
     )
+    # Proof localization actually fired: copy_as_entity_icon writes a new file
+    # named assistants/{id}/icon<ext> under the bucket owner, so the assistant's
+    # stored icon_url must differ from the raw upload token above.
+    assert_that(
+        icon_token,
+        is_not(equal_to(uploaded_file_token)),
+        "icon_url should point at the localized entity-icon copy, not the raw "
+        "upload token, once the update sets an icon_url",
+    )
+    # The stored icon_url is itself the full "/v1/files/<id>" reference (same
+    # form the UI's extractFileId strips before using it) — get_file() builds
+    # that prefix itself, so pass the bare id or the request path doubles up.
+    icon_file_id = (
+        icon_token.rsplit("/v1/files/", 1)[-1]
+        if "/v1/files/" in icon_token
+        else icon_token
+    )
 
-    owner_bytes = client.files.get_file(icon_token)
+    owner_bytes = client.files.get_file(icon_file_id)
     assert_that(
         owner_bytes,
         equal_to(icon_bytes),
@@ -75,7 +97,7 @@ def test_shared_assistant_icon_downloads_for_member_not_for_outsider(
     member_id, member_client = platform_user.user_id, platform_user.client
     user_utils.assign_user_to_project(member_id, PROJECT)
 
-    member_bytes = member_client.files.get_file(icon_token)
+    member_bytes = member_client.files.get_file(icon_file_id)
     assert_that(
         member_bytes,
         equal_to(icon_bytes),
@@ -86,7 +108,7 @@ def test_shared_assistant_icon_downloads_for_member_not_for_outsider(
 
     # user C: no read access to the assistant at all.
     with pytest.raises(HTTPError) as exc_info:
-        unrelated_client.files.get_file(icon_token)
+        unrelated_client.files.get_file(icon_file_id)
     assert_response(
         exc_info.value.response,
         404,
