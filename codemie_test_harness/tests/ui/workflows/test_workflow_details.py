@@ -128,7 +128,7 @@ def test_workflow_details_menu_navigation(page, test_workflow):
 
     workflow_details_page.navigate_to(test_workflow.id)
     workflow_details_page.menu.navigate_to_applications()
-    workflow_details_page.should_have_url_containing("/applications")
+    workflow_details_page.should_have_url_containing("/apps")
 
 
 # ==================== CONFIGURATION SIDEBAR TESTS ====================
