@@ -26,6 +26,11 @@ from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
 from codemie_test_harness.tests.ui.test_data.assistant_test_data import (
     AssistantPopUpMessages,
 )
+from codemie_test_harness.tests.ui.test_data.mcp_discovery_failure_test_data import (
+    build_catalog_mcp_server,
+    build_sign_in_required_mcp_config_request,
+    build_untrusted_inline_mcp_server,
+)
 from codemie_test_harness.tests.utils.client_factory import get_client
 
 
@@ -271,3 +276,143 @@ def disable_hide_tool_outputs_on_assistant(page):
         )
 
     return _disable
+
+
+@pytest.fixture(scope="function")
+def chat_with_untrusted_mcp_server(assistant_factory, sonnet_46_llm):
+    """Chat for an assistant with one inline/manual HTTP MCP server configured with no
+    auth_config, pointed at a host the environment does not trust for auth discovery.
+
+    Uses ``sonnet_46_llm`` (Bedrock Claude Sonnet 4.6), not the environment's flagged
+    default model: the preview stand rejects assistant creation with the default model
+    as deprecated (recon-report.md, "Unexpected gates").
+
+    Shared precondition for TC_001 (discovery-failure chat warning).
+    """
+    created_conversation = None
+
+    def _navigate_to(page):
+        nonlocal created_conversation
+        mcp_server = build_untrusted_inline_mcp_server()
+        test_assistant = assistant_factory.create(
+            llm_model_type=sonnet_46_llm.base_name,
+            mcp_servers=[mcp_server],
+        )
+        created_conversation = get_client().conversations.create(
+            ConversationCreateRequest(initial_assistant_id=test_assistant.id, folder="")
+        )
+        chat_id = created_conversation.get("id")
+        chat_page = ChatPage(page)
+        page.set_viewport_size({"width": 1920, "height": 980})
+        chat_page.navigate_to(chat_id)
+        chat_page.chat_input.wait_for(state="visible", timeout=15000)
+        return chat_page, mcp_server.name
+
+    yield _navigate_to
+
+    if created_conversation:
+        try:
+            get_client().conversations.delete(created_conversation.get("id"))
+        except HTTPError:
+            pass
+
+
+@pytest.fixture(scope="function")
+def chat_with_two_untrusted_mcp_servers(assistant_factory, sonnet_46_llm):
+    """Chat for an assistant with two inline/manual HTTP MCP servers, each with no
+    auth_config and no saved mcp_config_id, both pointed at untrusted hosts.
+
+    Uses ``sonnet_46_llm`` — see ``chat_with_untrusted_mcp_server`` for why.
+
+    Precondition for TC_002 (two inline discovery_failed rows render without a React
+    duplicate-key collision, AC-5).
+    """
+    created_conversation = None
+
+    def _navigate_to(page):
+        nonlocal created_conversation
+        mcp_server_a = build_untrusted_inline_mcp_server()
+        mcp_server_b = build_untrusted_inline_mcp_server()
+        test_assistant = assistant_factory.create(
+            llm_model_type=sonnet_46_llm.base_name,
+            mcp_servers=[mcp_server_a, mcp_server_b],
+        )
+        created_conversation = get_client().conversations.create(
+            ConversationCreateRequest(initial_assistant_id=test_assistant.id, folder="")
+        )
+        chat_id = created_conversation.get("id")
+        chat_page = ChatPage(page)
+        page.set_viewport_size({"width": 1920, "height": 980})
+        chat_page.navigate_to(chat_id)
+        chat_page.chat_input.wait_for(state="visible", timeout=15000)
+        return chat_page, mcp_server_a.name, mcp_server_b.name
+
+    yield _navigate_to
+
+    if created_conversation:
+        try:
+            get_client().conversations.delete(created_conversation.get("id"))
+        except HTTPError:
+            pass
+
+
+@pytest.fixture(scope="function")
+def sign_in_required_mcp_config(client):
+    """Catalog MCP config with ``auth_config`` set, requiring OAuth2 sign-in.
+
+    Its own HTTP endpoint still answers with a 401 (recon-report.md confirms the host
+    answers with an auth challenge) — with ``auth_config`` configured, the backend
+    routes that 401 to "authentication_required" instead of "discovery_failed"
+    (MCPToolkitService._build_auth_configured_tool_challenge_payload), giving the
+    pre-existing AC-9 regression target a real, reachable state to anchor on.
+    """
+    request = build_sign_in_required_mcp_config_request()
+    created = client.mcp_configs.create(request)
+    yield created
+    try:
+        client.mcp_configs.delete(created.id)
+    except Exception:
+        pass
+
+
+@pytest.fixture(scope="function")
+def chat_with_sign_in_required_mcp_server(
+    assistant_factory, sonnet_46_llm, sign_in_required_mcp_config
+):
+    """Chat for an assistant with a (saved, catalog) MCP server that requires sign-in
+    (authentication_required), using the catalog config from
+    ``sign_in_required_mcp_config``.
+
+    Uses ``sonnet_46_llm`` — see ``chat_with_untrusted_mcp_server`` for why.
+
+    Precondition for TC_003: the pre-existing auth gate for a recoverable status must
+    stay unaffected by the discovery_failed fix (AC-9 regression anchor).
+    """
+    created_conversation = None
+
+    def _navigate_to(page):
+        nonlocal created_conversation
+        mcp_server = build_catalog_mcp_server(
+            sign_in_required_mcp_config.id, sign_in_required_mcp_config.name
+        )
+        test_assistant = assistant_factory.create(
+            llm_model_type=sonnet_46_llm.base_name,
+            mcp_servers=[mcp_server],
+        )
+        created_conversation = get_client().conversations.create(
+            ConversationCreateRequest(initial_assistant_id=test_assistant.id, folder="")
+        )
+        chat_id = created_conversation.get("id")
+        chat_page = ChatPage(page)
+        page.set_viewport_size({"width": 1920, "height": 980})
+        chat_page.navigate_to(chat_id)
+        chat_page.chat_input.wait_for(state="visible", timeout=15000)
+        return chat_page
+
+    yield _navigate_to
+
+    if created_conversation:
+        try:
+            get_client().conversations.delete(created_conversation.get("id"))
+        except HTTPError:
+            pass

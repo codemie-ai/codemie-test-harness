@@ -953,3 +953,68 @@ class MCPServersSection(BasePage):
         expect(self.global_mode_button).to_have_attribute("aria-pressed", "true")
         expect(self.global_config_textarea).to_be_disabled()
         return self
+
+    # =============================================================================
+    # LOCATORS - Discovery-failure auth gate (Step 2)
+    # =============================================================================
+    # MCPToolsSelectionStep.tsx renders a discovery_failed row with the same
+    # AssistantAuthGateRow used by the chat auth prompt: a role="status" badge
+    # (StatusBadge.tsx) and a "Retry" button that stays reachable alongside the
+    # tool controls when the server is unavailable.
+
+    MCP_SERVER_UNAVAILABLE_BADGE = "Server unavailable"
+
+    @property
+    def mcp_tools_retry_button(self) -> Locator:
+        """Retry button shown in Step 2 while a discovery_failed row is present."""
+        return self.mcp_tools_dialog.get_by_role("button", name="Retry")
+
+    @property
+    def mcp_auth_gate_status_badges(self) -> Locator:
+        """Every 'Server unavailable' status badge inside the Step 2 dialog."""
+        return self.mcp_tools_dialog.locator(
+            f'[role="status"][aria-label="{self.MCP_SERVER_UNAVAILABLE_BADGE}"]'
+        )
+
+    def mcp_auth_gate_row_name(self, server_name: str) -> Locator:
+        """The server-name text of a discovery_failed row inside Step 2."""
+        return self.mcp_tools_dialog.get_by_text(server_name, exact=True)
+
+    # =============================================================================
+    # ACTION METHODS - Discovery-failure auth gate (Step 2)
+    # =============================================================================
+
+    @step
+    def click_mcp_tools_retry(self):
+        """Click Retry in Step 2 while a discovery_failed row is present."""
+        self.mcp_tools_retry_button.click()
+        return self
+
+    # =============================================================================
+    # VERIFICATION METHODS - Discovery-failure auth gate (Step 2)
+    # =============================================================================
+
+    @step
+    def should_have_mcp_tools_discovery_failed_row_visible(
+        self, server_name: str, timeout: int = 30000
+    ):
+        """Verify a discovery_failed row's name and 'Server unavailable' badge render
+        in Step 2, and tool controls (the 'Use all available tools' checkbox) and the
+        Retry button both stay reachable alongside it.
+
+        ``timeout`` covers the discovery probe itself (recon-report.md: "the MCP
+        picker fetch takes a few seconds"), not just the default expect() wait.
+        """
+        expect(self.mcp_auth_gate_status_badges.first).to_be_visible(timeout=timeout)
+        expect(self.mcp_auth_gate_row_name(server_name)).to_be_visible()
+        expect(self.mcp_tools_use_all_tools_checkbox).to_be_visible()
+        expect(self.mcp_tools_use_all_tools_checkbox).to_be_enabled()
+        expect(self.mcp_tools_retry_button).to_be_visible()
+        return self
+
+    @step
+    def should_have_mcp_auth_gate_rows_cleared(self):
+        """Verify the discovery_failed row(s) are no longer rendered — Retry clears
+        them before re-fetching when every row was discovery_failed."""
+        expect(self.mcp_auth_gate_status_badges).to_have_count(0)
+        return self

@@ -2364,3 +2364,87 @@ class ChatPage(BasePage):
             f"**/v1/conversations/{conversation_id}", handle_get_conversation
         )
         return self
+
+    # ==================== MCP AUTH GATE (discovery/sign-in failure prompts) ====================
+    # Rendered by ChatAiMcpAuthPrompt.tsx below an assistant turn when its MCP server(s)
+    # fail auth discovery or still require sign-in. Each row is AssistantAuthGateRow.tsx,
+    # whose status badge is a StatusBadge: <div role="status" aria-label="<text>">
+    # (StatusBadge.tsx) — the same role="status" pattern already used above by
+    # interrupted_thought_text / in_progress_thought_status.
+
+    MCP_SERVER_UNAVAILABLE_BADGE = "Server unavailable"
+
+    @property
+    def mcp_auth_prompt(self) -> Locator:
+        """The MCP auth-gate prompt container rendered below an assistant turn
+        (data-testid="chat-ai-auth-prompt", ChatAiMcpAuthPrompt.tsx)."""
+        return self.chat_history_container.get_by_test_id("chat-ai-auth-prompt")
+
+    @property
+    def mcp_auth_gate_status_badges(self) -> Locator:
+        """Every 'Server unavailable' status badge inside the current auth prompt."""
+        return self.mcp_auth_prompt.locator(
+            f'[role="status"][aria-label="{self.MCP_SERVER_UNAVAILABLE_BADGE}"]'
+        )
+
+    @property
+    def mcp_auth_gate_sign_in_button(self) -> Locator:
+        """The sign-in control on a recoverable (authentication_required /
+        session_expired) auth-gate row — labelled 'Authenticate', 'Re-authenticate',
+        or 'Open sign-in in a new tab' depending on row state (AssistantAuthGateRow.tsx).
+        """
+        return self.mcp_auth_prompt.get_by_role(
+            "button",
+            name=re.compile(r"^(Authenticate|Re-authenticate|Open sign-in in a new tab)$"),
+        )
+
+    def mcp_auth_gate_row_name(self, server_name: str) -> Locator:
+        """The server-name text of an auth-gate row inside the current prompt."""
+        return self.mcp_auth_prompt.get_by_text(server_name, exact=True)
+
+    def mcp_auth_gate_error_context(self, text: str) -> Locator:
+        """The error-detail text of a discovery_failed auth-gate row."""
+        return self.mcp_auth_prompt.get_by_text(text)
+
+    @step
+    def send_message_and_wait_for_mcp_auth_prompt(self, message: str, timeout: int = 30000):
+        """Send a chat message and wait for the MCP auth-gate prompt to render."""
+        self.send_message(message)
+        expect(self.mcp_auth_prompt).to_be_visible(timeout=timeout)
+        return self
+
+    @step
+    def should_have_mcp_discovery_failure_prompt_visible(self):
+        """Verify the discovery-failure prompt heading and subtitle are shown
+        (ChatAiMcpAuthPrompt.getPromptHeading/getPromptSubtitle)."""
+        expect(self.mcp_auth_prompt).to_be_visible()
+        expect(self.mcp_auth_prompt.get_by_text("MCP server unavailable")).to_be_visible()
+        expect(
+            self.mcp_auth_prompt.get_by_text(
+                "Authentication discovery failed for one or more MCP servers. "
+                "See the details below."
+            )
+        ).to_be_visible()
+        return self
+
+    @step
+    def should_have_mcp_auth_gate_row(self, server_name: str, error_context: str):
+        """Verify a discovery_failed row's name, error text and 'Server unavailable' badge."""
+        expect(self.mcp_auth_gate_row_name(server_name)).to_be_visible()
+        expect(self.mcp_auth_gate_error_context(error_context)).to_be_visible()
+        return self
+
+    @step
+    def should_have_mcp_auth_gate_status_badge_count(self, count: int):
+        """Verify the number of 'Server unavailable' status badges rendered."""
+        expect(self.mcp_auth_gate_status_badges).to_have_count(count)
+        return self
+
+    @step
+    def should_have_mcp_sign_in_prompt_visible(self, heading: str):
+        """Verify the pre-existing sign-in auth gate (non-discovery_failed) is shown:
+        the expected heading and a sign-in control — AC-9 regression anchor."""
+        expect(self.mcp_auth_prompt).to_be_visible()
+        expect(self.mcp_auth_prompt.get_by_text(heading, exact=True)).to_be_visible()
+        expect(self.mcp_auth_gate_sign_in_button).to_be_visible()
+        return self
