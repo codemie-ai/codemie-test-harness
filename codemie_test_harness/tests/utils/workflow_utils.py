@@ -386,43 +386,6 @@ class WorkflowUtils(BaseUtils):
 
         return execution, executions_service
 
-    def resume_workflow_execution(
-        self,
-        workflow_id,
-        execution_id: str,
-        disable_cache: Optional[bool] = None,
-        timeout: Optional[int] = None,
-    ):
-        """
-        Resume a workflow execution and wait for the resumed turn to finish.
-
-        Args:
-            workflow_id: Workflow ID
-            execution_id: ID of the execution to resume
-            disable_cache: Forwarded to the resume route's ``disable_cache`` query
-                parameter. Omit to exercise the route's own default
-                (``disable_cache=True`` when the query param is absent); pass an
-                explicit bool to override it.
-            timeout: Override the shared ``DEFAULT_TIMEOUT`` completion poll
-                timeout (seconds) for this call only.
-
-        Returns:
-            Completed workflow execution object after the resumed turn finishes.
-        """
-        executions_service = self.client.workflows.executions(workflow_id)
-
-        if disable_cache is None:
-            executions_service.resume(execution_id)
-        else:
-            executions_service.resume_with_disable_cache(execution_id, disable_cache)
-
-        wait_kwargs = {"timeout": timeout} if timeout is not None else {}
-        self.wait_for_completion(
-            service=executions_service, _id=execution_id, **wait_kwargs
-        )
-
-        return executions_service.get(execution_id)
-
     def run_workflow(
         self, workflow_id, user_input="", tags: Optional[List[str]] = None
     ):
