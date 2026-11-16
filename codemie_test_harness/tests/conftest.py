@@ -37,6 +37,7 @@ from codemie_sdk.models.assistant import (
     ToolPermissionsConfig,
 )
 from codemie_sdk.models.datasource import DataSource
+from codemie_sdk.models.mcp_config import MCPConfigUpdateRequest
 from codemie_sdk.models.integration import (
     IntegrationType,
     CredentialValues,
@@ -90,6 +91,10 @@ from codemie_test_harness.tests.utils.env_resolver import (
 )
 from codemie_test_harness.tests.utils import cleanup_utils
 from codemie_test_harness.tests.utils.gitbud_utils import GitBudUtils
+from codemie_test_harness.tests.utils.mcp_config_utils import McpConfigUtils
+from codemie_test_harness.tests.test_data.mcp_link_test_data import (
+    catalog_entry_create_request,
+)
 from codemie_test_harness.tests.utils.gitlab_seed import (
     GITLAB_SEED_FAKE_PNG_UPLOAD,
     GITLAB_SEED_IMAGE_UPLOAD,
@@ -535,6 +540,40 @@ def customer_config_utils(client):
 @pytest.fixture(scope="session")
 def workflow_utils(client):
     return WorkflowUtils(client)
+
+
+@pytest.fixture(scope="session")
+def mcp_config_utils(client):
+    return McpConfigUtils(client)
+
+
+@pytest.fixture
+def catalog_mcp_config(client):
+    """Factory: a public, active catalog MCP config used as an mcp_servers link target.
+
+    Deletes every config it created on teardown, unless the test already deleted it
+    (e.g. to simulate a dead ``mcp_config_id``); a repeat delete is swallowed.
+    """
+    created = []
+
+    def _create(name=None, is_public=True, is_active=True):
+        config = client.mcp_configs.create(
+            catalog_entry_create_request(name=name, is_public=is_public)
+        )
+        if not is_active:
+            config = client.mcp_configs.update(
+                config.id, MCPConfigUpdateRequest(is_active=False)
+            )
+        created.append(config)
+        return config
+
+    yield _create
+
+    for config in created:
+        try:
+            client.mcp_configs.delete(config.id)
+        except Exception:
+            pass
 
 
 @pytest.fixture(scope="session")
@@ -3037,10 +3076,13 @@ def draft_assistant(
 ):
     """Factory: an assistant of the submitter that was never published."""
 
-    def _create(name=None, categories=None):
+    def _create(name=None, categories=None, mcp_servers=None):
         assistant = marketplace_submitter.create_assistant(
             build_marketplace_submission(
-                marketplace_core_gates, name=name, categories=categories
+                marketplace_core_gates,
+                name=name,
+                categories=categories,
+                mcp_servers=mcp_servers,
             )
         )
         marketplace_assistants_to_delete.append(assistant)
@@ -3055,8 +3097,10 @@ def pending_assistant(
 ):
     """Factory: an assistant the submitter published, waiting in the review queue."""
 
-    def _create(name=None, categories=None):
-        assistant = draft_assistant(name=name, categories=categories)
+    def _create(name=None, categories=None, mcp_servers=None):
+        assistant = draft_assistant(
+            name=name, categories=categories, mcp_servers=mcp_servers
+        )
         marketplace_submitter.submit_for_review(assistant)
         return assistant
 
