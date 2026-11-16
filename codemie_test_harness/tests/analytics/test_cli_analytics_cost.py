@@ -40,6 +40,7 @@ def _filters(project_name: str) -> dict:
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_total_cost_is_tokens_priced_at_catalog(
     analytics_utils, cli_analytics_project, cost_model, cost_sessions
@@ -61,6 +62,7 @@ def test_total_cost_is_tokens_priced_at_catalog(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_cost_by_user_is_each_users_tokens_priced_at_catalog(
     analytics_utils,
@@ -93,6 +95,7 @@ def test_cost_by_user_is_each_users_tokens_priced_at_catalog(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_session_cost_is_its_tokens_priced_at_catalog(
     analytics_utils, cli_analytics_project, cost_model, cost_sessions

@@ -41,6 +41,7 @@ from codemie_test_harness.tests.ui.pageobject.administration.user_management_pag
 @pytest.mark.ui
 @pytest.mark.user
 @pytest.mark.smoke
+@pytest.mark.oss_standalone
 def test_admin_sets_default_project_in_user_details(
     page, user_utils, default_project_member
 ):
@@ -69,6 +70,7 @@ def test_admin_sets_default_project_in_user_details(
 @pytest.mark.ui
 @pytest.mark.user
 @pytest.mark.parametrize("set_as_default", [True, False], ids=["marked", "unmarked"])
+@pytest.mark.oss_standalone
 def test_add_project_dialog_default_option(
     page, user_utils, default_project_member, extra_project, set_as_default
 ):
@@ -96,6 +98,7 @@ def test_add_project_dialog_default_option(
 
 @pytest.mark.ui
 @pytest.mark.user
+@pytest.mark.oss_standalone
 def test_users_list_marks_only_the_default_project(
     page, user_utils, default_project_member
 ):
@@ -116,6 +119,7 @@ def test_users_list_marks_only_the_default_project(
 @pytest.mark.ui
 @pytest.mark.user
 @pytest.mark.parametrize("acting_credentials", ["maintainer"], indirect=True)
+@pytest.mark.oss_standalone
 def test_maintainer_can_set_default_project(page, user_utils, default_project_member):
     """TC-24: the maintainer role (without platform admin) can manage the default in the UI."""
     member = default_project_member
@@ -135,6 +139,7 @@ def test_maintainer_can_set_default_project(page, user_utils, default_project_me
 @pytest.mark.ui
 @pytest.mark.user
 @pytest.mark.parametrize("acting_credentials", ["auditor"], indirect=True)
+@pytest.mark.oss_standalone
 def test_auditor_sees_default_project_but_cannot_change_it(
     page, user_utils, default_project_member
 ):
@@ -163,6 +168,7 @@ def test_auditor_sees_default_project_but_cannot_change_it(
 @pytest.mark.ui
 @pytest.mark.user
 @pytest.mark.parametrize("acting_credentials", ["plain_user"], indirect=True)
+@pytest.mark.oss_standalone
 def test_plain_user_cannot_open_user_management(page):
     """TC-25b: a user without a user-management role gets 'Not found' instead of the page."""
     page.goto(UserManagementPage.PATH)
@@ -172,6 +178,7 @@ def test_plain_user_cannot_open_user_management(page):
 
 @pytest.mark.ui
 @pytest.mark.user
+@pytest.mark.oss_standalone
 def test_personal_project_is_shown_as_default_when_none_is_stored(
     page, default_project_member
 ):
@@ -187,6 +194,7 @@ def test_personal_project_is_shown_as_default_when_none_is_stored(
 
 @pytest.mark.ui
 @pytest.mark.user
+@pytest.mark.oss_standalone
 def test_projects_table_fits_long_project_names_on_one_row(
     page, default_project_member
 ):
@@ -202,6 +210,7 @@ def test_projects_table_fits_long_project_names_on_one_row(
 
 @pytest.mark.ui
 @pytest.mark.user
+@pytest.mark.oss_standalone
 def test_unassigning_default_project_falls_back_to_personal_project(
     page, user_utils, default_project_member
 ):

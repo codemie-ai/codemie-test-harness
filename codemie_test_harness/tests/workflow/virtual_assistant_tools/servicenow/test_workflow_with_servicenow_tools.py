@@ -29,6 +29,10 @@ from codemie_test_harness.tests.utils.base_utils import (
 @pytest.mark.virtual_workflow
 @pytest.mark.servicenow
 @pytest.mark.api
+@pytest.mark.xfail(
+    reason="ServiceNow environment is temporary not available",
+    strict=False,
+)
 def test_workflow_with_virtual_assistant_with_servicenow_tools(
     service_now_integration,
     workflow_with_virtual_assistant,

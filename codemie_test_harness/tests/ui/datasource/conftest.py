@@ -25,6 +25,7 @@ from codemie_test_harness.tests.test_data.provider_toolkit_test_data import (
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.constants import FILES_PATH
+from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.datasource_utils import DataSourceUtils
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,49 @@ def enough_datasources():
             utils.delete_datasource(ds)
         except Exception as e:
             logger.warning(f"Failed to delete datasource {ds}: {e}")
+
+
+@pytest.fixture
+def gitlab_datasource_with_integration(
+    datasource_utils, gitlab_integration, default_embedding_llm
+):
+    """Function-scoped Git datasource created via API with a saved integration.
+
+    A test may edit or clear the integration of this datasource, which would
+    break other tests if they shared the session-scoped `gitlab_datasource`, so
+    every test gets its own copy. Teardown deletes it via the API and never
+    raises.
+    """
+    datasource = datasource_utils.create_gitlab_datasource(
+        setting_id=gitlab_integration.id,
+        embeddings_model=default_embedding_llm.base_name,
+    )
+    yield datasource
+    if datasource:
+        datasource_utils.safe_delete_datasource(datasource)
+
+
+@pytest.fixture
+def public_git_datasource_with_integration(
+    datasource_utils, gitlab_integration, default_embedding_llm
+):
+    """Function-scoped Git datasource on a public repository, with a saved integration.
+
+    The repository is public so that saving the datasource after its integration
+    has been cleared still passes the Save-time git connectivity check; on the
+    private repository used by `gitlab_datasource_with_integration` that Save is
+    rejected ("Repository not publicly accessible"). The datasource is created via
+    the API with the integration attached. Teardown deletes it via the API and
+    never raises.
+    """
+    datasource = datasource_utils.create_gitlab_datasource(
+        link=CredentialsManager.get_parameter("GITHUB_PUBLIC_PROJECT"),
+        setting_id=gitlab_integration.id,
+        embeddings_model=default_embedding_llm.base_name,
+    )
+    yield datasource
+    if datasource:
+        datasource_utils.safe_delete_datasource(datasource)
 
 
 @pytest.fixture

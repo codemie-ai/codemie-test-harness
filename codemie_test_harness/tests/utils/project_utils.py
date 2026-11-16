@@ -40,6 +40,7 @@ from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
 from codemie_test_harness.tests.utils.base_utils import BaseUtils, poll_until
+from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
 
 _BUDGET_SPENDING_POLL_INTERVAL = 10
 _USERS_PER_PAGE = 100
@@ -91,6 +92,7 @@ class ProjectUtils(BaseUtils):
         has_assigned_budgets: bool = False,
         sort_by: Optional[str] = None,
         sort_order: str = "asc",
+        cost_center_ids: Optional[List[UUID]] = None,
     ) -> PaginatedProjectListResponse:
         """List projects with pagination and filters.
 
@@ -104,10 +106,16 @@ class ProjectUtils(BaseUtils):
                 assigned project budget
             sort_by: Field to sort by ('name' or 'created_at')
             sort_order: Sort order ('asc' or 'desc')
+            cost_center_ids: Return only projects assigned to any of these cost centers
 
         Returns:
             PaginatedProjectListResponse with list of projects and pagination info
         """
+        # Forwarded only when set, so callers that do not filter keep working on an SDK
+        # release that predates the cost_center_ids parameter.
+        optional_filters = (
+            {"cost_center_ids": cost_center_ids} if cost_center_ids else {}
+        )
         return self.client.projects.list_projects(
             search=search,
             page=page,
@@ -117,6 +125,7 @@ class ProjectUtils(BaseUtils):
             has_assigned_budgets=has_assigned_budgets,
             sort_by=sort_by,
             sort_order=sort_order,
+            **optional_filters,
         )
 
     def list_all_projects(
@@ -128,6 +137,7 @@ class ProjectUtils(BaseUtils):
         has_assigned_budgets: bool = False,
         sort_by: Optional[str] = None,
         sort_order: str = "asc",
+        cost_center_ids: Optional[List[UUID]] = None,
     ) -> List[ProjectListItem]:
         """List every project matching the given filters, across all pages.
 
@@ -140,6 +150,7 @@ class ProjectUtils(BaseUtils):
                 assigned project budget
             sort_by: Field to sort by ('name' or 'created_at')
             sort_order: Sort order ('asc' or 'desc')
+            cost_center_ids: Return only projects assigned to any of these cost centers
 
         Returns:
             All matching projects, collected across every page
@@ -156,6 +167,7 @@ class ProjectUtils(BaseUtils):
                 has_assigned_budgets=has_assigned_budgets,
                 sort_by=sort_by,
                 sort_order=sort_order,
+                cost_center_ids=cost_center_ids,
             )
             all_projects.extend(response.data)
             if len(all_projects) >= response.pagination.total:
@@ -513,7 +525,13 @@ class ProjectUtils(BaseUtils):
         deletion — DELETE /v1/projects/{name} 409s if any remain). Project
         budgets are only ever created via budget groups now, and deleting a
         group cascades to all of its category budgets.
+
+        OSS standalone has no budgets/budget groups at all (403 on every
+        call), so this is a no-op there.
         """
+        if EnvironmentResolver.is_oss_standalone():
+            return
+
         budget_utils = AdminProjectBudgetUtils(self.client)
 
         response = self.client.project_budget_groups.list_by_project(project_name)
@@ -533,7 +551,12 @@ class ProjectUtils(BaseUtils):
         a project (required before deletion — DELETE /v1/projects/{name}
         409s if any remain). Fixtures use this cascade instead of a
         one-off sweep script.
+
+        OSS standalone only has integrations: none of these entity types
+        exist there (404 on every call), so this is a no-op there.
         """
+        if EnvironmentResolver.is_oss_standalone():
+            return
 
         def _fetch_assistants(per_page):
             # scope="visible_to_user" surfaces assistants owned by/visible to

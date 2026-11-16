@@ -53,6 +53,7 @@ from codemie_test_harness.tests.utils.base_utils import (
 )
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
+from codemie_test_harness.tests.utils.logger_util import expected_http_errors
 
 
 def _integration_request(
@@ -153,6 +154,7 @@ def create_code_datasource_in_project(datasource_utils, default_embedding_llm):
 @pytest.mark.project_integration
 @pytest.mark.api
 @pytest.mark.parametrize("setting_type", project_change_scope_test_data)
+@pytest.mark.oss_standalone
 def test_change_integration_project_moves_integration_keeping_id(
     project, integration_utils, create_integration_in_project, setting_type
 ):
@@ -184,14 +186,14 @@ def test_change_integration_project_moves_integration_keeping_id(
 
 
 @pytest.fixture
-def source_project_admin_member(project, user_utils, non_admin_user):
+def source_project_admin_member(project, user_utils, platform_user):
     """Plain user (no platform role) who is admin of a fresh source project but not of a fresh target.
 
     The project integration is created by the platform admin, so the user owns nothing: the
     backend lets them update it only because they are admin of its (source) project
     (``ProjectSetting.is_managed_by``). They hold no membership at all in the target project.
     """
-    _, member_id, member_client = non_admin_user
+    member_id, member_client = platform_user.user_id, platform_user.client
     source = project()
     target = project()
     user_utils.assign_user_to_project(member_id, source.name, is_project_admin=True)
@@ -221,6 +223,7 @@ def integration_visible_to_source_admin_member(
 @pytest.mark.integration
 @pytest.mark.project_integration
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_change_integration_project_denied_without_target_project_admin(
     integration_utils, integration_visible_to_source_admin_member
 ):
@@ -228,7 +231,7 @@ def test_change_integration_project_denied_without_target_project_admin(
     """A caller who is admin of the source but not of the target project gets 403; the integration stays put."""
     source, target, member_utils, created = integration_visible_to_source_admin_member
 
-    with pytest.raises(HTTPError) as exc_info:
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
         member_utils.update_integration(
             _integration_request(
                 target.name,
@@ -262,6 +265,7 @@ def test_change_integration_project_denied_without_target_project_admin(
 @pytest.mark.integration
 @pytest.mark.project_integration
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_change_integration_project_rejected_on_alias_collision(
     project, integration_utils, create_integration_in_project
 ):

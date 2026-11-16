@@ -86,11 +86,14 @@ def auditor_test_user_id(regular_client):
 
 @pytest.fixture(scope="session")
 def auditor_test_budget_id(client):
-    """Real platform budget_id for write-denial tests."""
+    """Throwaway platform budget_id for write-denial tests.
+
+    Always creates a dedicated budget rather than reusing an existing one: these tests
+    assert that an auditor's write attempt is denied, so if a denial ever regressed, the
+    write would land on this disposable budget instead of a real one (there is no
+    delete_budget to clean it up afterwards, so it is left on the stand).
+    """
     admin_budget_utils = AdminBudgetUtils(client)
-    budgets = admin_budget_utils.list_budgets(per_page=10)
-    if budgets:
-        return budgets[0]["budget_id"]
     budget_id = f"autotest-test-{uuid.uuid4().hex[:8]}"
     admin_budget_utils.create_budget(budget_id=budget_id, category="platform")
     return budget_id
