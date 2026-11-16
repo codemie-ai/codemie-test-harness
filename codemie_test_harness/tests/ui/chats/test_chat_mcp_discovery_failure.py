@@ -18,15 +18,28 @@ Covers the ticket's core symptom: an MCP server that fails auth *discovery*
 (not sign-in) used to leave the chat turn with no visible feedback at all.
 These tests assert the chat turn now surfaces a dedicated "MCP server
 unavailable" warning, that two such inline servers on the same assistant
-render without a React duplicate-key collision, and that the pre-existing
-sign-in-required gate for a recoverable auth status is unchanged by the fix.
+render without a React duplicate-key collision, that the pre-existing
+sign-in-required gate for a recoverable auth status is unchanged by the fix,
+and the ticket's own literal repro (an assistant built through the UI with an
+inline figma MCP server).
 """
 
 import pytest
+from codemie_sdk.models.conversation import ConversationCreateRequest
 
+from codemie_test_harness.tests.enums.model_types import ModelTypes
+from codemie_test_harness.tests.ui.pageobject.assistants.assistants_page import (
+    AssistantsPage,
+)
+from codemie_test_harness.tests.ui.pageobject.assistants.create_edit_assistant_page import (
+    CreateEditAssistantPage,
+)
+from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
 from codemie_test_harness.tests.ui.test_data.mcp_discovery_failure_test_data import (
     DISCOVERY_FAILED_ERROR_CONTEXT,
+    UNTRUSTED_HTTP_MCP_URL,
 )
+from codemie_test_harness.tests.utils.base_utils import get_random_name, wait_for_entity
 
 
 @pytest.mark.mcp
@@ -87,9 +100,9 @@ def test_chat_sign_in_required_gate_unaffected_by_discovery_fix(
     An MCP server that requires sign-in (authentication_required) — reached
     through a saved catalog config with auth_config configured, so the same
     kind of 401 is *not* routed to the new discovery_failed path — still shows
-    the pre-existing "Authentication required" auth gate with a sign-in
-    control, unchanged by this fix (normalizeMCPAuthGateServer still rejects
-    an id-less row for every status except discovery_failed).
+    the pre-existing "Authentication required" auth gate heading, unchanged by
+    this fix (normalizeMCPAuthGateServer still rejects an id-less row for every
+    status except discovery_failed).
     """
     chat_page = chat_with_sign_in_required_mcp_server(page)
 
@@ -98,3 +111,113 @@ def test_chat_sign_in_required_gate_unaffected_by_discovery_fix(
     )
 
     chat_page.should_have_mcp_sign_in_prompt_visible("Authentication required")
+
+
+@pytest.fixture
+def created_assistant_cleanup(assistant_utils, client):
+    """Deletes (by name) an assistant created directly through the UI's own
+    "Create Assistant" flow, and its conversations, after the test — even if the
+    test fails.
+
+    No assistant()/assistant_factory fixture is used for this precondition: the
+    case is a literal reproduction of the ticket's own build steps (Create
+    Assistant -> Manual Setup, driven through the browser), so no Python object
+    with an id exists until after that UI-driven creation completes.
+    """
+    created_names = []
+
+    def _track(name: str):
+        created_names.append(name)
+        return name
+
+    yield _track
+
+    for name in created_names:
+        try:
+            created = wait_for_entity(
+                lambda: client.assistants.list(per_page=200),
+                entity_name=name,
+                timeout=5,
+                poll_interval=1,
+            )
+            assistant_utils.delete_assistant(created)
+        except Exception:
+            pass
+
+
+@pytest.mark.mcp
+@pytest.mark.ui
+def test_chat_shows_figma_repro_discovery_failure_warning(
+    page, client, created_assistant_cleanup
+):
+    """@case error-message-silently-ignores-mcp_TC_004
+
+    Literal reproduction of the ticket: an assistant built end to end through the
+    UI (Create Assistant -> Manual Setup) with one inline HTTP MCP server named
+    "figma" at https://mcp.figma.com/mcp and no auth_config, saved with a
+    non-deprecated LLM model (the preview stand rejects the environment's flagged
+    default model as deprecated, recon-report.md), surfaces the "MCP server
+    unavailable" warning and a discovery-failed row named "figma" when chat is used.
+
+    The precondition also depends on api.figma.com being excluded from the
+    stand's MCP_AUTH_TRUSTED_AS_DOMAINS — an environment-side setting outside
+    this diff's evidence, not something this test sets up or asserts directly.
+    If this test fails because figma.com has since become a trusted domain (the
+    warning never appears), that is an environment/precondition drift, not a
+    defect in this test.
+    """
+    assistant_name = f"QA figma repro {get_random_name()}"
+    mcp_server_name = "figma"
+    created_assistant_cleanup(assistant_name)
+
+    create_page = CreateEditAssistantPage(page)
+    create_page.navigate_to()
+    create_page.fill_name(assistant_name)
+    create_page.fill_description("QA fixture: literal figma MCP discovery-failure repro")
+    create_page.fill_system_prompt("Act as a helpful assistant.")
+
+    create_page.mcp_servers.should_have_mcp_servers_accordion_visible()
+    create_page.mcp_servers.expand_mcp_servers_accordion()
+    create_page.mcp_servers.click_mcp_manual_setup()
+    create_page.mcp_servers.fill_mcp_config_name(mcp_server_name)
+    create_page.mcp_servers.fill_mcp_config_description(
+        "QA fixture: literal figma MCP discovery-failure repro"
+    )
+    create_page.mcp_servers.fill_mcp_config_json(
+        f'{{"url": "{UNTRUSTED_HTTP_MCP_URL}", "type": "http"}}'
+    )
+    create_page.mcp_servers.click_mcp_config_next()
+    create_page.mcp_servers.select_use_all_tools_checkbox()
+    create_page.mcp_servers.click_mcp_tools_add()
+
+    # Swap the default LLM model for a non-deprecated one before saving — the
+    # preview stand rejects the environment's flagged default model as deprecated
+    # (recon-report.md, "Unexpected gates"), the same as every other case here.
+    create_page.select_llm_model(ModelTypes.CLAUDE_4_6_SONNET.value)
+    create_page.click_save()
+
+    # Confirm creation by searching the assistants list rather than the transient
+    # success toast: the toast can already have auto-dismissed by the time this
+    # check runs, which is a UI-timing race, not evidence creation failed.
+    assistants_page = AssistantsPage(page)
+    assistants_page.should_be_on_assistants_page()
+    assistants_page.search_assistants(assistant_name)
+    assistants_page.should_see_assistant_with_name(assistant_name)
+
+    created_assistant = wait_for_entity(
+        lambda: client.assistants.list(per_page=200), entity_name=assistant_name
+    )
+    conversation = client.conversations.create(
+        ConversationCreateRequest(initial_assistant_id=created_assistant.id, folder="")
+    )
+    chat_page = ChatPage(page)
+    page.set_viewport_size({"width": 1920, "height": 980})
+    chat_page.navigate_to(conversation.get("id"))
+    chat_page.chat_input.wait_for(state="visible", timeout=15000)
+
+    chat_page.send_message_and_wait_for_mcp_auth_prompt(
+        "Please use the figma MCP server's tools to help me with this task."
+    )
+
+    chat_page.should_have_mcp_discovery_failure_prompt_visible()
+    chat_page.should_have_mcp_auth_gate_row(mcp_server_name, DISCOVERY_FAILED_ERROR_CONTEXT)
