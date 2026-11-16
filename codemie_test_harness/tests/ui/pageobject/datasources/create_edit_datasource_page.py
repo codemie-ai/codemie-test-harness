@@ -16,7 +16,7 @@ import re
 from typing import Optional
 
 from hamcrest import assert_that, is_not, empty, matches_regexp
-from playwright.sync_api import expect
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.test_data.google_datasource_test_data import (
@@ -35,6 +35,7 @@ from codemie_test_harness.tests.ui.pageobject.datasources.datasource_sidebar imp
 )
 from codemie_test_harness.tests.ui.test_data.datasource_test_data import (
     DataSourceType,
+    GIT_INTEGRATION_PLACEHOLDER,
     SUMMARIZATION_METHODS_LIST,
     DATA_SOURCE_TYPES_LIST,
     FILE_INSTRUCTIONS,
@@ -60,6 +61,10 @@ class CreateEditDatasourcePage(BasePage):
     """Create Data Source page object with property-based element locators."""
 
     page_url = "/data-sources/create"
+
+    # How long to wait for the create form to auto-select a single eligible
+    # integration before concluding that none was selected.
+    INTEGRATION_AUTOSELECT_WAIT_MS = 5000
 
     def __init__(self, page):
         super().__init__(page)
@@ -187,6 +192,16 @@ class CreateEditDatasourcePage(BasePage):
     @property
     def integration_dropdown(self):
         return self.integration_input.locator(".p-dropdown-label")
+
+    @property
+    def integration_clear_icon(self):
+        """Clear (X) icon of the integration dropdown.
+
+        PrimeReact renders it only while a value is selected and the dropdown is
+        clearable. Source-derived class name (`.p-dropdown-clear-icon`); not yet
+        observed on a stand with a saved integration.
+        """
+        return self.integration_input.locator(".p-dropdown-clear-icon")
 
     @property
     def refresh_integrations_button(self):
@@ -572,6 +587,37 @@ class CreateEditDatasourcePage(BasePage):
         return self
 
     @step
+    def clear_integration(self):
+        """Click the clear (X) icon of the integration dropdown."""
+        self.integration_clear_icon.click()
+        return self
+
+    @step
+    def clear_integration_if_selected(self):
+        """Leave the integration empty on the create form.
+
+        On create, a single eligible integration is auto-selected once the
+        settings load, so the form may or may not hold a value. Wait a bounded
+        time for the clear icon: when it shows up, clear the selection and
+        confirm the placeholder. When it never does, re-read the form: if the
+        integration dropdown is rendered, it must show the placeholder (a late
+        auto-select fails here instead of letting the test go on with an
+        integration selected); if no dropdown is rendered at all (the form
+        offers only "Add User Integration"), there is nothing to clear.
+        """
+        try:
+            self.integration_clear_icon.wait_for(
+                state="visible", timeout=self.INTEGRATION_AUTOSELECT_WAIT_MS
+            )
+        except PlaywrightTimeoutError:
+            if self.integration_input.count() > 0:
+                self.should_see_integration_empty()
+            return self
+        self.clear_integration()
+        self.should_see_integration_empty()
+        return self
+
+    @step
     def click_create(self):
         self.create_button.click()
         return self
@@ -658,13 +704,32 @@ class CreateEditDatasourcePage(BasePage):
         summarization_method: Optional[str] = None,
         embeddings_model: Optional[str] = None,
         integration: Optional[str] = None,
+        clear_integration: bool = False,
     ):
         """
         Creates a Git DataSource with required and optional fields.
+
+        Args:
+            integration: Alias to pick in the integration dropdown; the pick is
+                verified to stick before the form is submitted.
+            clear_integration: When True, make sure the integration is empty
+                (clears an auto-selected one). Cannot be combined with `integration`.
+
+        Raises:
+            ValueError: if both `integration` and `clear_integration` are given.
         """
+        if integration and clear_integration:
+            raise ValueError(
+                "create_git_datasource: `integration` and `clear_integration=True` "
+                "contradict each other; pass only one of them"
+            )
         name = self._base_create_datasource(
             name, project_name, description, DataSourceType.GIT, shared, integration
         )
+        if integration:
+            self.should_see_selected_integration(integration)
+        if clear_integration:
+            self.clear_integration_if_selected()
         if repo_link:
             self.fill_repo_link(repo_link)
         if branch:
@@ -1141,7 +1206,23 @@ class CreateEditDatasourcePage(BasePage):
 
     @step
     def should_see_selected_integration(self, integration: str):
-        expect(self.integration_input).to_have_text(integration)
+        """Assert the integration dropdown label shows the given alias.
+
+        The UI appends the integration scope to the alias, e.g. "<alias> (project)",
+        so the label must equal the alias optionally followed by a "(project)" or
+        "(user)" suffix. Anything else, including the placeholder or a different
+        parenthesised text, fails. Scoped to the label so the clear icon and the
+        trigger never affect the match.
+        """
+        expect(self.integration_dropdown).to_have_text(
+            re.compile(rf"^{re.escape(integration)}(\s*\((project|user)\))?$")
+        )
+        return self
+
+    @step
+    def should_see_integration_empty(self):
+        """Assert the Git form's integration dropdown shows its placeholder, not a selected alias."""
+        expect(self.integration_dropdown).to_have_text(GIT_INTEGRATION_PLACEHOLDER)
         return self
 
     @step
@@ -1413,15 +1494,6 @@ class CreateEditDatasourcePage(BasePage):
     # -------------------------------
 
     @property
-    def optional_integration_hint(self):
-        """'Integration is optional' informational banner in IntegrationSection for Git datasource.
-
-        Uses a stable partial-text match on a unique sentence fragment so the locator
-        remains valid if the hint spans multiple DOM nodes or if surrounding copy changes.
-        """
-        return self.page.get_by_text("Integration is optional", exact=False)
-
-    @property
     def public_access_error_toast(self):
         """Error notification shown when repository is not publicly accessible.
 
@@ -1433,12 +1505,6 @@ class CreateEditDatasourcePage(BasePage):
         return self.page.get_by_role("alert").filter(
             has_text="Failed to connect to git"
         )
-
-    @step
-    def should_see_optional_integration_hint(self):
-        """Verify optional integration hint is visible on the Git datasource form."""
-        expect(self.optional_integration_hint).to_be_visible()
-        return self
 
     @step
     def should_see_public_access_error_notification(self):

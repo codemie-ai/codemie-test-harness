@@ -40,9 +40,9 @@ def replayed_sessions(
 ):
     """Sessions whose events were ingested, rolled up and then sent again unchanged.
 
-    Each replay request also carries the session's end, the one event that is new.
-    The backend stores a request in one transaction and recomputes a session from
-    all of its stored events, so a rollup that shows the end has also counted
+    Each replay request also carries the session's turn stop and end, the events that
+    are new. The backend stores a request in one transaction and recomputes a session
+    from all of its stored events, so a rollup that shows the end has also counted
     whatever else that request stored.
     """
     seeds = list(seed_cli_sessions(get_replay_session_seeds()).values())
