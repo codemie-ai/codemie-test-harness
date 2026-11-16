@@ -55,10 +55,10 @@ def _project_roles(detail):
 @pytest.mark.api
 @pytest.mark.oss_standalone
 def test_reactivate_restores_active_user_with_roles_and_projects(
-    user_utils, platform_project_user
+    user_utils, platform_project_admin
 ):
     # @case platform-admins-deactivate-reactivate-users_TC_001
-    _, user_id, _, project = platform_project_user
+    _, user_id, _, project = platform_project_admin
     user_utils.update_admin_user(user_id, is_admin=True)
     before = user_utils.get_admin_user(user_id)
     user_utils.deactivate_user(user_id)
@@ -325,10 +325,10 @@ def test_platform_role_grant_on_deactivated_user_is_refused(
 @pytest.mark.api
 @pytest.mark.oss_standalone
 def test_project_access_grant_to_deactivated_user_is_refused_and_removal_allowed(
-    user_utils, platform_project_user
+    user_utils, platform_project_admin
 ):
     # @case platform-admins-deactivate-reactivate-users_TC_018
-    _, user_id, _, project = platform_project_user
+    _, user_id, _, project = platform_project_admin
     user_utils.deactivate_user(user_id)
 
     with pytest.raises(HTTPError) as refused:

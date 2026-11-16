@@ -74,15 +74,14 @@ def deactivated_user(user_utils, admin_user):
 
 
 @pytest.fixture
-def platform_project_user(user_utils, platform_user, temp_project):
-    """(email, user_id, client, project) of a platform_user who is a plain member of a
-    temporary project."""
+def platform_project_admin(user_utils, platform_user, temp_project):
+    """(email, user_id, client, project) of a platform_user who administers a temporary project."""
     email, user_id, user_client = (
         platform_user.email,
         platform_user.user_id,
         platform_user.client,
     )
-    user_utils.assign_user_to_project(user_id, temp_project)
+    user_utils.assign_user_to_project(user_id, temp_project, is_project_admin=True)
     yield email, user_id, user_client, temp_project
     try:
         user_utils.remove_user_from_project(user_id, temp_project)

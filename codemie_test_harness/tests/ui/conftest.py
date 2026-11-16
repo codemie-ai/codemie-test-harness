@@ -134,8 +134,9 @@ def cleanup_faq_assistant_conversations():
             scope="marketplace",
         )
     except HTTPError:
-        # Assistants don't exist on this deployment (e.g. OSS standalone, which
-        # only has integrations) — nothing to clean up.
+        if not EnvironmentResolver.is_oss_standalone():
+            raise
+        # OSS standalone has no assistants, so there is nothing to clean up.
         return
     assistant = next(
         (a for a in assistants if a.name == AssistantNames.AI_RUN_FAQ), None

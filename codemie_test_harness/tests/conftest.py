@@ -2702,12 +2702,12 @@ def pytest_sessionfinish(session):
     except Exception as e:
         logger.error(f"Failed to clean up projects: {e}")
 
-    try:
-        cleanup_utils.delete_providers(client)
-    except Exception as e:
-        logger.error(f"Failed to cleanup providers: {e}")
-
     if has_full_platform:
+        try:
+            cleanup_utils.delete_providers(client)
+        except Exception as e:
+            logger.error(f"Failed to cleanup providers: {e}")
+
         try:
             cleanup_utils.delete_cost_centers(client, prefix=prefix)
         except Exception as e:
