@@ -126,7 +126,3 @@ def test_help_page_external_links(page, customer_config_utils):
         learning_courses_href,
         contains_string(_config_link(customer_config_utils, "learningCourses")),
     )
-
-    # Test Survey button href
-    survey_href = help_page.get_survey_href()
-    assert_that(survey_href, contains_string(ExternalUrls.SURVEY))

@@ -294,30 +294,6 @@ class HelpPage(BasePage):
             "//h3[contains(text(), 'AI/Run Feedback')]/ancestor::a//button[contains(text(), 'Chat Now')]"
         )
 
-    @property
-    def survey_card(self) -> Locator:
-        """Survey card."""
-        return self.page.locator("h3").filter(has_text="Survey").locator("..")
-
-    @property
-    def survey_title(self) -> Locator:
-        """Survey card title."""
-        return self.page.locator("h3").filter(has_text="Survey")
-
-    @property
-    def survey_description(self) -> Locator:
-        """Survey card description."""
-        return self.page.locator("p").filter(
-            has_text="Fill out a survey to share your experience using CodeMie."
-        )
-
-    @property
-    def survey_button(self) -> Locator:
-        """Open Survey button on Survey card."""
-        return self.page.locator(
-            "//h3[contains(text(), 'Survey')]/ancestor::a//button[contains(text(), 'Open Survey')]"
-        )
-
     # Interactive Tours section
     @property
     def interactive_tours_section_header(self) -> Locator:
@@ -459,12 +435,6 @@ class HelpPage(BasePage):
         self.ai_run_feedback_button.click()
         return self
 
-    @step
-    def click_survey_button(self):
-        """Click the Open Survey button on Survey card."""
-        self.survey_button.click()
-        return self
-
     # Verification methods
     @step
     def should_be_on_help_page(self):
@@ -544,11 +514,6 @@ class HelpPage(BasePage):
             expect(self.ai_run_feedback_title).to_be_visible()
             expect(self.ai_run_feedback_description).to_be_visible()
             expect(self.ai_run_feedback_button).to_be_visible()
-
-            expect(self.survey_card).to_be_visible()
-            expect(self.survey_title).to_be_visible()
-            expect(self.survey_description).to_be_visible()
-            expect(self.survey_button).to_be_visible()
         return self
 
     @step
@@ -620,10 +585,4 @@ class HelpPage(BasePage):
         link_locator = self.page.locator(
             "//h3[contains(text(), 'CodeMie Learning Courses')]/ancestor::a"
         )
-        return link_locator.get_attribute("href")
-
-    @step
-    def get_survey_href(self) -> str:
-        """Get the href attribute from Survey card link."""
-        link_locator = self.page.locator("//h3[contains(text(), 'Survey')]/ancestor::a")
         return link_locator.get_attribute("href")

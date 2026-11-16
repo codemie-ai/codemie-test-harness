@@ -28,11 +28,12 @@ from codemie_test_harness.tests.ui.pageobject.administration.user_management_pag
 
 @pytest.mark.user
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_deactivate_user_from_user_management_with_confirmation(
-    page, user_utils, disposable_user
+    page, user_utils, admin_user
 ):
     # @case platform-admins-deactivate-reactivate-users_TC_014
-    email, user_id, _ = disposable_user
+    email, user_id = admin_user.email, admin_user.user_id
     display_name = user_utils.get_display_name(user_id)
     users_page = UserManagementPage(page).navigate_to()
     users_page.search_user(email)
@@ -62,11 +63,12 @@ def test_deactivate_user_from_user_management_with_confirmation(
 
 @pytest.mark.user
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_reactivate_user_from_user_management_with_confirmation(
-    page, user_utils, disposable_user
+    page, user_utils, admin_user
 ):
     # @case platform-admins-deactivate-reactivate-users_TC_015
-    email, user_id, _ = disposable_user
+    email, user_id = admin_user.email, admin_user.user_id
     display_name = user_utils.get_display_name(user_id)
     user_utils.deactivate_user(user_id)
     users_page = UserManagementPage(page).navigate_to()
@@ -98,11 +100,12 @@ def test_reactivate_user_from_user_management_with_confirmation(
 
 @pytest.mark.user
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_user_management_shows_backend_error_when_status_change_fails(
-    page, user_utils, disposable_user
+    page, user_utils, admin_user
 ):
     # @case platform-admins-deactivate-reactivate-users_TC_016
-    email, user_id, _ = disposable_user
+    email, user_id = admin_user.email, admin_user.user_id
     user_utils.deactivate_user(user_id)
     users_page = UserManagementPage(page).navigate_to()
     users_page.search_user(email)
@@ -117,6 +120,7 @@ def test_user_management_shows_backend_error_when_status_change_fails(
 
 @pytest.mark.user
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_user_management_hides_deactivate_on_own_row(page, user_utils):
     # @case platform-admins-deactivate-reactivate-users_TC_017
     own_email = user_utils.get_about_me().email

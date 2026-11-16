@@ -34,6 +34,7 @@ class EnvironmentResolver:
     - prod: Production domains
     - preview: Preview domains
     - oss_preview: OSS Preview domains
+    - oss_standalone: OSS standalone domains (local auth, no Keycloak)
     - localhost: Local development
     - azure: Azure sandbox environments
     - gcp: GCP sandbox environments
@@ -47,6 +48,7 @@ class EnvironmentResolver:
         (r"codemie\.lab\.", Environment.PRODUCTION),
         (r"codemie-preview\.lab\.", Environment.PREVIEW),
         (r"codemie-preview-oss\.lab\.", Environment.OSS_PREVIEW),
+        (r"codemie-preview-oss-standalone\.", Environment.OSS_STANDALONE),
         (r"codemie-azure\.eks-sandbox\.", Environment.AZURE),
         (r"codemie-gcp\.eks-sandbox\.", Environment.GCP),
         (r"codemie-aws\.eks-sandbox\.", Environment.AWS),
@@ -113,6 +115,17 @@ class EnvironmentResolver:
     def is_localhost(cls) -> bool:
         """Check if current environment is localhost."""
         return cls.get_environment().is_localhost
+
+    @classmethod
+    def is_oss_standalone(cls) -> bool:
+        """Check if current environment is the OSS standalone stand (local auth, no Keycloak)."""
+        return cls.get_environment().is_oss_standalone
+
+    @classmethod
+    def uses_local_auth(cls) -> bool:
+        """Check if the current stand manages users through the admin API instead of
+        an external identity provider (localhost and OSS standalone)."""
+        return cls.get_environment().uses_local_auth
 
     @classmethod
     def is_sandbox(cls) -> bool:

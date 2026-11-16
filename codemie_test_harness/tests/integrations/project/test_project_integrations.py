@@ -44,6 +44,7 @@ from codemie_test_harness.tests.utils.base_utils import (
     "credential_type, credentials",
     valid_integrations,
 )
+@pytest.mark.oss_standalone
 def test_integration_created(
     credential_type, credentials, general_integration, integration_utils
 ):
@@ -77,6 +78,7 @@ def test_integration_created(
     "credential_type, credentials",
     testable_integrations,
 )
+@pytest.mark.oss_standalone
 def test_integration_after_creation(
     credential_type, credentials, general_integration, integration_utils
 ):
@@ -115,6 +117,7 @@ def test_integration_after_creation(
     "credential_type, credentials, error_message",
     invalid_integrations,
 )
+@pytest.mark.oss_standalone
 def test_integration_with_invalid_credentials(
     credential_type, credentials, error_message, integration_utils
 ):
@@ -157,6 +160,7 @@ def test_integration_with_invalid_credentials(
     "credential_type, credentials",
     testable_integrations,
 )
+@pytest.mark.oss_standalone
 def test_integration_during_creation(credential_type, credentials, integration_utils):
     integration_test_model = IntegrationTestRequest(
         credential_type=credential_type,
@@ -181,6 +185,7 @@ def test_integration_during_creation(credential_type, credentials, integration_u
     "credential_type, credentials, error_message",
     invalid_integrations,
 )
+@pytest.mark.oss_standalone
 def test_integration_during_creation_with_invalid_credentials(
     credential_type, credentials, error_message, integration_utils
 ):
@@ -203,6 +208,7 @@ def test_integration_during_creation_with_invalid_credentials(
     "credential_type, credentials",
     valid_integrations,
 )
+@pytest.mark.oss_standalone
 def test_delete_integration(
     credential_type, credentials, general_integration, integration_utils
 ):

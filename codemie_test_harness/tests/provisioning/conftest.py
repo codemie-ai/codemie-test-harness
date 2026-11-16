@@ -22,6 +22,7 @@ by the capability gate (``requires_setting``).
 
 import logging
 import secrets
+from contextlib import ExitStack
 
 import pytest
 from requests import HTTPError
@@ -35,7 +36,7 @@ from codemie_test_harness.cli.constants import (
     KEY_PROVISIONING_READ_SECRET,
 )
 from codemie_test_harness.tests import VERIFY_SSL
-from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.user_lifecycle_utils import new_logged_in_user
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.provisioning_utils import (
     ClientCredentialsTokenSource,
@@ -168,16 +169,11 @@ def late_user(keycloak_utils):
     The users are deleted after the test. Request this fixture before ``provisioning_utils``, so
     the users are still there when the projects they belong to are removed.
     """
-    emails: list[str] = []
+    with ExitStack() as created_users:
 
-    def create(email: str) -> str:
-        password = keycloak_utils.create_platform_user(email=email)
-        emails.append(email)
-        return get_client(username=email, password=password).users.about_me().user_id
+        def create(email: str) -> str:
+            return created_users.enter_context(
+                new_logged_in_user(keycloak_utils, email, admin=False)
+            ).user_id
 
-    yield create
-    for email in emails:
-        try:
-            keycloak_utils.delete_user(email)
-        except Exception as e:
-            logger.warning(f"Failed to delete user {email}: {e}")
+        yield create

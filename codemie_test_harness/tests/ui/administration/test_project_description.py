@@ -71,6 +71,7 @@ def created_project_names(project_utils):
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_create_project_modal_accepts_empty_description(
     page, project_utils, created_project_names
 ):
@@ -124,6 +125,7 @@ def test_create_project_modal_accepts_empty_description(
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_project_details_page_shows_no_description_placeholder(
     page, project_utils, project
 ):
