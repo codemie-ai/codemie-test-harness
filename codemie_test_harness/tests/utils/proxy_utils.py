@@ -39,6 +39,20 @@ class ProxyUtils(BaseUtils):
             "X-CodeMie-Branch": "Función nueva",
         }
 
+    def send_messages_until_status(
+        self, status_code: int, max_attempts: int, make_messages, **request_kwargs
+    ) -> requests.Response:
+        """Send /v1/messages requests with fresh messages until one answers with the status code;
+        returns the last response."""
+        response = None
+        for _ in range(max_attempts):
+            response = self.send_messages_request(
+                messages=make_messages(), **request_kwargs
+            )
+            if response.status_code == status_code:
+                break
+        return response
+
     def send_messages_request(
         self,
         model: str,

@@ -282,6 +282,10 @@ def test_cli_spending_reverts_to_personal_after_project_unassignment(
     default_llm,
     admin_project_utils,
 ):
+    # User 2 is a platform admin, so after the removal the named project is not rejected
+    # with 403: the header is ignored and the request is charged to the default project,
+    # which is the personal budget here because no default is assigned. The 403 for a
+    # regular user is covered in test_default_project_attribution.py.
     user2_email, _ = keycloak_user_2
     project_name, user2_id = lifecycle_project
     cli_customer_id = f"{user2_email}_{DEFAULT_CLI_BUDGET_ID}"
@@ -378,6 +382,10 @@ def test_premium_spending_reverts_to_personal_after_project_unassignment(
     project_budget_groups,
     admin_project_utils,
 ):
+    # User 2 is a platform admin, so after the removal the named project is not rejected
+    # with 403: the header is ignored and the request is charged to the default project,
+    # which is the personal budget here because no default is assigned. The 403 for a
+    # regular user is covered in test_default_project_attribution.py.
     user2_email, _ = keycloak_user_2
     project_name, user2_id = lifecycle_project
     premium_customer_id = f"{user2_email}_{DEFAULT_PREMIUM_BUDGET_ID}"

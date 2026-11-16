@@ -42,10 +42,12 @@ class LocalUserUtils:
         random.SystemRandom().shuffle(chars)
         return "".join(chars)
 
-    def create_test_user(self, email: str, project_name: str) -> str:
+    def create_test_user(
+        self, email: str, project_name: str, username: str | None = None
+    ) -> str:
         password = self._generate_password()
         self._client.admin.create_local_user(
-            email=email, username=email, password=password, is_admin=True
+            email=email, username=username or email, password=password, is_admin=True
         )
         return password
 

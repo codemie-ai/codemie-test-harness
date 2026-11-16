@@ -537,6 +537,31 @@ class AssistantUtils(BaseUtils):
     def send_evaluate_assistant_request(self, assistant_id: str, evaluation_request):
         return self.client.assistants.evaluate(assistant_id, evaluation_request)
 
+    def ask_until_text_in_reply(
+        self, assistant, make_prompt, text: str, max_attempts: int
+    ) -> str:
+        """Ask again with a fresh prompt until the reply contains the text; returns the last reply."""
+        reply = ""
+        for _ in range(max_attempts):
+            reply = self.ask_assistant(assistant, make_prompt())
+            if text in reply:
+                break
+        return reply
+
+    def generate_assistant_details(self, text: str):
+        """Ask the platform to generate assistant details; nothing is created."""
+        return self.client.assistants.generate(text=text)
+
+    def generate_assistant_prompt(self, text: str):
+        """Ask the platform to generate a system prompt; nothing is created."""
+        return self.client.assistants.generate_prompt(text=text)
+
+    def refine_assistant(self, system_prompt: str, refine_prompt: str):
+        """Ask the platform for recommendations on an assistant draft."""
+        return self.client.assistants.refine(
+            system_prompt=system_prompt, refine_prompt=refine_prompt
+        )
+
     def publish_assistant_to_marketplace(
         self, assistant_id: str, categories=None, ignore_recommendations=False
     ):

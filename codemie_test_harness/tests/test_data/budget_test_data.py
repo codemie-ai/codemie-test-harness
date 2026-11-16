@@ -46,6 +46,16 @@ MEMBER_OVERRIDE_CUSTOMER_ID_TEMPLATE = (
 CHROME_EXTENSION_CLIENT_HEADER = {"X-CodeMie-Client": "codemie-chrome-extension"}
 
 
+# Budgets small enough for a few long answers to exhaust the hard limit.
+EXHAUSTIBLE_PLATFORM_BUDGET = {"platform": {"max_budget": 0.05, "soft_budget": 0.02}}
+EXHAUSTIBLE_CLI_BUDGET = {"cli": {"max_budget": 0.05, "soft_budget": 0.02}}
+# A soft limit that the first long answer passes, with a hard limit far away.
+SOFT_LIMIT_PLATFORM_BUDGET = {"platform": {"max_budget": 100.0, "soft_budget": 0.001}}
+SOFT_LIMIT_BUDGET = 0.001
+BUDGET_EXCEEDED_MESSAGE = "Your LLM usage budget has been exceeded"
+BUDGET_EXCEEDED_STATUS = 429
+MAX_EXHAUSTING_ATTEMPTS = 8
+
 PLATFORM_BUDGET_CATEGORIES = {"platform": {"max_budget": 100.0, "soft_budget": 50.0}}
 CLI_BUDGET_CATEGORIES = {"cli": {"max_budget": 100.0, "soft_budget": 50.0}}
 PREMIUM_BUDGET_CATEGORIES = {
@@ -68,6 +78,31 @@ CLI_PROJECT_HEADER = "X-CodeMie-Project"
 
 def budget_skill_description() -> str:
     return f"Skill that summarises meeting notes. Debug uuid: {uuid.uuid4()}"
+
+
+def budget_math_prompt() -> str:
+    return f"Calculate 17 multiplied by 23 and give the number only. Debug uuid: {uuid.uuid4()}"
+
+
+def budget_generation_text() -> str:
+    return f"Assistant that greets visitors politely. Debug uuid: {uuid.uuid4()}"
+
+
+# AI generation and refinement requests that are billed to no asset, by request name.
+GENERATION_REQUEST_NAMES = [
+    "assistant_generate",
+    "assistant_prompt_generate",
+    "assistant_refine",
+    "skill_generate",
+    "skill_refine",
+]
+
+# A scheduled run starts at the next but one minute of the hour and then takes the time
+# of the chat and of LiteLLM writing its spend.
+SCHEDULED_RUN_CHARGE_TIMEOUT = 420
+
+# State name of the single-state workflows the budget tests run.
+BUDGET_WORKFLOW_STATE = "budget_test_state"
 
 
 def project_key_alias(project_name: str, category: str = "platform") -> str:
