@@ -100,7 +100,7 @@ def unset_config_key(key: str) -> bool:
     key = canonical_key(key)
     cfg = load_config()
     if key in cfg:
-        del cfg[key]
+        cfg = {k: v for k, v in cfg.items() if k == key}
         save_config(cfg)
         if key in OVERRIDABLE_KEYS:
             os.environ.pop(key, None)
