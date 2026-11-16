@@ -29,6 +29,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_create_project_with_duplicate_name(project_utils, project):
     """Test that creating a project with duplicate name fails with 409."""
     created_project = project()
@@ -48,6 +49,7 @@ def test_create_project_with_duplicate_name(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_create_project_with_empty_name(project_utils):
     """Test that creating a project with empty name fails with 400."""
     with pytest.raises(HTTPError) as exc_info:
@@ -65,6 +67,7 @@ def test_create_project_with_empty_name(project_utils):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_project_description_and_clear_description_together_returns_422(
     project_utils, project
 ):
@@ -114,6 +117,7 @@ def test_update_project_description_and_clear_description_together_returns_422(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_get_nonexistent_project_detail(project_utils):
     """Test getting details of non-existent project returns 404."""
     fake_project_name = get_random_name()
@@ -130,6 +134,7 @@ def test_get_nonexistent_project_detail(project_utils):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_nonexistent_project(project_utils):
     """Test updating a non-existent project returns 404."""
     fake_project_name = get_random_name()
@@ -149,6 +154,7 @@ def test_update_nonexistent_project(project_utils):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_project_name_fails_with_assigned_users(project_utils, project):
     """Test that renaming a project fails when users are assigned.
 
@@ -182,6 +188,7 @@ def test_update_project_name_fails_with_assigned_users(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_delete_nonexistent_project(project_utils):
     """Test deleting a non-existent project returns 404."""
     fake_project_name = get_random_name()
@@ -201,6 +208,7 @@ def test_delete_nonexistent_project(project_utils):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_assign_nonexistent_user_to_project(project_utils, project):
     """Test assigning a non-existent user returns 404."""
     created_project = project()
@@ -222,6 +230,7 @@ def test_assign_nonexistent_user_to_project(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_assignment_for_non_assigned_user(project_utils, project):
     """Test updating assignment for a user not assigned to project fails."""
     created_project = project()
@@ -246,6 +255,7 @@ def test_update_assignment_for_non_assigned_user(project_utils, project):
 @pytest.mark.project
 @pytest.mark.api
 @pytest.mark.smoke
+@pytest.mark.oss_standalone
 def test_remove_project_creator_fails(project_utils, project, user_utils):
     """Test that project creator cannot be removed.
 
@@ -273,6 +283,7 @@ def test_remove_project_creator_fails(project_utils, project, user_utils):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_bulk_assign_empty_list(project_utils, project):
     """Test bulk assigning with empty user list is rejected by the SDK before hitting the API.
 
@@ -289,6 +300,7 @@ def test_bulk_assign_empty_list(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_bulk_remove_project_creator_fails(project_utils, project, user_utils):
     """Test that project creator cannot be removed via bulk operations.
 
@@ -322,6 +334,7 @@ def test_bulk_remove_project_creator_fails(project_utils, project, user_utils):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_bulk_remove_empty_list(project_utils, project):
     """Test bulk removing with empty user list fails with 422."""
     created_project = project()
@@ -345,6 +358,7 @@ def test_bulk_remove_empty_list(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_validate_csv_with_malformed_format(project_utils, project):
     """Test CSV validation fails with 422 for malformed CSV (no header row)."""
     created_project = project()
@@ -369,6 +383,7 @@ another@example.com,project_admin
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_validate_csv_with_missing_email_column(project_utils, project):
     """Test CSV validation fails with 422 when required 'email' column is absent."""
     created_project = project()
@@ -393,6 +408,7 @@ user
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_import_csv_for_nonexistent_project(project_utils):
     """Test importing CSV for non-existent project returns 404."""
     fake_project_name = get_random_name()
@@ -416,6 +432,7 @@ test@example.com,user
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_import_empty_csv(project_utils, project):
     """Test importing CSV with header only fails with 422."""
     created_project = project()

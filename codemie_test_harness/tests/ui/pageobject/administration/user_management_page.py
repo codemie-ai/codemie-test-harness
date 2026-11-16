@@ -94,8 +94,13 @@ class UserManagementPage(BasePage):
         return self.user_rows.filter(has_text=email)
 
     def _user_email_button(self, email: str):
-        """Button labelled with the user's email address (opens User Details dialog)."""
-        return self._user_row(email).get_by_role("button", name=email)
+        """Button labelled with the user's email address (opens User Details dialog).
+
+        Must be exact: the row's 'More options' button has an `aria-labelledby` that
+        includes the user-name element, so its computed accessible name contains the
+        email too and a substring match resolves to both buttons.
+        """
+        return self._user_row(email).get_by_role("button", name=email, exact=True)
 
     def _row_menu_button(self, email: str):
         """'More options' button in the actions cell of the user's row."""

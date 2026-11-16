@@ -62,8 +62,8 @@ def remap_project(admin_utils, project_utils):
 
 
 @pytest.fixture
-def owned_conversation_factory(disposable_user, user_utils):
-    """Factory: create a conversation as `disposable_user`'s client, deleted afterwards.
+def owned_conversation_factory(admin_user, user_utils):
+    """Factory: create a conversation as `admin_user`'s client, deleted afterwards.
 
     `delete_project_cascade` removes assistants, workflows and budgets scoped to a
     project, but not conversations, so a conversation created for one of these tests
@@ -78,7 +78,7 @@ def owned_conversation_factory(disposable_user, user_utils):
     teardown remaps the row back to `old_user_id` before deleting with
     `old_user_client`, which owns it again at that point.
     """
-    _, old_user_id, old_user_client = disposable_user
+    old_user_id, old_user_client = admin_user.user_id, admin_user.client
     conversation_utils = ConversationUtils(old_user_client)
     created_ids = []
     current_owner_id = old_user_id
@@ -111,9 +111,9 @@ def owned_conversation_factory(disposable_user, user_utils):
 
 @pytest.mark.user
 @pytest.mark.api
-def test_remap_moves_user_to_new_id(user_utils, disposable_user, new_user_id_factory):
+def test_remap_moves_user_to_new_id(user_utils, admin_user, new_user_id_factory):
     # @case identity-remap-migration_TC_001
-    _, old_user_id, _ = disposable_user
+    old_user_id = admin_user.user_id
     new_user_id = new_user_id_factory()
 
     remapped = user_utils.remap_user(old_user_id, new_user_id)
@@ -149,14 +149,14 @@ def test_remap_moves_owned_content_to_new_user_id(
     assistant_utils,
     workflow_utils,
     admin_project_budget_utils,
-    disposable_user,
+    admin_user,
     new_user_id_factory,
     remap_project,
     owned_conversation_factory,
     default_llm,
 ):
     # @case identity-remap-migration_TC_003
-    _, old_user_id, old_user_client = disposable_user
+    old_user_id, old_user_client = admin_user.user_id, admin_user.client
     new_user_id = new_user_id_factory()
     project_name = remap_project
 
@@ -281,11 +281,11 @@ def test_remap_moves_owned_content_to_new_user_id(
 @pytest.mark.user
 @pytest.mark.api
 def test_remap_to_existing_different_user_id_is_rejected_not_merged(
-    user_utils, disposable_user, second_disposable_user
+    user_utils, admin_user, second_admin_user
 ):
     # @case identity-remap-migration_TC_004
-    _, old_user_id, _ = disposable_user
-    _, existing_user_id, _ = second_disposable_user
+    old_user_id = admin_user.user_id
+    existing_user_id = second_admin_user.user_id
 
     with pytest.raises(HTTPError) as exc_info:
         user_utils.remap_user(old_user_id, existing_user_id)
@@ -318,10 +318,10 @@ def test_remap_to_existing_different_user_id_is_rejected_not_merged(
 @pytest.mark.user
 @pytest.mark.api
 def test_remap_already_migrated_pair_is_idempotent(
-    user_utils, disposable_user, new_user_id_factory
+    user_utils, admin_user, new_user_id_factory
 ):
     # @case identity-remap-migration_TC_005
-    _, old_user_id, _ = disposable_user
+    old_user_id = admin_user.user_id
     new_user_id = new_user_id_factory()
     first = user_utils.remap_user(old_user_id, new_user_id)
 
@@ -346,9 +346,7 @@ def test_remap_already_migrated_pair_is_idempotent(
 
 @pytest.mark.user
 @pytest.mark.api
-def test_default_user_cannot_remap_user(
-    user_utils, default_user_utils, disposable_user
-):
+def test_default_user_cannot_remap_user(user_utils, default_user_utils, admin_user):
     """A plain user holding none of the admin/maintainer/auditor roles must not be able
     to call the remap endpoint. `maintainer_client` cannot stand in for that actor here:
     the backend's own role normalization sets is_admin on every maintainer, so maintainer
@@ -357,7 +355,7 @@ def test_default_user_cannot_remap_user(
     uses to prove 403 on the sibling admin user-management endpoints. The target id is a
     bare string, not `new_user_id_factory`: a rejected call never creates a row to clean up.
     """
-    _, old_user_id, _ = disposable_user
+    old_user_id = admin_user.user_id
     new_user_id = f"autotest-remap-denied-{get_random_name()}"
 
     status = default_user_utils.remap_user_status_code(old_user_id, new_user_id)
@@ -401,10 +399,10 @@ def test_remap_when_neither_id_exists_returns_404(user_utils):
 @pytest.mark.user
 @pytest.mark.api
 def test_remap_old_user_id_ceases_to_resolve(
-    user_utils, disposable_user, new_user_id_factory
+    user_utils, admin_user, new_user_id_factory
 ):
     # @case identity-remap-migration_TC_009
-    _, old_user_id, _ = disposable_user
+    old_user_id = admin_user.user_id
     new_user_id = new_user_id_factory()
 
     user_utils.remap_user(old_user_id, new_user_id)

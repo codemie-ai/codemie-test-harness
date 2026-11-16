@@ -80,6 +80,7 @@ def _alias_datetime_within_tolerance(
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_alias_auto_generation_happy_path(page):
     """
     TC-001: Alias auto-generation happy path.
@@ -147,6 +148,7 @@ def test_alias_auto_generation_happy_path(page):
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_manual_alias_override_retained(page):
     """
     TC-002 Part A: Manual alias override is retained after submission.

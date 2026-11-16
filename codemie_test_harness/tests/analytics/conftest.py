@@ -14,7 +14,7 @@
 
 """Fixtures for CLI Analytics tests (/v1/analytics/cli-analytics/*)."""
 
-import secrets
+from contextlib import ExitStack
 from dataclasses import dataclass
 
 import pytest
@@ -46,7 +46,10 @@ from codemie_test_harness.tests.utils.cli_gate_utils import (
     wait_until_ingest_ready,
     wait_until_listed,
 )
-from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    new_logged_in_user,
+    user_email,
+)
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.logger_util import setup_logger
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
@@ -224,40 +227,39 @@ def project_world(
 ):
     """A fresh enabled project with a plain member and a project admin of its own."""
     name = get_project_create_data()["name"]
-    admin_email = f"autotest_cliprojadmin_{secrets.token_hex(4)}@email.com"
-    try:
+    with ExitStack() as cleanup:
+        # Created before the project so that its cleanup runs after the project's.
+        project_admin = cleanup.enter_context(
+            new_logged_in_user(
+                keycloak_utils, user_email("cliprojadmin"), admin=False, strict=True
+            )
+        )
+        cleanup.callback(delete_projects_strict, project_utils, [name])
         admin_utils.create_project(name)
         admin_projects = ProjectUtils(gate_admin_client)
         admin_projects.update_project(name, cli_analytics_enabled=True)
         # before any grant: a user without membership must get 404, else the BE runs with
         # ENV=local (everyone is a global admin) and no role check proves anything
         assert_roles_are_real(unrelated_client, name)
-        password = keycloak_utils.create_platform_user(email=admin_email)
-        project_admin = get_client(username=admin_email, password=password)
         user_utils.assign_user_to_project(
             gate_member_client.users.about_me().user_id, name
         )
         user_utils.assign_user_to_project(
-            project_admin.users.about_me().user_id, name, is_project_admin=True
+            project_admin.user_id, name, is_project_admin=True
         )
         wait_until_accessible(gate_member_client, [name])
-        wait_until_accessible(project_admin, [name])
+        wait_until_accessible(project_admin.client, [name])
         wait_until_ingest_ready(gate_member_client, {name: ""})
         yield ProjectWorld(
             name,
             {
                 "admin": gate_admin_client,
                 "member": gate_member_client,
-                "project_admin": project_admin,
+                "project_admin": project_admin.client,
                 "unrelated": unrelated_client,
             },
             admin_projects,
         )
-    finally:
-        try:
-            delete_projects_strict(project_utils, [name])
-        finally:
-            keycloak_utils.delete_user(admin_email)
 
 
 @dataclass
@@ -319,24 +321,19 @@ def cli_analytics_project(create_cli_analytics_project):
 @pytest.fixture(scope="module")
 def cli_analytics_users(cli_analytics_enabled, keycloak_utils):
     """Fresh users keyed by role; sessions are attributed to the user that sends them."""
-    users = {}
-    try:
+    # strict: a user that cannot be deleted fails the teardown instead of being left behind.
+    with ExitStack() as cleanup:
+        users = {}
         for role in CLI_ANALYTICS_USERS:
-            email = f"autotest_clia_{secrets.token_hex(4)}@email.com"
-            password = keycloak_utils.create_platform_user(email=email)
-            user_client = get_client(username=email, password=password)
-            user_id = user_client.users.about_me().user_id
-            users[role] = CliAnalyticsUser(email, user_id, AnalyticsUtils(user_client))
+            user = cleanup.enter_context(
+                new_logged_in_user(
+                    keycloak_utils, user_email("clia"), admin=False, strict=True
+                )
+            )
+            users[role] = CliAnalyticsUser(
+                user.email, user.user_id, AnalyticsUtils(user.client)
+            )
         yield users
-    finally:
-        failed = {}
-        for user in users.values():
-            try:
-                keycloak_utils.delete_user(user.email)
-            except Exception as e:
-                failed[user.email] = e
-        if failed:
-            raise AssertionError(f"users left behind on the stand: {failed}")
 
 
 @pytest.fixture(scope="module")

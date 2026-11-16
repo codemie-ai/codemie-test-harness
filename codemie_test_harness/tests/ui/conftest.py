@@ -127,9 +127,17 @@ def cleanup_faq_assistant_conversations():
     """Delete all conversations for AI/Run FAQ assistant after each test."""
     yield
     client = get_client()
-    assistants = client.assistants.list(
-        filters={"search": AssistantNames.AI_RUN_FAQ}, per_page=200, scope="marketplace"
-    )
+    try:
+        assistants = client.assistants.list(
+            filters={"search": AssistantNames.AI_RUN_FAQ},
+            per_page=200,
+            scope="marketplace",
+        )
+    except HTTPError:
+        if not EnvironmentResolver.is_oss_standalone():
+            raise
+        # OSS standalone has no assistants, so there is nothing to clean up.
+        return
     assistant = next(
         (a for a in assistants if a.name == AssistantNames.AI_RUN_FAQ), None
     )

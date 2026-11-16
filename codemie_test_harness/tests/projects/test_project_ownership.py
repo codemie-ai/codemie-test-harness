@@ -60,13 +60,14 @@ def _member_roles(project_utils, project_name):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_persists_new_owner(
-    project_utils, non_admin_user, ownership_project
+    project_utils, platform_user, ownership_project
 ):
     """
     detail, read in a separate request, reports the same owner.
     """
-    _, new_owner_id, _ = non_admin_user
+    new_owner_id = platform_user.user_id
 
     response = project_utils.transfer_ownership(ownership_project.name, new_owner_id)
 
@@ -88,13 +89,14 @@ def test_transfer_ownership_persists_new_owner(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_by_unauthorized_user_returns_404(
-    project_utils, non_admin_user, ownership_project
+    project_utils, platform_user, ownership_project
 ):
     """
     does not exist (existence hiding) and the owner stays unchanged.
     """
-    _, member_id, member_client = non_admin_user
+    member_id, member_client = platform_user.user_id, platform_user.client
 
     with pytest.raises(HTTPError) as exc_info:
         ProjectUtils(member_client).transfer_ownership(
@@ -120,14 +122,15 @@ def test_transfer_ownership_by_unauthorized_user_returns_404(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_keeps_members_and_previous_owner(
-    project_utils, non_admin_user, extra_platform_user, ownership_project
+    project_utils, platform_user, second_platform_user, ownership_project
 ):
     """
     removed, every role is unchanged and the previous owner stays a project member.
     """
-    _, admin_member_id, _ = non_admin_user
-    _, plain_member_id = extra_platform_user
+    admin_member_id = platform_user.user_id
+    plain_member_id = second_platform_user.user_id
     project_utils.assign_user_to_project(
         ownership_project.name, admin_member_id, is_project_admin=True
     )
@@ -162,13 +165,14 @@ def test_transfer_ownership_keeps_members_and_previous_owner(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_to_non_member_adds_new_owner_as_project_admin(
-    project_utils, non_admin_user, ownership_project
+    project_utils, platform_user, ownership_project
 ):
     """
     as a project admin.
     """
-    _, new_owner_id, _ = non_admin_user
+    new_owner_id = platform_user.user_id
     assert_that(
         [
             m.user_id
@@ -189,6 +193,7 @@ def test_transfer_ownership_to_non_member_adds_new_owner_as_project_admin(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_to_missing_user_returns_404(
     project_utils, ownership_project
 ):
@@ -217,13 +222,14 @@ def test_transfer_ownership_to_missing_user_returns_404(
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_transfer_ownership_of_personal_project_returns_403(
-    project_utils, non_admin_user
+    project_utils, platform_user
 ):
     """
     request is rejected with 403 and the owner stays unchanged.
     """
-    email, member_id, _ = non_admin_user
+    email, member_id = platform_user.email, platform_user.user_id
     owner_before = project_utils.get_project_detail(email).created_by
 
     with pytest.raises(HTTPError) as exc_info:

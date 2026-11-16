@@ -112,10 +112,10 @@ def test_set_budget_naming_deleted_cost_center_is_rejected_with_409(
 @pytest.mark.requires_setting(*PROVISIONING_FULL_CLIENT_KEYS)
 @pytest.mark.api
 def test_set_budget_for_personal_project_is_rejected_with_403(
-    provisioning_full, non_admin_user, provisioning_utils
+    provisioning_full, platform_user, provisioning_utils
 ):
     # @case provisioning-api-for-third-party_TC_009
-    personal_project, _, _ = non_admin_user
+    personal_project = platform_user.email
     state_before = provisioning_utils.state(personal_project)
     assert_that(
         state_before.exists,

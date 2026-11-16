@@ -40,6 +40,7 @@ from codemie_test_harness.tests.ui.test_data.integration_test_data import (
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_delete_integration_with_confirmation(page: Page):
     """
     Test deleting an integration with confirmation dialog.
