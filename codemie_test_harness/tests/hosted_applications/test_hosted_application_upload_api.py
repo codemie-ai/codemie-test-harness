@@ -58,7 +58,6 @@ CAPABILITY = "features:hostedApplications"
 
 
 @pytest.mark.requires_capability(CAPABILITY)
-@pytest.mark.requires_setting("FRONTEND_URL")
 @pytest.mark.parametrize("bundle", SPA_BUNDLES, ids=[item.id for item in SPA_BUNDLES])
 @pytest.mark.hosted_applications
 @pytest.mark.api

@@ -43,7 +43,6 @@ def content_session(hosted_live_app, hosted_owner):
 
 
 @pytest.mark.requires_capability(CAPABILITY)
-@pytest.mark.requires_setting("FRONTEND_URL")
 @pytest.mark.parametrize(
     "content_request", CONTENT_REQUESTS, ids=[item.id for item in CONTENT_REQUESTS]
 )
@@ -100,7 +99,6 @@ def test_content_responses_carry_the_server_owned_security_headers(
 
 
 @pytest.mark.requires_capability(CAPABILITY)
-@pytest.mark.requires_setting("FRONTEND_URL")
 @pytest.mark.hosted_applications
 @pytest.mark.api
 def test_top_level_document_request_is_handed_to_the_viewer_origin(content_session):
