@@ -18,14 +18,13 @@ import pytest
 from hamcrest import assert_that, equal_to, is_
 from requests import HTTPError
 
-from codemie_test_harness.cli.constants import PROVISIONING_READ_CLIENT_KEYS
 from codemie_test_harness.tests.test_data.hosted_application_test_data import (
     HIDDEN_REQUESTS,
     HIDDEN_FROM_READER,
     INDEPENDENT_REVIEW_CODE,
     NOT_FOUND_CODE,
     NOT_SUSPENDED_CODE,
-    SERVICE_ACCOUNT_REFUSAL,
+    ACCOUNT_REFUSAL_CODE,
     html_artifact,
 )
 from codemie_test_harness.tests.utils.hosted_application_utils import (
@@ -43,14 +42,13 @@ ACCOUNT_UNAVAILABLE_REASON = "Applications are not available for this account"
 
 
 @pytest.mark.requires_capability(CAPABILITY)
-@pytest.mark.requires_setting(*PROVISIONING_READ_CLIENT_KEYS)
 @pytest.mark.hosted_applications
 @pytest.mark.api
-def test_service_account_sees_hosted_applications_as_unavailable(
-    service_account_hosted,
+def test_external_account_sees_hosted_applications_as_unavailable(
+    external_account_hosted,
 ):
     # @case hosted-applications-upload-share-view_TC_002
-    capabilities = service_account_hosted.capabilities()
+    capabilities = external_account_hosted.capabilities()
 
     assert_that(capabilities.view, is_(False), "the account may not open applications")
     assert_that(capabilities.create, is_(False), "the account may not create them")
@@ -61,7 +59,7 @@ def test_service_account_sees_hosted_applications_as_unavailable(
     )
 
     with pytest.raises(HTTPError) as refused:
-        service_account_hosted.list_applications()
+        external_account_hosted.list_applications()
 
     assert_that(
         error_status(refused.value),
@@ -70,7 +68,7 @@ def test_service_account_sees_hosted_applications_as_unavailable(
     )
     assert_that(
         error_code(refused.value),
-        equal_to(SERVICE_ACCOUNT_REFUSAL),
+        equal_to(ACCOUNT_REFUSAL_CODE),
         "the refusal names the account kind",
     )
 

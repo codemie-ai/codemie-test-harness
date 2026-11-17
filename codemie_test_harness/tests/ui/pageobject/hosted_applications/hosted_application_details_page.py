@@ -20,25 +20,23 @@ from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
-from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_standalone_page import (
-    HostedStandalonePage,
-)
 
 MAX_TAB_PRESSES = 120
+NEW_TAB_NAME = re.compile("new tab", re.IGNORECASE)
 
 
 class HostedApplicationDetailsPage(BasePage):
     """Details page: actions, versions and the upload dialog."""
 
     @property
-    def view_button(self) -> Locator:
-        """View button; disabled until a version is live."""
-        return self.page.get_by_role("button", name="View", exact=True)
+    def open_button(self) -> Locator:
+        """Open button; disabled until a version is live."""
+        return self.page.get_by_role("button", name="Open", exact=True)
 
     @property
-    def open_in_new_tab_button(self) -> Locator:
-        """Open in new tab button."""
-        return self.page.get_by_role("button", name="Open in new tab")
+    def new_tab_controls(self) -> Locator:
+        """Any button of the page that talks about a new tab."""
+        return self.page.get_by_role("button", name=NEW_TAB_NAME)
 
     @property
     def upload_version_button(self) -> Locator:
@@ -81,21 +79,14 @@ class HostedApplicationDetailsPage(BasePage):
     def open(self, app_id: str):
         """Open the details page of an application."""
         self.page.goto(f"/apps/{app_id}")
-        expect(self.view_button).to_be_visible()
+        expect(self.open_button).to_be_visible()
         return self
 
     @step
-    def click_view(self):
-        """Press View."""
-        self.view_button.click()
+    def click_open(self):
+        """Press Open."""
+        self.open_button.click()
         return self
-
-    @step
-    def open_in_new_tab(self) -> HostedStandalonePage:
-        """Press Open in new tab and return the tab it opens."""
-        with self.page.context.expect_page() as opened:
-            self.open_in_new_tab_button.click()
-        return HostedStandalonePage(opened.value)
 
     @step
     def focus_by_keyboard(self, target: Locator):
@@ -114,10 +105,10 @@ class HostedApplicationDetailsPage(BasePage):
         return self
 
     @step
-    def should_show_open_buttons_enabled(self):
-        """View and Open in new tab are both available."""
-        expect(self.view_button).to_be_enabled()
-        expect(self.open_in_new_tab_button).to_be_enabled()
+    def should_offer_open(self):
+        """Open is available, and no control opens the application in a new tab."""
+        expect(self.open_button).to_be_enabled()
+        expect(self.new_tab_controls).to_have_count(0)
         return self
 
     @step

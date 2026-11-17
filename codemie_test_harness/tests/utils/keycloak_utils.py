@@ -160,6 +160,29 @@ class KeycloakUtils:
 
         return password
 
+    def create_external_user(self, email: str) -> str:
+        """Create a user with developer role only whose ``user_type`` attribute is ``external``.
+
+        The platform reads the attribute as the ``user_type`` claim of the user's token, so the
+        account counts as an external user from its first sign-in.
+        """
+        password = self.create_platform_user(email=email)
+        headers = self._get_headers()
+        users_url = f"{self._server_url}admin/realms/{self._realm}/users"
+        found = self._session.get(users_url, params={"email": email}, headers=headers)
+        found.raise_for_status()
+        user_url = f"{users_url}/{found.json()[0]['id']}"
+        current = self._session.get(user_url, headers=headers)
+        current.raise_for_status()
+        user_data = current.json()
+        user_data["attributes"] = {
+            **user_data.get("attributes", {}),
+            "user_type": ["external"],
+        }
+        updated = self._session.put(user_url, json=user_data, headers=headers)
+        updated.raise_for_status()
+        return password
+
     def delete_user(self, email: str) -> None:
         headers = self._get_headers()
         search_url = f"{self._server_url}admin/realms/{self._realm}/users"

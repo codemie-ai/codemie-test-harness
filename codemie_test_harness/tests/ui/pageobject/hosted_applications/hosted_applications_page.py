@@ -21,13 +21,11 @@ from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
-from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_standalone_page import (
-    HostedStandalonePage,
-)
 
 APPS_ROUTE = "/apps"
 PLATFORM_ROUTE = "/apps/platform"
 LEGACY_ROUTE = "/applications"
+NEW_TAB_NAME = re.compile("new tab", re.IGNORECASE)
 # Enough Tab presses to cross the navigation, the header and a page of cards.
 MAX_TAB_PRESSES = 120
 
@@ -60,19 +58,27 @@ class HostedApplicationsPage(BasePage):
 
     def card(self, name: str) -> Locator:
         """The card of the application with this name."""
-        return self.page.get_by_role("article", name=name)
+        return self.page.get_by_role("article", name=name, exact=True)
 
-    def view_button(self, name: str) -> Locator:
-        """View button of a card; its accessible name carries the application name."""
-        return self.card(name).get_by_role("button", name=f"View {name}")
+    def open_card_button(self, name: str) -> Locator:
+        """The card itself as one control: it is named 'Open <name>' while the application can run.
 
-    def open_in_new_tab_button(self, name: str) -> Locator:
-        """Open in new tab button of a card."""
-        return self.card(name).get_by_role("button", name=f"Open {name} in a new tab")
+        The match is exact: the card also holds an overflow menu and, for a manager, a next-step
+        button, whose names are different.
+        """
+        return self.card(name).get_by_role("button", name=f"Open {name}", exact=True)
+
+    def next_step_button(self, name: str, label: str) -> Locator:
+        """The next-step button of a card whose application has nothing live, by its exact label."""
+        return self.card(name).get_by_role("button", name=label, exact=True)
 
     def activate_version_button(self, name: str) -> Locator:
         """Activate version button of a card whose application has nothing live."""
-        return self.card(name).get_by_role("button", name="Activate version")
+        return self.next_step_button(name, "Activate version")
+
+    def new_tab_controls(self, name: str) -> Locator:
+        """Any control of the card that talks about a new tab."""
+        return self.card(name).get_by_role("button", name=NEW_TAB_NAME)
 
     # ------------------------------------------------------------------
     # Navigation
@@ -97,17 +103,10 @@ class HostedApplicationsPage(BasePage):
         return self
 
     @step
-    def click_view(self, name: str):
-        """Press View on a card."""
-        self.view_button(name).click()
+    def click_card(self, name: str):
+        """Click the card of an application that can run; it opens in the viewer."""
+        self.open_card_button(name).click()
         return self
-
-    @step
-    def open_in_new_tab(self, name: str) -> HostedStandalonePage:
-        """Press Open in new tab on a card and return the tab it opens."""
-        with self.page.context.expect_page() as opened:
-            self.open_in_new_tab_button(name).click()
-        return HostedStandalonePage(opened.value)
 
     @step
     def click_activate_version(self, name: str):
@@ -129,9 +128,9 @@ class HostedApplicationsPage(BasePage):
         return self
 
     @step
-    def focus_view_button_by_keyboard(self, name: str):
-        """Tab to the View button of a card."""
-        return self.focus_by_keyboard(self.view_button(name))
+    def focus_card_by_keyboard(self, name: str):
+        """Tab to the card of an application that can run."""
+        return self.focus_by_keyboard(self.open_card_button(name))
 
     @step
     def press_enter(self):
@@ -156,23 +155,24 @@ class HostedApplicationsPage(BasePage):
         return self
 
     @step
-    def should_have_focus_on_view_button(self, name: str):
-        """The focus is on the control named 'View <name>'."""
-        expect(self.view_button(name)).to_be_focused()
+    def should_have_focus_on_card(self, name: str):
+        """The focus is on the one control named 'Open <name>'."""
+        expect(self.open_card_button(name)).to_have_count(1)
+        expect(self.open_card_button(name)).to_be_focused()
         return self
 
     @step
     def should_show_card_without_live_version(self, name: str):
         """The card says the application is not shared and has no live version, and offers Activate version."""
         card = self.card(name)
-        expect(card.get_by_text("Not shared with project")).to_be_visible()
-        expect(card.get_by_text("No active version yet")).to_be_visible()
+        expect(card.get_by_text("Not shared with project", exact=True)).to_be_visible()
+        expect(card.get_by_text("No active version yet", exact=True)).to_be_visible()
         expect(self.activate_version_button(name)).to_be_visible()
         return self
 
     @step
-    def should_show_open_buttons(self, name: str):
-        """The card of an application with a live version offers View and Open in new tab."""
-        expect(self.view_button(name)).to_be_visible()
-        expect(self.open_in_new_tab_button(name)).to_be_visible()
+    def should_not_offer_open_in_new_tab(self, name: str):
+        """The card has no control for opening the application in a new tab."""
+        expect(self.open_card_button(name)).to_be_visible()
+        expect(self.new_tab_controls(name)).to_have_count(0)
         return self

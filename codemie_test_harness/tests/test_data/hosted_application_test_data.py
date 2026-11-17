@@ -30,7 +30,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 # The platform's own error code of a version that did not pass validation, and of an
 # application that may not be opened.
 HIDDEN_FROM_READER = 404
-SERVICE_ACCOUNT_REFUSAL = "ACCOUNT_NOT_SUPPORTED"
+ACCOUNT_REFUSAL_CODE = "ACCOUNT_NOT_SUPPORTED"
 SESSION_ENDED_STATUS = 401
 APPLICATION_LIMIT_CODE = "APPLICATION_LIMIT"
 UPLOAD_CONCURRENCY_LIMIT_CODE = "UPLOAD_CONCURRENCY_LIMIT"

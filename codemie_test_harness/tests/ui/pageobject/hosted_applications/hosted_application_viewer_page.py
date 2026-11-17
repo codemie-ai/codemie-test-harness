@@ -20,21 +20,29 @@ from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
-from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_standalone_page import (
-    HostedStandalonePage,
-)
 
 PROBE_RESULT_ID = "probe-result"
 CONTENT_WAIT_MS = 60000
+NEW_TAB_NAME = re.compile("new tab", re.IGNORECASE)
 
 
 class HostedApplicationViewerPage(BasePage):
     """The viewer: the CodeMie header around a frame that holds the application's own frame."""
 
     @property
-    def open_in_new_tab_button(self) -> Locator:
-        """Open in new tab button of the viewer header."""
-        return self.page.get_by_role("button", name="Open in new tab")
+    def new_tab_controls(self) -> Locator:
+        """Any button of the viewer that talks about a new tab."""
+        return self.page.get_by_role("button", name=NEW_TAB_NAME)
+
+    @property
+    def application_actions_button(self) -> Locator:
+        """Button that opens the overflow menu of the viewer."""
+        return self.page.get_by_role("button", name="Application actions")
+
+    @property
+    def new_tab_menu_items(self) -> Locator:
+        """Any entry of the open overflow menu that talks about a new tab."""
+        return self.page.get_by_role("menuitem", name=NEW_TAB_NAME)
 
     def content(self, app_name: str):
         """The frame of the application itself, inside the viewer's container frame."""
@@ -55,19 +63,6 @@ class HostedApplicationViewerPage(BasePage):
         """Open the viewer of an application at its address."""
         self.page.goto(f"/apps/{app_id}/view")
         return self
-
-    @step
-    def open_preview(self, app_id: str, version_id: str):
-        """Open the preview of one version of an application at its address."""
-        self.page.goto(f"/apps/{app_id}/preview/{version_id}")
-        return self
-
-    @step
-    def open_in_new_tab(self) -> HostedStandalonePage:
-        """Press Open in new tab and return the tab it opens."""
-        with self.page.context.expect_page() as opened:
-            self.open_in_new_tab_button.click()
-        return HostedStandalonePage(opened.value)
 
     @step
     def should_be_on_view_route(self, app_id: str):
@@ -97,4 +92,13 @@ class HostedApplicationViewerPage(BasePage):
         expect(self.probe_report(app_name)).to_have_text(
             report, timeout=CONTENT_WAIT_MS
         )
+        return self
+
+    @step
+    def should_not_offer_open_in_new_tab(self):
+        """Neither the header nor the overflow menu has a control for a new tab."""
+        expect(self.application_actions_button).to_be_visible()
+        expect(self.new_tab_controls).to_have_count(0)
+        self.application_actions_button.click()
+        expect(self.new_tab_menu_items).to_have_count(0)
         return self

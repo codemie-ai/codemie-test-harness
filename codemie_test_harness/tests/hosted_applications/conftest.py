@@ -23,23 +23,14 @@ import secrets
 
 import pytest
 
-from codemie_test_harness.cli.constants import (
-    KEY_PROVISIONING_READ_ID,
-    KEY_PROVISIONING_READ_SECRET,
-)
-from codemie_test_harness.tests import VERIFY_SSL
 from codemie_test_harness.tests.test_data.hosted_application_test_data import (
     html_artifact,
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.client_factory import get_client
-from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.hosted_application_utils import (
     HostedApplicationUtils,
     HostedUser,
-)
-from codemie_test_harness.tests.utils.provisioning_utils import (
-    ClientCredentialsTokenSource,
 )
 from codemie_test_harness.tests.utils.user_utils import UserUtils
 
@@ -130,18 +121,18 @@ def hosted_project_factory(hosted_user_factory, admin_utils, project_utils, user
             logger.warning(f"Failed to delete project {name}: {error}")
 
 
-@pytest.fixture(scope="session")
-def service_account_hosted(client):
-    """Hosted-application service called with the token of a service account.
+@pytest.fixture
+def external_account_hosted(keycloak_utils):
+    """Hosted-application service called as an external user, an account the feature does not serve.
 
-    The account is a registered provisioning client (read-only), minted from the same realm the
-    harness logs in to; a test that uses it needs those settings.
+    The user is created for the test and deleted after it.
     """
-    source = ClientCredentialsTokenSource(
-        CredentialsManager.get_required_parameter("AUTH_SERVER_URL"),
-        CredentialsManager.get_required_parameter("AUTH_REALM_NAME"),
-        CredentialsManager.get_required_parameter(KEY_PROVISIONING_READ_ID),
-        CredentialsManager.get_required_parameter(KEY_PROVISIONING_READ_SECRET),
-        VERIFY_SSL,
-    )
-    return client.hosted_applications.with_token(source.token)
+    email = f"autotest_external_{secrets.token_hex(4)}@email.com"
+    password = keycloak_utils.create_external_user(email=email)
+    try:
+        yield get_client(username=email, password=password).hosted_applications
+    finally:
+        try:
+            keycloak_utils.delete_user(email)
+        except Exception as error:
+            logger.warning(f"Failed to delete user {email}: {error}")
