@@ -19,7 +19,7 @@ applications they created are deleted while those users still exist, and then th
 """
 
 import logging
-import secrets
+from contextlib import ExitStack
 
 import pytest
 
@@ -32,45 +32,47 @@ from codemie_test_harness.tests.utils.hosted_application_utils import (
     HostedApplicationUtils,
     HostedUser,
 )
-from codemie_test_harness.tests.utils.user_utils import UserUtils
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    new_logged_in_user,
+    new_user,
+    user_email,
+)
 
 logger = logging.getLogger(__name__)
 
 
+def cleanup_applications(user: HostedUser) -> None:
+    """Delete the applications ``user`` created; a failure is logged and never stops the teardown."""
+    try:
+        user.apps.cleanup()
+    except Exception as error:
+        logger.warning(f"Failed to clean up applications of {user.email}: {error}")
+
+
 @pytest.fixture
-def hosted_user_factory(keycloak_utils, user_utils):
+def hosted_user_factory(keycloak_utils):
     """Factory: create a plain user (or a platform admin) who can use hosted applications.
 
-    The applications each user created are deleted first, then the users.
+    Each user is created with the shared user helpers. The applications a user created are
+    deleted before that user is, and the user is deleted even when that cleanup fails.
     """
-    users: list[HostedUser] = []
-    emails: list[str] = []
+    with ExitStack() as cleanup:
 
-    def create(admin: bool = False) -> HostedUser:
-        email = f"autotest_hosted_{secrets.token_hex(4)}@email.com"
-        password = keycloak_utils.create_platform_user(email=email)
-        emails.append(email)
-        client = get_client(username=email, password=password)
-        user = HostedUser(
-            email=email,
-            user_id=client.users.about_me().user_id,
-            client=client,
-            apps=HostedApplicationUtils(client),
-        )
-        users.append(user)
-        if admin:
-            user_utils.update_admin_user(user.user_id, is_admin=True)
-            UserUtils(client).wait_until_user_management_effective()
-        return user
+        def create(admin: bool = False) -> HostedUser:
+            logged_in = cleanup.enter_context(
+                new_logged_in_user(keycloak_utils, user_email("hosted"), admin=admin)
+            )
+            user = HostedUser(
+                email=logged_in.email,
+                user_id=logged_in.user_id,
+                client=logged_in.client,
+                apps=HostedApplicationUtils(logged_in.client),
+            )
+            # Registered after the user, so it runs before the user is deleted.
+            cleanup.callback(cleanup_applications, user)
+            return user
 
-    yield create
-    for user in users:
-        user.apps.cleanup()
-    for email in emails:
-        try:
-            keycloak_utils.delete_user(email)
-        except Exception as error:
-            logger.warning(f"Failed to delete user {email}: {error}")
+        yield create
 
 
 @pytest.fixture
@@ -101,20 +103,24 @@ def hosted_live_app(hosted_owner):
 def hosted_project_factory(hosted_user_factory, admin_utils, project_utils, user_utils):
     """Factory: create a shared project and add the given users to it.
 
-    It depends on ``hosted_user_factory``, so the project is deleted before its users.
+    On teardown the applications of those users are deleted first, because an application in
+    the project blocks its deletion; then the project goes. The fixture depends on
+    ``hosted_user_factory``, so both happen before the users are deleted.
     """
-    names: list[str] = []
+    projects: list[tuple[str, tuple[HostedUser, ...]]] = []
 
     def create(*users: HostedUser) -> str:
         name = get_random_name()
         admin_utils.create_project(name)
-        names.append(name)
+        projects.append((name, users))
         for user in users:
             user_utils.assign_user_to_project(user.user_id, name)
         return name
 
     yield create
-    for name in names:
+    for name, users in projects:
+        for user in users:
+            cleanup_applications(user)
         try:
             project_utils.delete_project_with_all_members(name)
         except Exception as error:
@@ -127,12 +133,6 @@ def external_account_hosted(keycloak_utils):
 
     The user is created for the test and deleted after it.
     """
-    email = f"autotest_external_{secrets.token_hex(4)}@email.com"
-    password = keycloak_utils.create_external_user(email=email)
-    try:
+    email = user_email("external")
+    with new_user(keycloak_utils, email, admin=False, external=True) as password:
         yield get_client(username=email, password=password).hosted_applications
-    finally:
-        try:
-            keycloak_utils.delete_user(email)
-        except Exception as error:
-            logger.warning(f"Failed to delete user {email}: {error}")

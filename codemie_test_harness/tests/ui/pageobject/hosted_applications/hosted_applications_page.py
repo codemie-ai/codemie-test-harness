@@ -20,17 +20,16 @@ import re
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
-from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_page_base import (
+    NEW_TAB_NAME,
+    HostedPageBase,
+)
 
 APPS_ROUTE = "/apps"
-PLATFORM_ROUTE = "/apps/platform"
 LEGACY_ROUTE = "/applications"
-NEW_TAB_NAME = re.compile("new tab", re.IGNORECASE)
-# Enough Tab presses to cross the navigation, the header and a page of cards.
-MAX_TAB_PRESSES = 120
 
 
-class HostedApplicationsPage(BasePage):
+class HostedApplicationsPage(HostedPageBase):
     """Applications collections (My apps, Platform apps) and their application cards."""
 
     # ------------------------------------------------------------------
@@ -118,25 +117,9 @@ class HostedApplicationsPage(BasePage):
     # Keyboard
     # ------------------------------------------------------------------
     @step
-    def focus_by_keyboard(self, target: Locator):
-        """Press Tab until ``target`` has the focus; it fails when the control is not reachable."""
-        for _ in range(MAX_TAB_PRESSES):
-            if target.evaluate("element => element === document.activeElement"):
-                return self
-            self.page.keyboard.press("Tab")
-        expect(target).to_be_focused()
-        return self
-
-    @step
     def focus_card_by_keyboard(self, name: str):
         """Tab to the card of an application that can run."""
         return self.focus_by_keyboard(self.open_card_button(name))
-
-    @step
-    def press_enter(self):
-        """Press Enter on the focused control."""
-        self.page.keyboard.press("Enter")
-        return self
 
     # ------------------------------------------------------------------
     # Assertions

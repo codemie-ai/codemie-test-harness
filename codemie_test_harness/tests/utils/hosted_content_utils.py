@@ -25,7 +25,7 @@ from urllib.parse import urlparse
 
 import requests
 from codemie_sdk.models.hosted_application import HostedApplicationLaunch
-from hamcrest import assert_that, contains_string, equal_to
+from hamcrest import assert_that, contains_string, empty, equal_to, is_not
 
 from codemie_test_harness.tests import VERIFY_SSL
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
@@ -83,7 +83,20 @@ class HostedContentSession:
             equal_to(303),
             "redeeming the launch ticket redirects to the viewing session",
         )
-        return response.headers["Set-Cookie"].split(";", 1)[0]
+        # One header per cookie: read the list, never the comma-joined value (an Expires date holds a comma).
+        cookies = response.raw.headers.getlist("Set-Cookie")
+        assert_that(
+            cookies,
+            is_not(empty()),
+            "redeeming the launch ticket sets the viewing-session cookie",
+        )
+        pair = cookies[0].split(";", 1)[0].strip()
+        assert_that(
+            pair,
+            contains_string("="),
+            "the viewing-session cookie carries a name and a value",
+        )
+        return pair
 
     def request(
         self,

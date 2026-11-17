@@ -101,6 +101,7 @@ class KeycloakUtils:
         project_name: str,
         role_names: tuple,
         username: str | None = None,
+        extra_attributes: dict[str, list[str]] | None = None,
     ) -> str:
         password = self._generate_password()
         headers = self._get_headers()
@@ -151,6 +152,7 @@ class KeycloakUtils:
         attributes["applications"] = (
             [email, project_name] if project_name != email else [email]
         )
+        attributes.update(extra_attributes or {})
         user_data["attributes"] = attributes
 
         put_user_response = self._session.put(
@@ -166,22 +168,12 @@ class KeycloakUtils:
         The platform reads the attribute as the ``user_type`` claim of the user's token, so the
         account counts as an external user from its first sign-in.
         """
-        password = self.create_platform_user(email=email)
-        headers = self._get_headers()
-        users_url = f"{self._server_url}admin/realms/{self._realm}/users"
-        found = self._session.get(users_url, params={"email": email}, headers=headers)
-        found.raise_for_status()
-        user_url = f"{users_url}/{found.json()[0]['id']}"
-        current = self._session.get(user_url, headers=headers)
-        current.raise_for_status()
-        user_data = current.json()
-        user_data["attributes"] = {
-            **user_data.get("attributes", {}),
-            "user_type": ["external"],
-        }
-        updated = self._session.put(user_url, json=user_data, headers=headers)
-        updated.raise_for_status()
-        return password
+        return self._create_user(
+            email,
+            email,
+            role_names=("developer",),
+            extra_attributes={"user_type": ["external"]},
+        )
 
     def delete_user(self, email: str) -> None:
         headers = self._get_headers()

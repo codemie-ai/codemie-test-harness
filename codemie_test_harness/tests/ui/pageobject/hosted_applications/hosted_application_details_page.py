@@ -19,13 +19,13 @@ import re
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
-from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_page_base import (
+    NEW_TAB_NAME,
+    HostedPageBase,
+)
 
-MAX_TAB_PRESSES = 120
-NEW_TAB_NAME = re.compile("new tab", re.IGNORECASE)
 
-
-class HostedApplicationDetailsPage(BasePage):
+class HostedApplicationDetailsPage(HostedPageBase):
     """Details page: actions, versions and the upload dialog."""
 
     @property
@@ -89,22 +89,6 @@ class HostedApplicationDetailsPage(BasePage):
         return self
 
     @step
-    def focus_by_keyboard(self, target: Locator):
-        """Press Tab until ``target`` has the focus; it fails when the control is not reachable."""
-        for _ in range(MAX_TAB_PRESSES):
-            if target.evaluate("element => element === document.activeElement"):
-                return self
-            self.page.keyboard.press("Tab")
-        expect(target).to_be_focused()
-        return self
-
-    @step
-    def press_enter(self):
-        """Press Enter on the focused control."""
-        self.page.keyboard.press("Enter")
-        return self
-
-    @step
     def should_offer_open(self):
         """Open is available, and no control opens the application in a new tab."""
         expect(self.open_button).to_be_enabled()
@@ -115,12 +99,6 @@ class HostedApplicationDetailsPage(BasePage):
     def should_be_on_details_route(self, app_id: str):
         """The details page of the application is open."""
         expect(self.page).to_have_url(re.compile(rf"/apps/{app_id}/?$"))
-        return self
-
-    @step
-    def should_be_on_view_route(self, app_id: str):
-        """The embedded viewer of the application is open."""
-        expect(self.page).to_have_url(re.compile(rf"/apps/{app_id}/view/?$"))
         return self
 
     @step

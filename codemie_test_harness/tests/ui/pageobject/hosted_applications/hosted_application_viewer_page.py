@@ -19,14 +19,18 @@ import re
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
-from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_page_base import (
+    NEW_TAB_NAME,
+    HostedPageBase,
+)
+from codemie_test_harness.tests.test_data.hosted_application_test_data import (
+    PROBE_RESULT_ID,
+)
 
-PROBE_RESULT_ID = "probe-result"
 CONTENT_WAIT_MS = 60000
-NEW_TAB_NAME = re.compile("new tab", re.IGNORECASE)
 
 
-class HostedApplicationViewerPage(BasePage):
+class HostedApplicationViewerPage(HostedPageBase):
     """The viewer: the CodeMie header around a frame that holds the application's own frame."""
 
     @property
@@ -38,6 +42,11 @@ class HostedApplicationViewerPage(BasePage):
     def application_actions_button(self) -> Locator:
         """Button that opens the overflow menu of the viewer."""
         return self.page.get_by_role("button", name="Application actions")
+
+    @property
+    def menu_items(self) -> Locator:
+        """Every entry of the open overflow menu."""
+        return self.page.get_by_role("menuitem")
 
     @property
     def new_tab_menu_items(self) -> Locator:
@@ -100,5 +109,7 @@ class HostedApplicationViewerPage(BasePage):
         expect(self.application_actions_button).to_be_visible()
         expect(self.new_tab_controls).to_have_count(0)
         self.application_actions_button.click()
+        # The menu renders after the click: wait for it before asserting what it lacks.
+        expect(self.menu_items.first).to_be_visible()
         expect(self.new_tab_menu_items).to_have_count(0)
         return self

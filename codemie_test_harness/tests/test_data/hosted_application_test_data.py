@@ -91,19 +91,6 @@ def zip_artifact(
     )
 
 
-def site_zip(marker: str | None = None) -> HostedArtifact:
-    """A small valid site: an entry page, a script and a stylesheet."""
-    marker = marker or get_random_name()
-    return zip_artifact(
-        [
-            ("index.html", html_page(marker).encode()),
-            ("app.js", b"document.title = document.title;"),
-            ("style.css", b"body { margin: 0; }"),
-        ],
-        marker,
-    )
-
-
 @dataclass(frozen=True)
 class SpaBundle:
     """The file layout of a prebuilt single-page application."""
