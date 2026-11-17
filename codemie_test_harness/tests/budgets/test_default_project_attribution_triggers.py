@@ -25,7 +25,7 @@ Covers:
     TC-37  A webhook and a scheduler of a user with a funded default project run a
            marketplace assistant of a project the user is not a member of (a trigger
            belongs to the project of its assistant): the owner's default project pays
-    TC-38  The same triggers run an assistant of a funded project the owner is a member of:
+    TC-43  The same triggers run an assistant of a funded project the owner is a member of:
            that project pays, which only happens when the owner's memberships are known
 """
 
@@ -90,7 +90,7 @@ def test_trigger_run_is_charged_as_owner(
     )
 
 
-# ── TC-38 ──────────────────────────────────────────────────────────────────────
+# ── TC-43 ──────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.budget

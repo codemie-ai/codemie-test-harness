@@ -52,6 +52,7 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
     budget_chat_prompt_bigger,
     project_key_alias,
 )
+from codemie_test_harness.tests.utils.base_utils import call_until
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +87,11 @@ def test_exhausted_hard_limit_is_not_rerouted_to_default_project_on_web(
 
     logger.info("Chatting until the hard limit of the member project is used up")
     before = lite_llm_budget_utils.get_spends(keys, customers)
-    reply = user2_assistant_utils.ask_until_text_in_reply(
-        assistant,
-        budget_chat_prompt_bigger,
-        BUDGET_EXCEEDED_MESSAGE,
+    reply = call_until(
+        lambda: user2_assistant_utils.ask_assistant(
+            assistant, budget_chat_prompt_bigger()
+        ),
+        lambda reply: BUDGET_EXCEEDED_MESSAGE in reply,
         MAX_EXHAUSTING_ATTEMPTS,
     )
 
@@ -139,13 +141,15 @@ def test_exhausted_hard_limit_is_not_rerouted_to_default_project_on_cli(
         "Sending CLI requests until the hard limit of the member project is used up"
     )
     before = lite_llm_budget_utils.get_spends(keys, customers)
-    response = user2_proxy_utils.send_messages_until_status(
-        BUDGET_EXCEEDED_STATUS,
+    response = call_until(
+        lambda: user2_proxy_utils.send_messages_request(
+            model=default_llm.base_name,
+            messages=[{"role": "user", "content": budget_chat_prompt_bigger()}],
+            max_tokens=1500,
+            extra_headers={**CLI_CLIENT_HEADER, CLI_PROJECT_HEADER: limited_project},
+        ),
+        lambda response: response.status_code == BUDGET_EXCEEDED_STATUS,
         MAX_EXHAUSTING_ATTEMPTS,
-        lambda: [{"role": "user", "content": budget_chat_prompt_bigger()}],
-        model=default_llm.base_name,
-        max_tokens=1500,
-        extra_headers={**CLI_CLIENT_HEADER, CLI_PROJECT_HEADER: limited_project},
     )
 
     assert_that(

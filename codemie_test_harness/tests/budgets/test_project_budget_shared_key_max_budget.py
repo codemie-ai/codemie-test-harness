@@ -22,6 +22,7 @@ from hamcrest import assert_that, contains_string, equal_to, greater_than, not_n
 from codemie_test_harness.tests.enums.model_types import ModelTypes
 from codemie_test_harness.tests.test_data.budget_test_data import (
     BUDGET_CACHE_DELAY,
+    BUDGET_EXCEEDED_MESSAGE,
     budget_chat_prompt,
     budget_chat_prompt_bigger,
     project_key_alias,
@@ -34,7 +35,6 @@ _INITIAL_SOFT_BUDGET = 0.5
 _UPDATED_MAX_BUDGET = 0.2
 _UPDATED_SOFT_BUDGET = 0.1
 _MAX_CHAT_ATTEMPTS = 5
-_BUDGET_EXCEEDED_MSG = "Your LLM usage budget has been exceeded"
 
 
 @pytest.fixture(scope="function")
@@ -224,7 +224,7 @@ def test_platform_budget_shared_key_max_budget_reflected_and_enforced_user_added
             assistant, budget_chat_prompt_bigger()
         )
         logger.info("Attempt %d response preview: %s", attempt + 1, generated[:120])
-        if _BUDGET_EXCEEDED_MSG in generated:
+        if BUDGET_EXCEEDED_MESSAGE in generated:
             break
 
     # Phase 7: assert the budget-exceeded error is present in the assistant response
@@ -327,7 +327,7 @@ def test_platform_budget_shared_key_max_budget_reflected_and_enforced_user_added
             assistant, budget_chat_prompt_bigger()
         )
         logger.info("Attempt %d response preview: %s", attempt + 1, generated[:120])
-        if _BUDGET_EXCEEDED_MSG in generated:
+        if BUDGET_EXCEEDED_MESSAGE in generated:
             break
 
     # Phase 7: assert the budget-exceeded error is present in the assistant response

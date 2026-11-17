@@ -88,14 +88,23 @@ def budget_generation_text() -> str:
     return f"Assistant that greets visitors politely. Debug uuid: {uuid.uuid4()}"
 
 
-# AI generation and refinement requests that are billed to no asset, by request name.
-GENERATION_REQUEST_NAMES = [
-    "assistant_generate",
-    "assistant_prompt_generate",
-    "assistant_refine",
-    "skill_generate",
-    "skill_refine",
-]
+# AI generation and refinement requests that are billed to no asset, by request name. Each takes
+# the AssistantUtils and the SkillsUtils of the user who sends it.
+GENERATION_REQUESTS = {
+    "assistant_generate": lambda assistants,
+    skills: assistants.generate_assistant_details(budget_generation_text()),
+    "assistant_prompt_generate": lambda assistants,
+    skills: assistants.generate_assistant_prompt(budget_generation_text()),
+    "assistant_refine": lambda assistants, skills: assistants.refine_assistant(
+        system_prompt="You greet visitors", refine_prompt=budget_generation_text()
+    ),
+    "skill_generate": lambda assistants, skills: skills.generate_skill(
+        budget_generation_text()
+    ),
+    "skill_refine": lambda assistants, skills: skills.refine_skill(
+        instructions="Greet visitors", refine_prompt=budget_generation_text()
+    ),
+}
 
 # A scheduled run starts at the next but one minute of the hour and then takes the time
 # of the chat and of LiteLLM writing its spend.

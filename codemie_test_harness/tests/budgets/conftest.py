@@ -38,7 +38,6 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
     budget_chat_prompt,
     BUDGET_CACHE_DELAY,
     BUDGET_WORKFLOW_STATE,
-    budget_generation_text,
     CLI_BUDGET_CATEGORIES,
     CLI_CLIENT_HEADER,
     DEFAULT_CLI_BUDGET_ID,
@@ -807,77 +806,48 @@ def user1_published_workflow(user1_workflow, user1_workflow_utils):
 
 
 @pytest.fixture(scope="function")
-def user2_trigger(user2_integration_utils, user2_client):
+def user2_trigger(user2_integration_utils, user2_client, budget_scheduler_integration):
     """Triggers of user 2 by name: ``(project_name, assistant)`` creates the integration in
     the assistant's project and starts a run of the assistant (the scheduler starts it by
     itself)."""
-    created = []
+    webhooks = []
     webhook_utils = WebhookUtils(user2_client)
-
-    def _integration(credential_type, extra_values, assistant, project_name):
-        values = [
-            CredentialValues(key="url", value=CredentialsManager.AUTO_GENERATED),
-            CredentialValues(key="is_enabled", value=True),
-            CredentialValues(key="resource_type", value="assistant"),
-            CredentialValues(key="resource_id", value=assistant.id),
-            *extra_values,
-        ]
-        integration = user2_integration_utils.create_integration(
-            credential_type, values, project_name=project_name
-        )
-        created.append(integration)
 
     def _webhook(project_name: str, assistant):
         webhook_id = get_random_name()
-        _integration(
-            CredentialTypes.WEBHOOK,
-            [CredentialValues(key="webhook_id", value=webhook_id)],
-            assistant,
-            project_name,
+        webhooks.append(
+            user2_integration_utils.create_integration(
+                CredentialTypes.WEBHOOK,
+                [
+                    CredentialValues(
+                        key="url", value=CredentialsManager.AUTO_GENERATED
+                    ),
+                    CredentialValues(key="webhook_id", value=webhook_id),
+                    CredentialValues(key="is_enabled", value=True),
+                    CredentialValues(key="resource_type", value="assistant"),
+                    CredentialValues(key="resource_id", value=assistant.id),
+                ],
+                project_name=project_name,
+            )
         )
         webhook_utils.trigger_webhook(webhook_id, data=budget_chat_prompt())
 
     def _scheduler(project_name: str, assistant):
-        next_minute = (datetime.now() + timedelta(minutes=2)).minute
-        _integration(
-            CredentialTypes.SCHEDULER,
-            [
-                CredentialValues(key="schedule", value=f"{next_minute} * * * *"),
-                CredentialValues(key="prompt", value=budget_chat_prompt()),
-            ],
-            assistant,
-            project_name,
+        budget_scheduler_integration(
+            "assistant",
+            assistant.id,
+            prompt=budget_chat_prompt(),
+            project_name=project_name,
+            owner_utils=user2_integration_utils,
         )
 
     yield {"webhook": _webhook, "scheduler": _scheduler}
 
-    for integration in created:
+    for integration in webhooks:
         try:
             user2_integration_utils.delete_integration(integration)
         except HTTPError:
             pass
-
-
-@pytest.fixture(scope="function")
-def user2_generation_requests(user2_assistant_utils, user2_skills_utils):
-    """AI generation and refinement requests of user 2 by name, each billed to no asset."""
-    return {
-        "assistant_generate": lambda: user2_assistant_utils.generate_assistant_details(
-            budget_generation_text()
-        ),
-        "assistant_prompt_generate": lambda: user2_assistant_utils.generate_assistant_prompt(
-            budget_generation_text()
-        ),
-        "assistant_refine": lambda: user2_assistant_utils.refine_assistant(
-            system_prompt="You greet visitors", refine_prompt=budget_generation_text()
-        ),
-        "skill_generate": lambda: user2_skills_utils.generate_skill(
-            budget_generation_text()
-        ),
-        "skill_refine": lambda: user2_skills_utils.refine_skill(
-            instructions="Greet visitors", refine_prompt=budget_generation_text()
-        ),
-    }
 
 
 @pytest.fixture(scope="function")
@@ -911,6 +881,8 @@ def user2_file_datasource(user2_datasource_utils, default_embedding_llm):
 
 @pytest.fixture(scope="function")
 def budget_scheduler_integration(integration_utils):
+    """Factory for scheduler integrations, owned by the admin unless ``owner_utils`` (the
+    ``IntegrationUtils`` of the user who owns the schedule) is given, in ``project_name``."""
     created_integrations = []
 
     def _create(
@@ -918,7 +890,10 @@ def budget_scheduler_integration(integration_utils):
         resource_id: str,
         prompt: str = None,
         schedule: str = None,
+        project_name: str = None,
+        owner_utils: IntegrationUtils = None,
     ):
+        owner_utils = owner_utils or integration_utils
         if schedule is None:
             next_minute = (datetime.now() + timedelta(minutes=2)).minute
             schedule = f"{next_minute} * * * *"
@@ -931,17 +906,20 @@ def budget_scheduler_integration(integration_utils):
             CredentialValues(key="resource_id", value=resource_id),
             CredentialValues(key="prompt", value=prompt),
         ]
-        integration = integration_utils.create_integration(
-            CredentialTypes.SCHEDULER, credential_values, integration_alias=alias
+        integration = owner_utils.create_integration(
+            CredentialTypes.SCHEDULER,
+            credential_values,
+            project_name=project_name,
+            integration_alias=alias,
         )
-        created_integrations.append(integration)
+        created_integrations.append((owner_utils, integration))
         return integration
 
     yield _create
 
-    for integration in created_integrations:
+    for owner_utils, integration in created_integrations:
         try:
-            integration_utils.delete_integration(integration)
+            owner_utils.delete_integration(integration)
         except HTTPError:
             pass
 

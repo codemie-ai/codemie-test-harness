@@ -34,7 +34,7 @@ from hamcrest import assert_that, equal_to
 
 from codemie_test_harness.tests.test_data.budget_test_data import (
     BUDGET_CACHE_DELAY,
-    GENERATION_REQUEST_NAMES,
+    GENERATION_REQUESTS,
     PLATFORM_BUDGET_CATEGORIES,
     project_key_alias,
 )
@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.api
 @pytest.mark.enterprise
 @pytest.mark.timeout(1500)
-@pytest.mark.parametrize("request_name", GENERATION_REQUEST_NAMES)
+@pytest.mark.parametrize("request_name", GENERATION_REQUESTS)
 @pytest.mark.parametrize(
     "has_default, expected_charged",
     [
@@ -65,7 +65,8 @@ def test_ai_generation_is_charged_to_default_project(
     user2_id,
     user_utils,
     budget_project_factory,
-    user2_generation_requests,
+    user2_assistant_utils,
+    user2_skills_utils,
     lite_llm_budget_utils,
 ):
     email, _ = keycloak_user_2
@@ -87,7 +88,7 @@ def test_ai_generation_is_charged_to_default_project(
         expected_charged,
     )
     before = lite_llm_budget_utils.get_spends(keys, customers)
-    user2_generation_requests[request_name]()
+    GENERATION_REQUESTS[request_name](user2_assistant_utils, user2_skills_utils)
 
     assert_that(
         lite_llm_budget_utils.wait_for_charged_sources(before, keys, customers),
