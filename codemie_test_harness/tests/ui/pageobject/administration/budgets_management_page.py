@@ -119,6 +119,30 @@ class BudgetsManagementPage(BasePage):
         """'Edit' item of the currently open row-actions menu."""
         return self.page.get_by_role("menuitem", name="Edit")
 
+    @property
+    def _delete_menu_item(self):
+        """'Delete' item of the currently open row-actions menu (a native button, which is
+        disabled while users are assigned to the budget)."""
+        return self._row_actions_menu.get_by_role("menuitem", name="Delete", exact=True)
+
+    @property
+    def _delete_dialog(self):
+        """The delete confirmation dialog (recon: role dialog, heading 'Delete budget')."""
+        return self.page.get_by_role("dialog")
+
+    @property
+    def _delete_dialog_confirm_button(self):
+        """'Delete' button of the delete confirmation dialog."""
+        return self._delete_dialog.get_by_role("button", name="Delete", exact=True)
+
+    def _toast(self, text: str):
+        """A toast notification containing `text`.
+
+        VERIFY: the success toast was not reached in recon; the `.codemie-toast` class is
+        taken from toaster.ts (`toaster.info` -> 'codemie-toast codemie-toast-info').
+        """
+        return self.page.locator(".codemie-toast").filter(has_text=text)
+
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @step
@@ -197,6 +221,24 @@ class BudgetsManagementPage(BasePage):
         self._view_details_menu_item.click()
         return self
 
+    @step
+    def choose_delete(self):
+        """Click 'Delete' in the open row-actions menu."""
+        self._delete_menu_item.click()
+        return self
+
+    @step
+    def confirm_delete(self):
+        """Click 'Delete' in the confirmation dialog."""
+        self._delete_dialog_confirm_button.click()
+        return self
+
+    @step
+    def hover_delete_item(self):
+        """Hover the 'Delete' item of the open row-actions menu."""
+        self._delete_menu_item.hover()
+        return self
+
     # ── Assertions ────────────────────────────────────────────────────────────
 
     @step
@@ -266,5 +308,55 @@ class BudgetsManagementPage(BasePage):
             matches,
             empty(),
             f"No request should contain '{path_fragment}'; got {matches}",
+        )
+        return self
+
+    @step
+    def should_offer_delete(self):
+        """Assert the open row-actions menu offers an enabled 'Delete'."""
+        expect(self._delete_menu_item).to_be_visible(timeout=5000)
+        expect(self._delete_menu_item).to_be_enabled()
+        return self
+
+    @step
+    def should_see_delete_disabled(self):
+        """Assert the open row-actions menu offers 'Delete' but it cannot be used."""
+        expect(self._delete_menu_item).to_be_visible(timeout=5000)
+        expect(self._delete_menu_item).to_be_disabled()
+        return self
+
+    @step
+    def should_see_delete_tooltip(self, expected_text: str):
+        """Assert the tooltip bubble (the shared react-tooltip) shows exactly `expected_text`.
+
+        VERIFY: hovering a disabled menu item was not reached in recon; the item carries
+        data-tooltip-content (NavigationMore.tsx) and the shared bubble has role 'tooltip'.
+        """
+        expect(self.page.get_by_role("tooltip")).to_have_text(
+            expected_text, timeout=5000
+        )
+        return self
+
+    @step
+    def should_ask_to_confirm_delete(self, expected_message: str):
+        """Assert the 'Delete budget' confirmation dialog is open with `expected_message`."""
+        expect(self._delete_dialog).to_be_visible(timeout=10000)
+        expect(
+            self._delete_dialog.get_by_role("heading", name="Delete budget")
+        ).to_be_visible()
+        expect(self._delete_dialog).to_contain_text(expected_message)
+        return self
+
+    @step
+    def should_see_budget_deleted_toast(self, expected_text: str):
+        """Assert the success toast with `expected_text` is shown."""
+        expect(self._toast(expected_text)).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_not_see_budget_row(self, budget_name: str):
+        """Assert no table row mentions `budget_name` (the list reloads after the delete)."""
+        expect(self.budget_rows.filter(has_text=budget_name)).to_have_count(
+            0, timeout=15000
         )
         return self

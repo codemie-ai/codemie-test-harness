@@ -60,6 +60,20 @@ class AdminBudgetUtils(BaseUtils):
         resp.raise_for_status()
         return resp.json()
 
+    def delete_budget(self, budget_id: str) -> requests.Response:
+        """DELETE /v1/admin/budgets/{budget_id}: 204 with no body on success.
+
+        Returns the response so the caller can assert the exact status; any 4xx/5xx
+        raises ``HTTPError`` (``exc.response`` carries the status and the message).
+        """
+        resp = requests.delete(
+            f"{API_DOMAIN}/v1/admin/budgets/{budget_id}",
+            headers=self._headers,
+            verify=VERIFY_SSL,
+        )
+        resp.raise_for_status()
+        return resp
+
     def _iter_all_budgets(self, per_page: int = 100):
         """Yield every budget across every page, newest first (the API's own order)."""
         page = 0

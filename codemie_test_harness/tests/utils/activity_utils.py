@@ -61,6 +61,14 @@ class ActivityUtils(BaseUtils):
             offset=offset,
         )
 
+    def list_budget_deleted_events(self, budget_id: str) -> list:
+        """The ``budget.deleted`` activity events recorded for a budget id."""
+        return self.list_activity_events(
+            entity_id=budget_id,
+            event_type=["budget.deleted"],
+            domain=["budget_management"],
+        ).data
+
     def get_filter_options(self) -> ActivityEventFilterOptions:
         """Return available filter options for the activity events endpoint."""
         return self.client.activity_events.get_filter_options()

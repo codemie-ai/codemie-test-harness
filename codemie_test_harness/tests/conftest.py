@@ -1010,6 +1010,44 @@ def orphaned_creator_budget(keycloak_utils, user_utils, client):
 
 
 @pytest.fixture
+def manual_budget(maintainer_client, lite_llm_budget_utils):
+    """A manually created platform budget with no assigned users, owned by the maintainer.
+
+    Yields the created budget (``budget_id``, ``name``, ...). Only a maintainer creates,
+    updates and deletes budgets, so the teardown deletes it as that maintainer when the
+    test has not (a 404 or 409 is expected then) and removes any LiteLLM leftover.
+    """
+    budget_utils = AdminBudgetUtils(maintainer_client)
+    budget = budget_utils.create_budget(
+        f"autotest-del-{secrets.token_hex(4)}", "platform"
+    )
+    yield budget
+    with contextlib.suppress(HTTPError):
+        budget_utils.delete_budget(budget["budget_id"])
+    lite_llm_budget_utils.delete_budget(budget["budget_id"])
+
+
+@pytest.fixture
+def assign_budget_user(manual_budget, maintainer_client):
+    """Factory ``(user_id)``: assigns the user to ``manual_budget`` as their platform budget.
+
+    The assignments are removed before the budget is, whether or not the user still exists.
+    """
+    budget_utils = AdminBudgetUtils(maintainer_client)
+    assigned = []
+
+    def _assign(user_id: str):
+        budget_utils.assign_user_budget(user_id, "platform", manual_budget["budget_id"])
+        assigned.append(user_id)
+
+    yield _assign
+
+    for user_id in assigned:
+        with contextlib.suppress(HTTPError):
+            budget_utils.unassign_user_budget(user_id, "platform")
+
+
+@pytest.fixture
 def project_admin_client(project_admin_user):
     """project_admin_user's client."""
     return project_admin_user.client
