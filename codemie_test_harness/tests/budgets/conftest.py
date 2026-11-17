@@ -473,6 +473,24 @@ def keycloak_user_2(keycloak_utils, lite_llm_budget_utils):
 
 
 @pytest.fixture(scope="function")
+def mixed_case_keycloak_user(keycloak_utils, lite_llm_budget_utils):
+    """Same shape as keycloak_user_2, but the email contains uppercase letters."""
+    uid = secrets.token_hex(4)
+    email = f"AutoTest.Budget.{uid}@Email.com"
+    password = keycloak_utils.create_test_user(email=email, project_name=email)
+    yield email, password
+    keycloak_utils.delete_user(email)
+    # LiteLLM customers are keyed by the lowercased username, not by the mixed-case email.
+    username = email.lower()
+    for customer_id in (
+        username,
+        f"{username}_{DEFAULT_PREMIUM_BUDGET_ID}",
+        f"{username}_{DEFAULT_CLI_BUDGET_ID}",
+    ):
+        lite_llm_budget_utils.delete_customer(customer_id)
+
+
+@pytest.fixture(scope="function")
 def user1_client(keycloak_user_1):
     email, password = keycloak_user_1
     return get_client(username=email, password=password)
@@ -481,6 +499,12 @@ def user1_client(keycloak_user_1):
 @pytest.fixture(scope="function")
 def user2_client(keycloak_user_2):
     email, password = keycloak_user_2
+    return get_client(username=email, password=password)
+
+
+@pytest.fixture(scope="function")
+def mixed_case_client(mixed_case_keycloak_user):
+    email, password = mixed_case_keycloak_user
     return get_client(username=email, password=password)
 
 
@@ -502,6 +526,11 @@ def user2_assistant_utils(user2_client):
 @pytest.fixture(scope="function")
 def user2_proxy_utils(user2_client):
     return ProxyUtils(user2_client)
+
+
+@pytest.fixture(scope="function")
+def mixed_case_proxy_utils(mixed_case_client):
+    return ProxyUtils(mixed_case_client)
 
 
 @pytest.fixture(scope="function")
@@ -1249,6 +1278,17 @@ def user2_id(user2_client):
 @pytest.fixture(scope="function")
 def user2_skills_utils(user2_client):
     return SkillsUtils(user2_client)
+
+
+@pytest.fixture(scope="function")
+def mixed_case_user_id(mixed_case_client):
+    """Id of the mixed-case user; the first request is the login that creates the personal project."""
+    return mixed_case_client.users.about_me().user_id
+
+
+@pytest.fixture(scope="function")
+def mixed_case_skills_utils(mixed_case_client):
+    return SkillsUtils(mixed_case_client)
 
 
 @pytest.fixture(scope="function")

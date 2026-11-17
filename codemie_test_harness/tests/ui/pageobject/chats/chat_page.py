@@ -46,6 +46,9 @@ from codemie_test_harness.tests.ui.pageobject.components.tool_output_preview imp
 from codemie_test_harness.tests.ui.pageobject.chats.configuration_panel import (
     ConfigurationPanel,
 )
+from codemie_test_harness.tests.ui.pageobject.chats.workspace_browser_popup import (
+    WorkspaceBrowserPopup,
+)
 
 
 # noinspection PyArgumentList
@@ -371,6 +374,11 @@ class ChatPage(BasePage):
         return self.page.locator('button[data-tooltip-content="Clear Chat"]')
 
     @property
+    def browse_files_button(self) -> Locator:
+        """The Browse files button of the chat header; rendered once the chat has a message."""
+        return self.page.locator('button[aria-label="Browse files"]')
+
+    @property
     def add_attachment_button(self) -> Locator:
         """Add attachment button with paperclip icon."""
         return self.page.locator(
@@ -381,6 +389,14 @@ class ChatPage(BasePage):
     def file_input(self) -> Locator:
         """Native hidden file input backing the attach-file control."""
         return self.page.locator('input[type="file"]')
+
+    @property
+    def composer_file_input(self) -> Locator:
+        """File input of the chat composer (scoped to the prompt box; a chat that already
+        has messages renders further file inputs elsewhere on the page)."""
+        return self.page.get_by_test_id("chat-prompt").get_by_label(
+            "Select files to upload"
+        )
 
     @property
     def attachment_remove_buttons(self) -> Locator:
@@ -548,6 +564,24 @@ class ChatPage(BasePage):
             timeout=15000,
         ):
             self.page.locator('input[type="file"]').set_input_files(file_path)
+        return self
+
+    @step
+    def attach_file_to_composer(self, file_path: str):
+        """
+        Attach a file through the composer's own file input.
+
+        Unlike attach_file, this stays unambiguous in a chat that already has messages,
+        where the page holds several file inputs.
+
+        Args:
+            file_path: Absolute path to the file to attach
+        """
+        with self.page.expect_response(
+            lambda r: "files/bulk" in r.url and r.request.method == "POST",
+            timeout=15000,
+        ):
+            self.composer_file_input.set_input_files(file_path)
         return self
 
     @step
@@ -1638,6 +1672,34 @@ class ChatPage(BasePage):
         """
         self.processed_in_field.last.wait_for(state="visible", timeout=timeout)
         return self
+
+    @step
+    def send_message_and_wait_for_reply(
+        self, message: str, reply_number: int, timeout: int = 120000
+    ):
+        """
+        Send a message and wait until the assistant has finished its reply to it.
+
+        Args:
+            message: The message text to send
+            reply_number: Ordinal of the reply being waited for (1 for the first
+                message of the chat, 2 for the second, ...). Each finished reply
+                carries a "Processed in" line, so the Nth one marks the Nth reply done.
+            timeout: Timeout in milliseconds
+        """
+        self.send_message(message)
+        expect(self.processed_in_field.nth(reply_number - 1)).to_be_visible(
+            timeout=timeout
+        )
+        self.wait_for_idle_state(timeout=timeout)
+        return self
+
+    @step
+    def open_workspace_browser(self) -> WorkspaceBrowserPopup:
+        """Open the agent workspace popup with the chat header "Browse files" button."""
+        expect(self.browse_files_button).to_be_visible(timeout=30000)
+        self.browse_files_button.click()
+        return WorkspaceBrowserPopup(self.page).should_be_visible()
 
     @step
     def scroll_to_bottom_of_chat(self):

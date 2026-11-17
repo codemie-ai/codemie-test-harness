@@ -67,6 +67,7 @@ def new_user(
     admin: bool,
     project_name: Optional[str] = None,
     strict: bool = False,
+    external: bool = False,
 ) -> Iterator[str]:
     """Create the user `email`, yield its password, delete the user on leaving the block.
 
@@ -74,8 +75,11 @@ def new_user(
     is the project the auth server attaches on Keycloak). False: developer role only, no
     platform role (create_platform_user). Nothing logs in here; on Keycloak the backend user
     appears on the first login. A failed deletion is logged, or raised when `strict`.
+    `external` True: an external account (create_external_user), which is never an admin.
     """
-    if admin:
+    if external:
+        password = user_lifecycle.create_external_user(email=email)
+    elif admin:
         password = user_lifecycle.create_test_user(
             email=email, project_name=project_name or email
         )

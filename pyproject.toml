@@ -128,6 +128,7 @@ markers = [
     "user: User management admin API tests",
     "cli_analytics: CLI Analytics tests",
     "project: Project management tests",
+    "hosted_applications: Hosted applications (upload, share, view) tests",
     "prod_regression: UI tests safe to run on PROD (regular user or admin, not a maintainer)",
     "oss_standalone: Integration-entity tests safe to run against an OSS standalone deployment",
     "requires_capability(name): needs a /v1/config capability, skipped in gated runs when absent",
