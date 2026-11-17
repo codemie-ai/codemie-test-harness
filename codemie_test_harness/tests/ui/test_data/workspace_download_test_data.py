@@ -35,12 +35,16 @@ WORKSPACE_ASSISTANT_SYSTEM_PROMPT = (
 
 # First message of a chat: gives the chat a message (so "Browse files" is rendered)
 # without writing anything into the workspace.
-NO_FILE_PROMPT = "Reply with the single word OK. Do not call any tool."
+NO_FILE_PROMPT = (
+    "Reply with the single word OK. Do not call any tool and do not create, write "
+    "or list any file."
+)
 
 GENERATE_SCRIPT_PROMPT = (
-    f"Create a Python script named {GENERATED_SCRIPT_NAME} in the workspace "
-    "that prints the text hello. Save it with the write workspace file tool, "
-    "then confirm in one short sentence."
+    "Use the write workspace file tool to create exactly one file named "
+    f"{GENERATED_SCRIPT_NAME} (this exact name, no folder, no other files) that "
+    "contains a Python script printing the text hello. After the tool call "
+    "succeeds, confirm in one short sentence."
 )
 
 UPLOAD_ACK_PROMPT = (

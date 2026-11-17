@@ -99,12 +99,17 @@ def test_download_all_archive_entries_are_identical_to_uploaded_files(
 
 # @case enable-download-of-all-files_TC_003
 @pytest.mark.chat
+@pytest.mark.timeout(600)
 @pytest.mark.ui
 def test_download_all_archive_excludes_files_of_another_chat(open_workspace_chat):
     first_chat = open_workspace_chat()
     first_chat.attach_file(str(FILES_PATH / OTHER_TEXT_SAMPLE_FILE))
     first_chat.should_have_file_attached(OTHER_TEXT_SAMPLE_FILE)
     first_chat.send_message_and_wait_for_reply(UPLOAD_ACK_PROMPT, 1)
+
+    first_popup = first_chat.open_workspace_browser()
+    first_popup.should_list_file(OTHER_TEXT_SAMPLE_FILE)
+    first_popup.close()
 
     second_chat = open_workspace_chat()
     second_chat.attach_file(str(FILES_PATH / TEXT_SAMPLE_FILE))
