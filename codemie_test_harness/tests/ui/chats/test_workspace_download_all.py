@@ -53,7 +53,7 @@ def test_download_all_archives_generated_script_and_uploaded_file(open_workspace
     empty_popup.close()
 
     chat_page.send_message_and_wait_for_reply(GENERATE_SCRIPT_PROMPT, 2)
-    chat_page.attach_file(str(FILES_PATH / TEXT_SAMPLE_FILE))
+    chat_page.attach_file_to_composer(str(FILES_PATH / TEXT_SAMPLE_FILE))
     chat_page.should_have_file_attached(TEXT_SAMPLE_FILE)
     chat_page.send_message_and_wait_for_reply(UPLOAD_ACK_PROMPT, 3)
 

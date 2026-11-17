@@ -391,6 +391,14 @@ class ChatPage(BasePage):
         return self.page.locator('input[type="file"]')
 
     @property
+    def composer_file_input(self) -> Locator:
+        """File input of the chat composer (scoped to the prompt box; a chat that already
+        has messages renders further file inputs elsewhere on the page)."""
+        return self.page.get_by_test_id("chat-prompt").get_by_label(
+            "Select files to upload"
+        )
+
+    @property
     def attachment_remove_buttons(self) -> Locator:
         """Remove buttons for any file attachment previews currently rendered in the composer.
 
@@ -556,6 +564,24 @@ class ChatPage(BasePage):
             timeout=15000,
         ):
             self.page.locator('input[type="file"]').set_input_files(file_path)
+        return self
+
+    @step
+    def attach_file_to_composer(self, file_path: str):
+        """
+        Attach a file through the composer's own file input.
+
+        Unlike attach_file, this stays unambiguous in a chat that already has messages,
+        where the page holds several file inputs.
+
+        Args:
+            file_path: Absolute path to the file to attach
+        """
+        with self.page.expect_response(
+            lambda r: "files/bulk" in r.url and r.request.method == "POST",
+            timeout=15000,
+        ):
+            self.composer_file_input.set_input_files(file_path)
         return self
 
     @step
