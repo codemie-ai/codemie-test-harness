@@ -72,7 +72,8 @@ def test_confluence_datasource_keeps_selected_embedding_model_after_save(
 
     Steps:
         1. Record description, CQL and "shared with project" of the datasource.
-        2. Open the edit form, select a non-default embedding model and click Save.
+        2. Open the edit form, select a non-default embedding model and click
+           Save & Reindex (the backend rejects a plain Save of a changed model).
         3. Reopen the edit form; the picker shows the selected model, not the default.
         4. Read the datasource back through the API; the stored model is the selected one.
         5. Description, CQL and "shared with project" equal the values recorded in step 1.
@@ -92,7 +93,7 @@ def test_confluence_datasource_keeps_selected_embedding_model_after_save(
     edit_page.should_see_disabled_name_input(before.name)
     edit_page.select_embeddings_model(model_label)
     edit_page.should_see_selected_embeddings_model(model_label)
-    edit_page.click_save()
+    edit_page.click_save_and_reindex()
     datasource_page.should_see_datasource_with_name(before.name)
 
     datasource_page.open_and_select_row_action(before.name, "Edit")
