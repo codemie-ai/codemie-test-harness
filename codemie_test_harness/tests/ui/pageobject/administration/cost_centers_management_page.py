@@ -88,17 +88,3 @@ class CostCentersManagementPage(BasePage):
             re.compile(rf"[?&]cost_center_ids={re.escape(str(cost_center_id))}(&|$)"),
         )
         return self
-
-    @step
-    def should_show_project_count_without_link(self, name: str, project_count: int):
-        """Verify the row shows the project count under the 'Projects' label as plain text:
-        no link role and no anchor in the row (what a user who is neither admin nor
-        maintainer sees)."""
-        row = self._cost_center_row(name)
-        expect(row).to_be_visible(timeout=15000)
-        badge = row.get_by_label("Projects", exact=True)
-        expect(badge).to_have_count(1)
-        expect(badge).to_have_text(str(project_count))
-        expect(self.project_count_badge(name)).to_have_count(0)
-        expect(row.locator("a")).to_have_count(0)
-        return self
