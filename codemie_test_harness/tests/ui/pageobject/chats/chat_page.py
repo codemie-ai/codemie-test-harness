@@ -46,6 +46,9 @@ from codemie_test_harness.tests.ui.pageobject.components.tool_output_preview imp
 from codemie_test_harness.tests.ui.pageobject.chats.configuration_panel import (
     ConfigurationPanel,
 )
+from codemie_test_harness.tests.ui.pageobject.chats.workspace_browser_popup import (
+    WorkspaceBrowserPopup,
+)
 
 
 # noinspection PyArgumentList
@@ -369,6 +372,11 @@ class ChatPage(BasePage):
     def clear_chat_button(self) -> Locator:
         """Clear chat button with clear/delete icon."""
         return self.page.locator('button[data-tooltip-content="Clear Chat"]')
+
+    @property
+    def browse_files_button(self) -> Locator:
+        """The Browse files button of the chat header; rendered once the chat has a message."""
+        return self.page.locator('button[aria-label="Browse files"]')
 
     @property
     def add_attachment_button(self) -> Locator:
@@ -1638,6 +1646,34 @@ class ChatPage(BasePage):
         """
         self.processed_in_field.last.wait_for(state="visible", timeout=timeout)
         return self
+
+    @step
+    def send_message_and_wait_for_reply(
+        self, message: str, reply_number: int, timeout: int = 120000
+    ):
+        """
+        Send a message and wait until the assistant has finished its reply to it.
+
+        Args:
+            message: The message text to send
+            reply_number: Ordinal of the reply being waited for (1 for the first
+                message of the chat, 2 for the second, ...). Each finished reply
+                carries a "Processed in" line, so the Nth one marks the Nth reply done.
+            timeout: Timeout in milliseconds
+        """
+        self.send_message(message)
+        expect(self.processed_in_field.nth(reply_number - 1)).to_be_visible(
+            timeout=timeout
+        )
+        self.wait_for_idle_state(timeout=timeout)
+        return self
+
+    @step
+    def open_workspace_browser(self) -> WorkspaceBrowserPopup:
+        """Open the agent workspace popup with the chat header "Browse files" button."""
+        expect(self.browse_files_button).to_be_visible(timeout=30000)
+        self.browse_files_button.click()
+        return WorkspaceBrowserPopup(self.page).should_be_visible()
 
     @step
     def scroll_to_bottom_of_chat(self):
