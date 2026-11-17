@@ -26,6 +26,9 @@ LITELLM_ALREADY_ABSENT = "already_absent"
 
 DELETE_REASON_MANUAL = "manual_delete"
 
+# Detail of the 403 of the maintainer_access_only gate (authentication.py).
+MAINTAINER_ONLY_DETAIL = "This action requires maintainer privileges."
+
 
 def budget_in_use_message(budget_id: str, user_count: int) -> str:
     """409 text of a delete refused because users are assigned ("user" for exactly one)."""

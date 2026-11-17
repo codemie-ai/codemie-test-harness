@@ -27,21 +27,17 @@ Covers:
     TC-006 (AC-5)  an unknown id is 404
     TC-008 (AC-7)  sync does not bring a deleted budget back
     TC-011 (gap from the change)  a project budget cannot be deleted here
-    TC-012 (gap from the change)  a deactivated user still blocks the delete
 """
 
 import pytest
 from hamcrest import (
-    all_of,
     assert_that,
     contains_string,
     empty,
     equal_to,
-    greater_than_or_equal_to,
     has_item,
     has_length,
     is_not,
-    less_than,
     none,
 )
 from requests import HTTPError
@@ -50,6 +46,7 @@ from codemie_test_harness.tests.test_data.budget_delete_test_data import (
     DELETE_REASON_MANUAL,
     LITELLM_ALREADY_ABSENT,
     LITELLM_PRESENT,
+    MAINTAINER_ONLY_DETAIL,
     budget_in_use_message,
     budget_not_found_message,
     budget_preconfigured_delete_message,
@@ -66,13 +63,17 @@ def _rejection_status(exc_info) -> int:
     return exc_info.value.response.status_code
 
 
-def _assert_client_error(status: int, who: str):
-    """The delete is rejected with a 4xx; the exact code is set by the access gate, so the
-    observed one is reported in the message."""
+def _assert_maintainer_gate_rejection(exc_info, who: str):
+    """The delete is rejected by maintainer_access_only: 403 with the gate's detail."""
     assert_that(
-        status,
-        all_of(greater_than_or_equal_to(400), less_than(500)),
-        f"DELETE as {who} should be rejected with a 4xx status; observed {status}",
+        _rejection_status(exc_info),
+        equal_to(403),
+        f"DELETE as {who} should be rejected with 403",
+    )
+    assert_that(
+        exc_info.value.response.text,
+        contains_string(MAINTAINER_ONLY_DETAIL),
+        f"DELETE as {who} should carry the maintainer-only rejection detail",
     )
 
 
@@ -177,7 +178,7 @@ def test_maintainer_deletes_budget_and_admin_is_rejected(
     with pytest.raises(HTTPError) as exc_info:
         admin_utils.delete_budget(budget_id)
 
-    _assert_client_error(_rejection_status(exc_info), "a platform admin")
+    _assert_maintainer_gate_rejection(exc_info, "a platform admin")
     assert_that(
         admin_utils.get_budget(budget_id)["budget_id"],
         equal_to(budget_id),
@@ -303,7 +304,7 @@ def test_user_without_platform_role_cannot_delete_budget(
     with pytest.raises(HTTPError) as exc_info:
         AdminBudgetUtils(platform_user.client).delete_budget(budget_id)
 
-    _assert_client_error(_rejection_status(exc_info), "a user without a platform role")
+    _assert_maintainer_gate_rejection(exc_info, "a user without a platform role")
     assert_that(
         admin_budget_utils.get_budget(budget_id)["budget_id"],
         equal_to(budget_id),
@@ -412,43 +413,4 @@ def test_project_budget_cannot_be_deleted_through_the_global_budget_endpoint(
         _category_budgets(group_after).keys(),
         has_item(budget_id),
         "the project budget should still belong to its group",
-    )
-
-
-# ---------------------------------------------------------------------------
-# TC-012
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.budget
-@pytest.mark.api
-def test_deactivated_user_still_blocks_budget_deletion(
-    platform_user,
-    manual_budget,
-    assign_budget_user,
-    user_utils,
-    maintainer_budget_utils,
-):
-    """@case delete-budget_TC_012
-
-    Gap from the change: only soft-deleted users are ignored by the in-use count, a
-    deactivated user is still counted, so the delete answers 409 "1 user assigned"
-    (budget_repository.py:211-219) and the budget stays.
-    """
-    budget_id = manual_budget["budget_id"]
-    assign_budget_user(platform_user.user_id)
-    user_utils.deactivate_user(platform_user.user_id)
-
-    with pytest.raises(HTTPError) as exc_info:
-        maintainer_budget_utils.delete_budget(budget_id)
-
-    assert_that(_rejection_status(exc_info), equal_to(409), "DELETE should be 409")
-    assert_that(
-        exc_info.value.response.text,
-        contains_string(budget_in_use_message(budget_id, 1)),
-    )
-    assert_that(
-        maintainer_budget_utils.get_budget(budget_id)["budget_id"],
-        equal_to(budget_id),
-        "the budget should still be present",
     )

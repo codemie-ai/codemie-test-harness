@@ -138,8 +138,8 @@ class BudgetsManagementPage(BasePage):
     def _toast(self, text: str):
         """A toast notification containing `text`.
 
-        VERIFY: the success toast was not reached in recon; the `.codemie-toast` class is
-        taken from toaster.ts (`toaster.info` -> 'codemie-toast codemie-toast-info').
+        The `.codemie-toast` class comes from toaster.ts (`toaster.info` ->
+        'codemie-toast codemie-toast-info'); confirmed live by the delete flow test.
         """
         return self.page.locator(".codemie-toast").filter(has_text=text)
 
@@ -329,8 +329,8 @@ class BudgetsManagementPage(BasePage):
     def should_see_delete_tooltip(self, expected_text: str):
         """Assert the tooltip bubble (the shared react-tooltip) shows exactly `expected_text`.
 
-        VERIFY: hovering a disabled menu item was not reached in recon; the item carries
-        data-tooltip-content (NavigationMore.tsx) and the shared bubble has role 'tooltip'.
+        The item carries data-tooltip-content (NavigationMore.tsx) and the shared bubble
+        has role 'tooltip'; confirmed live by the disabled-delete test.
         """
         expect(self.page.get_by_role("tooltip")).to_have_text(
             expected_text, timeout=5000
