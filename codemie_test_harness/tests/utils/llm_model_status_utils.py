@@ -41,6 +41,11 @@ logger = setup_logger(__name__)
 # that lands on another instance can lag behind the write that preceded it.
 CATALOG_PROPAGATION_TIMEOUT = 30.0
 
+# One read that shows the status only proves that the instance serving it is
+# up to date. The call under test may land on another instance, so the status
+# must be shown by this many reads in a row.
+CONSISTENT_CATALOG_READS = 4
+
 
 class LlmModelStatusUtils(BaseUtils):
     """Reads and writes model statuses and the global default model."""
@@ -99,8 +104,9 @@ class LlmModelStatusUtils(BaseUtils):
         """Wait until the catalog of each client reflects the status of a model.
 
         A Disabled model leaves the catalog; any other status keeps it listed with
-        that status. Never raises: whatever the catalog still shows when the time
-        is up is what the test asserts on.
+        that status. The status must show on several reads in a row, because the
+        reads may be served by different instances. Never raises: whatever the
+        catalog still shows when the time is up is what the test asserts on.
         """
 
         def reflects(catalog: dict[str, LLMModel]) -> bool:
@@ -110,9 +116,16 @@ class LlmModelStatusUtils(BaseUtils):
             return model is not None and model.status == status
 
         for client in (self.client, *clients):
+            streak = 0
+
+            def reflects_in_a_row(catalog: dict[str, LLMModel]) -> bool:
+                nonlocal streak
+                streak = streak + 1 if reflects(catalog) else 0
+                return streak >= CONSISTENT_CATALOG_READS
+
             poll_until(
                 lambda c=client: self.catalog_of(c),
-                reflects,
+                reflects_in_a_row,
                 timeout=CATALOG_PROPAGATION_TIMEOUT,
             )
 
