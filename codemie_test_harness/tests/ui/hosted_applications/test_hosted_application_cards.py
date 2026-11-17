@@ -33,16 +33,18 @@ CAPABILITY = "features:hostedApplications"
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.parametrize("key", ["Enter", "Space"])
 def test_keyboard_user_reaches_the_card_of_an_openable_application_and_opens_it(
-    page, ui_live_app
+    page, ui_live_app, key
 ):
     # @case hosted-applications-upload-share-view_TC_020
+    # @case clicking-a-hosted-app-opens_TC_001
     app, artifact = ui_live_app
     applications = HostedApplicationsPage(page).open_my_apps()
 
     applications.focus_card_by_keyboard(app.name)
     applications.should_have_focus_on_card(app.name)
-    applications.press_enter()
+    applications.press_key(key)
 
     viewer = HostedApplicationViewerPage(page)
     viewer.should_be_on_view_route(app.id)
@@ -73,9 +75,11 @@ def test_clicking_the_card_of_an_openable_application_opens_it_in_the_viewer(
     page, ui_live_app
 ):
     # @case hosted-applications-upload-share-view_TC_021
+    # @case clicking-a-hosted-app-opens_TC_001
     app, artifact = ui_live_app
     applications = HostedApplicationsPage(page).open_my_apps()
 
+    applications.should_name_card_for_opening(app.name)
     applications.click_card(app.name)
 
     viewer = HostedApplicationViewerPage(page)
@@ -90,6 +94,7 @@ def test_open_on_the_details_page_opens_the_application_in_the_viewer(
     page, ui_live_app
 ):
     # @case hosted-applications-upload-share-view_TC_021
+    # @case clicking-a-hosted-app-opens_TC_010
     app, artifact = ui_live_app
     details = HostedApplicationDetailsPage(page).open(app.id)
     details.should_offer_open()
@@ -128,6 +133,7 @@ def test_card_without_a_live_version_shows_its_statuses_and_a_clickable_activate
     page, ui_unreleased_app
 ):
     # @case hosted-applications-upload-share-view_TC_022
+    # @case clicking-a-hosted-app-opens_TC_005
     app, _, _ = ui_unreleased_app
     applications = HostedApplicationsPage(page).open_my_apps()
 
@@ -135,3 +141,46 @@ def test_card_without_a_live_version_shows_its_statuses_and_a_clickable_activate
     applications.click_activate_version(app.name)
 
     HostedApplicationDetailsPage(page).should_be_on_details_route(app.id)
+
+
+@pytest.mark.requires_capability(CAPABILITY)
+@pytest.mark.hosted_applications
+@pytest.mark.ui
+def test_clicking_the_card_of_an_application_without_a_live_version_opens_its_details(
+    page, ui_empty_app
+):
+    # @case clicking-a-hosted-app-opens_TC_004
+    app = ui_empty_app
+    applications = HostedApplicationsPage(page).open_my_apps()
+
+    applications.click_card_without_live_version(app.name)
+
+    HostedApplicationDetailsPage(page).should_be_on_details_route(app.id)
+
+
+@pytest.mark.requires_capability(CAPABILITY)
+@pytest.mark.hosted_applications
+@pytest.mark.ui
+def test_card_of_an_application_without_a_version_offers_upload_version_that_opens_details(
+    page, ui_empty_app
+):
+    # @case clicking-a-hosted-app-opens_TC_005
+    app = ui_empty_app
+    applications = HostedApplicationsPage(page).open_my_apps()
+
+    applications.should_show_next_step_button(app.name, "Upload version")
+    applications.click_next_step_button(app.name, "Upload version")
+
+    HostedApplicationDetailsPage(page).should_be_on_details_route(app.id)
+
+
+@pytest.mark.requires_capability(CAPABILITY)
+@pytest.mark.hosted_applications
+@pytest.mark.ui
+def test_open_on_the_details_page_is_disabled_until_a_version_is_live(
+    page, ui_unreleased_app
+):
+    # @case clicking-a-hosted-app-opens_TC_010
+    app, _, _ = ui_unreleased_app
+
+    HostedApplicationDetailsPage(page).open(app.id).should_have_open_disabled()

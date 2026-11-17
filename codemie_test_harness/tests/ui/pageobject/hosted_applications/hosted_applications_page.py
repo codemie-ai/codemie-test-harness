@@ -20,6 +20,9 @@ import re
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.options_menu import (
+    OptionsMenu,
+)
 from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_page_base import (
     NEW_TAB_NAME,
     HostedPageBase,
@@ -27,6 +30,10 @@ from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_page_ba
 
 APPS_ROUTE = "/apps"
 LEGACY_ROUTE = "/applications"
+SHARED_WITH_ME = "Shared with me"
+NO_ACTIVE_VERSION = "No active version yet"
+# A card holds its own role=button element plus the More options button.
+CARD_BUTTONS_WITHOUT_NEXT_STEP = 2
 
 
 class HostedApplicationsPage(HostedPageBase):
@@ -67,6 +74,19 @@ class HostedApplicationsPage(HostedPageBase):
         """
         return self.card(name).get_by_role("button", name=f"Open {name}", exact=True)
 
+    def unopenable_card_button(self, name: str) -> Locator:
+        """The card itself as one control named just '<name>': the application cannot run."""
+        return self.card(name).get_by_role("button", name=name, exact=True)
+
+    def more_options_button(self, name: str) -> Locator:
+        """More options button of a card."""
+        return self.card(name).get_by_role("button", name=f"More options {name}")
+
+    @property
+    def options_menu(self) -> OptionsMenu:
+        """The More options menu of a card."""
+        return OptionsMenu(self.page)
+
     def next_step_button(self, name: str, label: str) -> Locator:
         """The next-step button of a card whose application has nothing live, by its exact label."""
         return self.card(name).get_by_role("button", name=label, exact=True)
@@ -90,6 +110,18 @@ class HostedApplicationsPage(HostedPageBase):
         return self
 
     @step
+    def open_shared_with_me(self):
+        """Open the Shared with me collection."""
+        self.page.goto(APPS_ROUTE)
+        self.collections_navigation.get_by_role(
+            "button", name=SHARED_WITH_ME, exact=True
+        ).click()
+        expect(
+            self.page.get_by_role("heading", name=SHARED_WITH_ME, level=1)
+        ).to_be_visible()
+        return self
+
+    @step
     def open_legacy_applications_route(self):
         """Open the address the Applications page had before the collections."""
         self.page.goto(LEGACY_ROUTE)
@@ -106,6 +138,25 @@ class HostedApplicationsPage(HostedPageBase):
         """Click the card of an application that can run; it opens in the viewer."""
         self.open_card_button(name).click()
         return self
+
+    @step
+    def click_card_without_live_version(self, name: str):
+        """Click the card of an application that cannot run; it opens the details page."""
+        self.unopenable_card_button(name).click()
+        return self
+
+    @step
+    def click_next_step_button(self, name: str, label: str):
+        """Press the next-step button of a card by its label."""
+        self.next_step_button(name, label).click()
+        return self
+
+    @step
+    def open_card_menu(self, name: str):
+        """Open the More options menu of a card."""
+        self.more_options_button(name).click()
+        self.options_menu.should_be_open()
+        return self.options_menu
 
     @step
     def click_activate_version(self, name: str):
@@ -142,6 +193,48 @@ class HostedApplicationsPage(HostedPageBase):
         """The focus is on the one control named 'Open <name>'."""
         expect(self.open_card_button(name)).to_have_count(1)
         expect(self.open_card_button(name)).to_be_focused()
+        return self
+
+    @step
+    def should_name_card_for_opening(self, name: str):
+        """The card is one control whose accessible name is 'Open <name>'."""
+        expect(self.open_card_button(name)).to_be_visible()
+        return self
+
+    @step
+    def should_name_card_without_open(self, name: str):
+        """The card is one control named just '<name>', with no 'Open' in it."""
+        expect(self.unopenable_card_button(name)).to_have_attribute("aria-label", name)
+        expect(self.open_card_button(name)).to_have_count(0)
+        return self
+
+    @step
+    def should_show_no_active_version_badge(self, name: str):
+        """The cover carries the 'No active version yet' badge."""
+        expect(
+            self.card(name).get_by_text(NO_ACTIVE_VERSION, exact=True)
+        ).to_be_visible()
+        return self
+
+    @step
+    def should_have_only_card_and_menu_buttons(self, name: str):
+        """The card has no button besides itself and More options."""
+        expect(self.card(name).get_by_role("button")).to_have_count(
+            CARD_BUTTONS_WITHOUT_NEXT_STEP
+        )
+        expect(self.more_options_button(name)).to_be_visible()
+        return self
+
+    @step
+    def should_show_next_step_button(self, name: str, label: str):
+        """The card shows the next-step button with this label."""
+        expect(self.next_step_button(name, label)).to_be_visible()
+        return self
+
+    @step
+    def should_still_list_card(self, name: str):
+        """The collection still shows the card, so nothing navigated away from the list."""
+        expect(self.card(name)).to_be_visible()
         return self
 
     @step
