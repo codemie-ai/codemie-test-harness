@@ -251,16 +251,16 @@ class ProjectDetailsPage(BasePage):
         return self.page.get_by_role("button", name="Edit Project", exact=True)
 
     @property
-    def cli_analytics_label(self):
-        """The 'CLI Analytics' item label in Overview > Project information."""
+    def ai_attribution_label(self):
+        """The 'AI Attribution' item label in Overview > Project information."""
         return self.page.locator("div.mb-1.text-xs.text-text-quaternary").filter(
-            has_text=re.compile(r"^CLI Analytics$")
+            has_text=re.compile(r"^AI Attribution$")
         )
 
     @property
-    def cli_analytics_value(self):
-        """The value block under the 'CLI Analytics' label ('Enabled' or 'Disabled')."""
-        return self.cli_analytics_label.locator("xpath=following-sibling::div[1]")
+    def ai_attribution_value(self):
+        """The value block under the 'AI Attribution' label ('Enabled' or 'Disabled')."""
+        return self.ai_attribution_label.locator("xpath=following-sibling::div[1]")
 
     @property
     def project_not_found_message(self):
@@ -536,8 +536,8 @@ class ProjectDetailsPage(BasePage):
     @step
     def should_show_cli_analytics_status(self, enabled: bool):
         """Verify Overview shows 'CLI Analytics: Enabled|Disabled'."""
-        expect(self.cli_analytics_label).to_be_visible(timeout=15000)
-        expect(self.cli_analytics_value).to_have_text(
+        expect(self.ai_attribution_label).to_be_visible(timeout=15000)
+        expect(self.ai_attribution_value).to_have_text(
             "Enabled" if enabled else "Disabled"
         )
         return self
@@ -550,7 +550,7 @@ class ProjectDetailsPage(BasePage):
         expect(self.owned_by_label.or_(self.project_not_found_message)).to_be_visible(
             timeout=15000
         )
-        expect(self.cli_analytics_label).to_have_count(0)
+        expect(self.ai_attribution_label).to_have_count(0)
         return self
 
     @step
@@ -558,7 +558,7 @@ class ProjectDetailsPage(BasePage):
         """STRICT: the project details are shown ('Owned by' is visible) and the
         'CLI Analytics' item is absent. For users who must see the project."""
         expect(self.owned_by_label).to_be_visible(timeout=15000)
-        expect(self.cli_analytics_label).to_have_count(0)
+        expect(self.ai_attribution_label).to_have_count(0)
         return self
 
     @step
