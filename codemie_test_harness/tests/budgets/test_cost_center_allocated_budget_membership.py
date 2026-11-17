@@ -21,6 +21,7 @@ a manual rebalance. Needs ENABLE_USER_MANAGEMENT and a build that includes the r
 
 Covered cases:
     TC-001  Allocated Budget follows a member being added and removed (AC-1, AC-2)
+    TC-002  A manual rebalance with no membership change keeps the Allocated Budget (AC-3, AC-4)
 """
 
 import pytest
@@ -102,4 +103,53 @@ def test_cost_center_allocated_budget_follows_member_add_and_remove_without_reba
         close_to(max_budget, AMOUNT_TOLERANCE),
         "After a member is removed the remaining member's share must be re-split to the "
         "whole project budget.",
+    )
+
+
+@pytest.mark.budget
+@pytest.mark.enterprise
+@pytest.mark.timeout(1000)
+@pytest.mark.api
+def test_cost_center_allocated_budget_unchanged_by_rebalance_without_membership_change(
+    user1_project_utils,
+    cost_center,
+    cost_center_budget_projects,
+    cost_center_utils,
+    admin_project_budget_utils,
+):
+    # @case cost-center-page-shows-incorrect_TC_002
+    max_budget = MEMBERSHIP_SHARE_PLATFORM["platform"]["max_budget"]
+    cc_id = cost_center()
+    budget = cost_center_budget_projects.create(
+        cc_id,
+        MEMBERSHIP_SHARE_PLATFORM,
+        creator_utils=user1_project_utils,
+        track_members=True,
+    )
+    cost_center_budget_projects.wait_until_budgets_usable(budget)
+
+    before = _platform_rollup(cost_center_utils, cc_id)
+    assert_that(
+        before.allocated_member_budget_total,
+        close_to(max_budget, AMOUNT_TOLERANCE),
+        "The member shares must sum to the project budget before the rebalance.",
+    )
+
+    admin_project_budget_utils.rebalance_budget(budget.budget_ids["platform"])
+
+    after = _platform_rollup(cost_center_utils, cc_id)
+    assert_that(
+        after.member_count,
+        equal_to(before.member_count),
+        "The rebalance must not change the project's members.",
+    )
+    assert_that(
+        after.allocated_member_budget_total,
+        close_to(before.allocated_member_budget_total, AMOUNT_TOLERANCE),
+        "A rebalance with no membership change must leave the Allocated Budget as it was.",
+    )
+    assert_that(
+        after.allocated_member_budget_total,
+        close_to(max_budget, AMOUNT_TOLERANCE),
+        "After the rebalance the member shares must still sum to the project budget.",
     )
