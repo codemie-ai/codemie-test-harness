@@ -15,9 +15,10 @@
 """API tests for how assistants behave when the status of their model changes.
 
 A Deprecated model is refused for new work but keeps serving existing work; a
-Disabled model is replaced by the global default when an assistant is read or run.
-The tests run in a new project, which has no default model and no model
-restriction, so the global default is the only fallback.
+Disabled model is replaced by an available fallback when an assistant is read or run:
+the project default model, or the global default when the project has none. A new
+project is created with a default model of its own and no model restriction, so the
+fallback is that default, and the tests assert only that it is an enabled model.
 """
 
 import pytest
@@ -88,6 +89,7 @@ def test_assistant_keeps_working_after_its_model_is_deprecated(
     created = assistant_factory.create(
         llm_model_type=base_name, project_name=isolated_project_name
     )
+    stored = assistant_utils.get_assistant_by_id(created.id)
     llm_model_status_utils.apply_status(base_name, ModelStatus.DEPRECATED)
 
     answer = assistant_utils.ask_assistant(created, CHAT_PROMPT)
@@ -98,8 +100,8 @@ def test_assistant_keeps_working_after_its_model_is_deprecated(
     update_response = assistant_utils.update_assistant(
         created.id,
         AssistantUpdateRequest(
-            name=created.name,
-            slug=created.slug,
+            name=stored.name,
+            slug=stored.slug,
             description="Integration test assistant [updated]",
             system_prompt="Act as a helpful assistant",
             project=isolated_project_name,
@@ -122,7 +124,7 @@ def test_assistant_keeps_working_after_its_model_is_deprecated(
 @pytest.mark.not_for_parallel_run
 @pytest.mark.llm
 @pytest.mark.api
-def test_assistant_on_disabled_model_runs_on_global_default(
+def test_assistant_on_disabled_model_runs_on_an_available_fallback(
     llm_model_status_utils,
     assistant_utils,
     status_test_model,
@@ -133,7 +135,6 @@ def test_assistant_on_disabled_model_runs_on_global_default(
     created = assistant_factory.create(
         llm_model_type=base_name, project_name=isolated_project_name
     )
-    global_default = llm_model_status_utils.get_default().effective_base_name
     llm_model_status_utils.apply_status(base_name, ModelStatus.DISABLED)
 
     detail = poll_until(
@@ -143,9 +144,9 @@ def test_assistant_on_disabled_model_runs_on_global_default(
     )
 
     assert_that(
-        detail.llm_model_type,
-        equal_to(global_default),
-        "the assistant detail must show the global default instead of the disabled model",
+        llm_model_status_utils.status_of(detail.llm_model_type),
+        equal_to(ModelStatus.ENABLED),
+        "the assistant detail must show an enabled fallback instead of the disabled model",
     )
     assert_that(
         detail.effective_llm_model_reason,

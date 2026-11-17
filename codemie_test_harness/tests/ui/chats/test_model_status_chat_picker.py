@@ -42,7 +42,8 @@ def test_chat_model_picker_marks_a_deprecated_model_and_blocks_it(
     chat_page.open_model_picker()
     chat_page.search_model_in_picker(label)
     chat_page.should_show_deprecated_meta_in_picker(label)
-    chat_page.click_model_in_picker(label)
+    chat_page.should_block_model_in_picker(label)
+    chat_page.try_to_pick_blocked_model_in_picker(label)
 
     chat_page.should_keep_default_model_selected()
 

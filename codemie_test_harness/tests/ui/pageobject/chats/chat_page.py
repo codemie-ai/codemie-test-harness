@@ -2065,6 +2065,18 @@ class ChatPage(BasePage):
         return self
 
     @step
+    def try_to_pick_blocked_model_in_picker(self, model_name: str):
+        """Click the option of a blocked model anyway; a disabled option ignores the click."""
+        self.model_picker_option(model_name).click(force=True)
+        return self
+
+    @step
+    def should_block_model_in_picker(self, model_name: str):
+        """Assert the picker option of a model is disabled."""
+        expect(self.model_picker_option(model_name)).to_be_disabled()
+        return self
+
+    @step
     def should_show_deprecated_meta_in_picker(self, model_name: str):
         """Assert the picker option of a model carries the 'Deprecated' meta label."""
         meta = self.model_picker_option(model_name).locator(

@@ -72,12 +72,10 @@ class ModelsManagementPage(BasePage):
         return self.page.get_by_role("textbox", name="Provider")
 
     @property
-    def provider_open_button(self) -> Locator:
-        """Unnamed button beside the Provider text box; the text box alone opens nothing."""
-        return (
-            self.provider_filter.locator("xpath=ancestor::*[.//button][1]")
-            .get_by_role("button")
-            .first
+    def provider_dropdown(self) -> Locator:
+        """Clickable root of the Provider dropdown; its text box is hidden and opens nothing."""
+        return self.provider_filter.locator(
+            'xpath=ancestor::*[@data-pc-name="dropdown"][1]'
         )
 
     @property
@@ -89,6 +87,13 @@ class ModelsManagementPage(BasePage):
     def status_filter(self) -> Locator:
         """Status multi-select of the list filters, showing 'All statuses' by default."""
         return self.page.get_by_role("combobox", name="Status")
+
+    @property
+    def status_filter_control(self) -> Locator:
+        """Clickable root of the Status multi-select; its label covers the combobox input."""
+        return self.status_filter.locator(
+            'xpath=ancestor::*[@data-pc-name="multiselect"][1]'
+        )
 
     def _status_filter_option(self, label: str) -> Locator:
         """Option (with a checkbox) of the open Status filter."""
@@ -114,10 +119,8 @@ class ModelsManagementPage(BasePage):
         )
 
     def column_header(self, name: str) -> Locator:
-        """Column header whose title starts with `name`."""
-        return self.model_table.get_by_role(
-            "columnheader", name=re.compile(rf"^{re.escape(name)}")
-        )
+        """Column header whose title contains `name` (the cost title continues with "(in / out)")."""
+        return self.model_table.get_by_role("columnheader", name=name)
 
     def row_for_model(self, base_name: str) -> Locator:
         """Row of the model; every row shows its base name under the label."""
@@ -128,8 +131,14 @@ class ModelsManagementPage(BasePage):
         return self.page.locator(f'[id="model-status-{base_name}"]')
 
     def _status_option(self, label: str) -> Locator:
-        """Option of the open status select; its name continues with a description."""
-        return self.page.get_by_role("option", name=re.compile(rf"^{label}\b"))
+        """Option of the open status select.
+
+        Scoped to the open list: every row also holds a hidden native select with the
+        same option names.
+        """
+        return self.page.get_by_role("listbox", name="Option List").get_by_role(
+            "option", name=label, exact=True
+        )
 
     def _bulk_action_item(self, label: str) -> Locator:
         """Item of the open Bulk Actions menu."""
@@ -197,7 +206,7 @@ class ModelsManagementPage(BasePage):
     @step
     def select_provider(self, provider_label: str):
         """Filter the list by a provider, named as the filter spells it."""
-        self.provider_open_button.click()
+        self.provider_dropdown.click()
         self.provider_options.get_by_role(
             "option", name=provider_label, exact=True
         ).click()
@@ -206,7 +215,7 @@ class ModelsManagementPage(BasePage):
     @step
     def toggle_status_filter_option(self, label: str):
         """Check or uncheck a status in the Status filter, then close the list."""
-        self.status_filter.click()
+        self.status_filter_control.click()
         self._status_filter_option(label).click()
         self.page.keyboard.press("Escape")
         return self
@@ -281,5 +290,5 @@ class ModelsManagementPage(BasePage):
     @step
     def should_show_status_filter_value(self, text: str):
         """Assert the Status filter reads `text` ('All statuses' or the checked labels)."""
-        expect(self.status_filter).to_contain_text(text)
+        expect(self.status_filter_control).to_contain_text(text)
         return self
