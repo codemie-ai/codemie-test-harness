@@ -19,14 +19,26 @@ Observation channel (same as the other budget tests): LiteLLM spend on the proje
 After each request exactly the expected source must have grown.
 
 Covers:
-    TC-14  Marketplace assistant: non-member+default -> default; member+default -> assistant's
-           project; member, no default -> assistant's project; non-member, no default -> personal
+    TC-14  Marketplace assistant is charged to the user's default project whether or not the user
+           is a member of the assistant's project; without an assigned default the default is the
+           personal project, so the personal budget pays
     TC-15  A flow not bound to a project asset is charged to the default project of a multi-project user
     TC-16  Multi-project user without a default: the charged destination is the same every time
     TC-17  Default project without a budget: all spend goes to the personal budgets
-    TC-18  Proxy / CLI: default project when no project is sent; explicit project always wins
+    TC-18  Proxy / CLI: default project when no project is sent; a funded member project named
+           in the request is charged instead of the default
     TC-19  Lifecycle: changing the default moves new spend only; removing the default membership
            stops charging that project
+    TC-20  Personal assistant: charged to the assigned default project
+    TC-21  Member project without a budget: charged to the funded default project
+    TC-22  Shared project assistant used by a non-member: the assistant's project is never
+           charged; default project, otherwise personal
+    TC-23  Marketplace assistant published from the user's own personal project
+    TC-24  CLI request naming a member project that has no budget: charged to the default
+           project
+    TC-25  CLI request naming a project the user is not a member of: rejected for a regular
+           user; header ignored and default project charged for an admin
+    TC-26  Sub-assistant of an orchestrator: charged as that assistant, not as the orchestrator
 """
 
 import logging
@@ -38,10 +50,8 @@ from hamcrest import (
     close_to,
     contains_exactly,
     equal_to,
-    greater_than,
     has_length,
     none,
-    not_none,
 )
 
 from codemie_test_harness.tests.test_data.budget_test_data import (
@@ -50,17 +60,15 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
     CLI_CLIENT_HEADER,
     CLI_PROJECT_HEADER,
     DEFAULT_CLI_BUDGET_ID,
-    DEFAULT_PLATFORM_BUDGET_ID,
     PLATFORM_BUDGET_CATEGORIES,
     budget_chat_prompt,
+    budget_math_prompt,
     budget_skill_description,
     project_key_alias,
 )
+from codemie_test_harness.tests.utils.proxy_utils import ProxyUtils
 
 logger = logging.getLogger(__name__)
-
-# How long the ledger may take to show a charge made through the proxy.
-LEDGER_CHARGE_TIMEOUT = 300
 
 
 # ── TC-14 ──────────────────────────────────────────────────────────────────────
@@ -72,17 +80,49 @@ LEDGER_CHARGE_TIMEOUT = 300
 @pytest.mark.marketplace
 @pytest.mark.timeout(1500)
 @pytest.mark.parametrize(
-    "is_member, has_default, expected_charged",
+    "is_member, has_default, default_budget, expected_charged",
     [
-        pytest.param(False, True, "default_project", id="non_member_with_default"),
-        pytest.param(True, True, "assistant_project", id="member_with_other_default"),
-        pytest.param(True, False, "assistant_project", id="member_without_default"),
-        pytest.param(False, False, "personal", id="non_member_without_default"),
+        pytest.param(
+            False,
+            True,
+            PLATFORM_BUDGET_CATEGORIES,
+            "default_project",
+            id="non_member_with_default",
+        ),
+        pytest.param(
+            True,
+            True,
+            PLATFORM_BUDGET_CATEGORIES,
+            "default_project",
+            id="member_with_other_default",
+        ),
+        pytest.param(
+            True,
+            False,
+            PLATFORM_BUDGET_CATEGORIES,
+            "personal",
+            id="member_without_default",
+        ),
+        pytest.param(
+            False,
+            False,
+            PLATFORM_BUDGET_CATEGORIES,
+            "personal",
+            id="non_member_without_default",
+        ),
+        pytest.param(
+            False,
+            True,
+            None,
+            "personal",
+            id="non_member_with_unfunded_default",
+        ),
     ],
 )
 def test_marketplace_assistant_charge_follows_membership_then_default(
     is_member,
     has_default,
+    default_budget,
     expected_charged,
     keycloak_user_2,
     user2_id,
@@ -96,7 +136,7 @@ def test_marketplace_assistant_charge_follows_membership_then_default(
     assistant_project = budget_project_factory(
         PLATFORM_BUDGET_CATEGORIES, (user2_id,) if is_member else ()
     )
-    default_project = budget_project_factory(PLATFORM_BUDGET_CATEGORIES, (user2_id,))
+    default_project = budget_project_factory(default_budget, (user2_id,))
     assistant = user1_published_assistant(assistant_project)
     if has_default:
         user_utils.set_default_project(user2_id, default_project)
@@ -108,9 +148,11 @@ def test_marketplace_assistant_charge_follows_membership_then_default(
     customers = {"personal": email}
 
     logger.info(
-        "Asking the marketplace assistant: member=%s, default set=%s, expecting %s",
+        "Asking the marketplace assistant: member=%s, default set=%s, default funded=%s, "
+        "expecting %s",
         is_member,
         has_default,
+        default_budget is not None,
         expected_charged,
     )
     before = lite_llm_budget_utils.get_spends(keys, customers)
@@ -326,7 +368,7 @@ def test_cli_request_uses_default_project_unless_project_is_explicit(
     assert_that(
         lite_llm_budget_utils.wait_for_charged_sources(before, keys, customers),
         equal_to({"explicit_project"}),
-        "An explicitly requested project must be charged regardless of the default",
+        "A project the user is a member of and that is funded must be charged instead of the default project when the request names it",
     )
 
 
@@ -404,103 +446,346 @@ def test_changing_and_removing_default_project_moves_only_new_spend(
     )
 
 
-# ── user-management-shows-no-default_TC_003 ────────────────────────────────
+# ── TC-20 ──────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.budget
 @pytest.mark.api
 @pytest.mark.enterprise
 @pytest.mark.timeout(1500)
-def test_mixed_case_personal_project_is_charged_under_its_real_name(
-    mixed_case_keycloak_user,
-    mixed_case_user_id,
-    mixed_case_skills_utils,
-    mixed_case_proxy_utils,
-    default_llm,
-    admin_project_utils,
+def test_personal_assistant_is_charged_to_assigned_default_project(
+    keycloak_user_2,
+    user2_id,
+    user_utils,
+    user2_assistant,
+    user2_assistant_utils,
+    budget_project_factory,
     lite_llm_budget_utils,
 ):
-    """@case user-management-shows-no-default_TC_003
+    email, _ = keycloak_user_2
+    default_project = budget_project_factory(PLATFORM_BUDGET_CATEGORIES, (user2_id,))
+    user_utils.set_default_project(user2_id, default_project)
+    sleep(BUDGET_CACHE_DELAY)
+    keys = {"default_project": project_key_alias(default_project)}
+    customers = {"personal": email}
+    assistant = user2_assistant(project_name=email)
 
-    A mixed-case personal project must be charged under its real casing, and
-    requesting the user's own identity under a different casing must still
-    resolve to that same personal budget -- never a fallback destination.
+    logger.info("Asking an assistant of the user's personal project, default is a team")
+    before = lite_llm_budget_utils.get_spends(keys, customers)
+    user2_assistant_utils.ask_assistant(assistant, budget_chat_prompt())
 
-    Each charge is checked twice: on the LiteLLM personal customer, and in the
-    ledger by user id.
-    """
-    email, _ = mixed_case_keycloak_user
-    # LiteLLM keys the personal customer by the username, which the identity provider
-    # lowercases; the project itself keeps the real mixed-case name.
-    customers = {"personal": email.lower()}
-
-    logger.info("Phase 0: the project carries the real mixed-case name and is personal")
-    project = admin_project_utils.get_project_detail(email)
-    assert_that(project.name, equal_to(email), "The project keeps its real casing")
     assert_that(
-        project.project_type,
-        equal_to("personal"),
-        "A mixed-case email must get a personal project, not a regular one",
+        lite_llm_budget_utils.wait_for_charged_sources(before, keys, customers),
+        equal_to({"default_project"}),
+        "A personal assistant must be charged to the assigned default project",
     )
 
-    logger.info("Phase 1: unbound flow charges the real mixed-case personal project")
-    before = lite_llm_budget_utils.get_spends({}, customers)
-    ledger_before = admin_project_utils.get_member_budget_spending(
-        DEFAULT_PLATFORM_BUDGET_ID, "platform", mixed_case_user_id
-    )
-    mixed_case_skills_utils.generate_instructions(budget_skill_description())
+
+# ── TC-21 ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.budget
+@pytest.mark.api
+@pytest.mark.enterprise
+@pytest.mark.timeout(1500)
+def test_member_project_without_budget_falls_back_to_funded_default_project(
+    keycloak_user_2,
+    user2_id,
+    user_utils,
+    user2_assistant,
+    user2_assistant_utils,
+    budget_project_factory,
+    lite_llm_budget_utils,
+):
+    email, _ = keycloak_user_2
+    default_project = budget_project_factory(PLATFORM_BUDGET_CATEGORIES, (user2_id,))
+    unfunded_project = budget_project_factory(None, (user2_id,))
+    user_utils.set_default_project(user2_id, default_project)
+    sleep(BUDGET_CACHE_DELAY)
+    keys = {
+        "default_project": project_key_alias(default_project),
+        "unfunded_project": project_key_alias(unfunded_project),
+    }
+    customers = {"personal": email}
+    assistant = user2_assistant(project_name=unfunded_project)
+
+    logger.info("Asking an assistant of a member project that has no budget")
+    before = lite_llm_budget_utils.get_spends(keys, customers)
+    user2_assistant_utils.ask_assistant(assistant, budget_chat_prompt())
+
     assert_that(
-        lite_llm_budget_utils.wait_for_charged_sources(before, {}, customers),
-        equal_to({"personal"}),
-        "Spend must be charged to the personal budget key under the project's real "
-        "mixed-case name",
+        lite_llm_budget_utils.wait_for_charged_sources(before, keys, customers),
+        equal_to({"default_project"}),
+        "A project without a budget must fall back to the funded default project, "
+        "not to the personal budget",
     )
-    charged = admin_project_utils.wait_for_member_budget_spending_above(
-        DEFAULT_PLATFORM_BUDGET_ID,
-        "platform",
-        ledger_before,
-        user_id=mixed_case_user_id,
-        timeout=LEDGER_CHARGE_TIMEOUT,
-    )
-    assert_that(charged, not_none(), "No personal platform spend in the ledger")
-    assert_that(
-        charged.current_spending,
-        greater_than(ledger_before),
-        "The ledger must show the spend on the personal platform budget",
-    )
+
+
+# ── TC-22 ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.budget
+@pytest.mark.api
+@pytest.mark.enterprise
+@pytest.mark.timeout(1500)
+@pytest.mark.parametrize(
+    "has_default, expected_charged",
+    [
+        pytest.param(True, "default_project", id="with_default"),
+        pytest.param(False, "personal", id="without_default"),
+    ],
+)
+def test_shared_assistant_non_member_is_charged_to_default_project_not_asset_project(
+    has_default,
+    expected_charged,
+    keycloak_user_2,
+    user2_id,
+    user_utils,
+    budget_project_factory,
+    user1_assistant,
+    user2_assistant_utils,
+    lite_llm_budget_utils,
+):
+    email, _ = keycloak_user_2
+    asset_project = budget_project_factory(PLATFORM_BUDGET_CATEGORIES, ())
+    default_project = budget_project_factory(PLATFORM_BUDGET_CATEGORIES, (user2_id,))
+    assistant = user1_assistant(project_name=asset_project, shared=True)
+    if has_default:
+        user_utils.set_default_project(user2_id, default_project)
+    sleep(BUDGET_CACHE_DELAY)
+    keys = {
+        "asset_project": project_key_alias(asset_project),
+        "default_project": project_key_alias(default_project),
+    }
+    customers = {"personal": email}
 
     logger.info(
-        "Phase 2: requesting the user's own identity in another casing is not a fallback"
+        "Asking a shared assistant as a non-member: default set=%s, expecting %s",
+        has_default,
+        expected_charged,
     )
-    cli_customers = {
-        **customers,
-        "personal_cli": f"{customers['personal']}_{DEFAULT_CLI_BUDGET_ID}",
+    before = lite_llm_budget_utils.get_spends(keys, customers)
+    user2_assistant_utils.ask_assistant(assistant, budget_chat_prompt())
+
+    assert_that(
+        lite_llm_budget_utils.wait_for_charged_sources(before, keys, customers),
+        equal_to({expected_charged}),
+        f"Spend must be charged to {expected_charged}, never to the assistant's project",
+    )
+
+
+# ── TC-23 ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.budget
+@pytest.mark.api
+@pytest.mark.enterprise
+@pytest.mark.marketplace
+@pytest.mark.timeout(1500)
+@pytest.mark.parametrize(
+    "has_default, expected_charged",
+    [
+        pytest.param(True, "default_project", id="with_default"),
+        pytest.param(False, "personal", id="without_default"),
+    ],
+)
+def test_marketplace_assistant_from_personal_project_is_charged_to_default_project(
+    has_default,
+    expected_charged,
+    keycloak_user_1,
+    user1_id,
+    user_utils,
+    budget_project_factory,
+    user1_published_assistant,
+    user1_assistant_utils,
+    lite_llm_budget_utils,
+):
+    email, _ = keycloak_user_1
+    default_project = budget_project_factory(PLATFORM_BUDGET_CATEGORIES)
+    assistant = user1_published_assistant(email)
+    if has_default:
+        user_utils.set_default_project(user1_id, default_project)
+    sleep(BUDGET_CACHE_DELAY)
+    keys = {"default_project": project_key_alias(default_project)}
+    customers = {"personal": email}
+
+    logger.info(
+        "Owner asks their published assistant from the personal project: "
+        "default set=%s, expecting %s",
+        has_default,
+        expected_charged,
+    )
+    before = lite_llm_budget_utils.get_spends(keys, customers)
+    user1_assistant_utils.ask_assistant(assistant, budget_chat_prompt())
+
+    assert_that(
+        lite_llm_budget_utils.wait_for_charged_sources(before, keys, customers),
+        equal_to({expected_charged}),
+        f"Spend must be charged to {expected_charged}",
+    )
+
+
+# ── TC-24 ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.budget
+@pytest.mark.api
+@pytest.mark.enterprise
+@pytest.mark.timeout(1800)
+def test_cli_unfunded_member_project_falls_back_to_default_project(
+    keycloak_user_2,
+    user2_id,
+    user_utils,
+    user2_proxy_utils,
+    default_llm,
+    budget_project_factory,
+    lite_llm_budget_utils,
+):
+    email, _ = keycloak_user_2
+    default_project = budget_project_factory(CLI_BUDGET_CATEGORIES, (user2_id,))
+    unfunded_project = budget_project_factory(None, (user2_id,))
+    user_utils.set_default_project(user2_id, default_project)
+    sleep(BUDGET_CACHE_DELAY)
+    keys = {
+        "default_project": project_key_alias(default_project, "cli"),
+        "unfunded_project": project_key_alias(unfunded_project, "cli"),
     }
-    before = lite_llm_budget_utils.get_spends({}, cli_customers)
-    ledger_before = admin_project_utils.get_member_budget_spending(
-        DEFAULT_CLI_BUDGET_ID, "cli", mixed_case_user_id
-    )
-    mixed_case_proxy_utils.send_messages_request(
+    customers = {
+        "personal": email,
+        "personal_cli": f"{email}_{DEFAULT_CLI_BUDGET_ID}",
+    }
+
+    logger.info("CLI request naming a member project that has no budget")
+    before = lite_llm_budget_utils.get_spends(keys, customers)
+    user2_proxy_utils.send_messages_request(
         model=default_llm.base_name,
         messages=[{"role": "user", "content": budget_chat_prompt()}],
-        extra_headers={**CLI_CLIENT_HEADER, CLI_PROJECT_HEADER: email.upper()},
+        extra_headers={**CLI_CLIENT_HEADER, CLI_PROJECT_HEADER: unfunded_project},
     ).raise_for_status()
+
     assert_that(
-        lite_llm_budget_utils.wait_for_charged_sources(before, {}, cli_customers),
-        equal_to({"personal_cli"}),
-        "Requesting the user's own identity in another casing must still charge the "
-        "real personal CLI budget, not a fallback destination",
+        lite_llm_budget_utils.wait_for_charged_sources(before, keys, customers),
+        equal_to({"default_project"}),
+        "A member project without a budget must fall back to the funded default "
+        "project, not to the personal CLI budget",
     )
-    charged = admin_project_utils.wait_for_member_budget_spending_above(
-        DEFAULT_CLI_BUDGET_ID,
-        "cli",
-        ledger_before,
-        user_id=mixed_case_user_id,
-        timeout=LEDGER_CHARGE_TIMEOUT,
+
+
+# ── TC-25 ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.budget
+@pytest.mark.api
+@pytest.mark.enterprise
+@pytest.mark.timeout(1200)
+def test_cli_non_member_project_header_is_rejected_for_regular_user(
+    platform_user,
+    default_llm,
+    budget_project_factory,
+):
+    project = budget_project_factory(CLI_BUDGET_CATEGORIES, ())
+    proxy_utils = ProxyUtils(platform_user.client)
+
+    logger.info("Regular user names a project they are not a member of")
+    response = proxy_utils.send_messages_request(
+        model=default_llm.base_name,
+        messages=[{"role": "user", "content": budget_chat_prompt()}],
+        extra_headers={**CLI_CLIENT_HEADER, CLI_PROJECT_HEADER: project},
     )
-    assert_that(charged, not_none(), "No personal CLI spend in the ledger")
+
     assert_that(
-        charged.current_spending,
-        greater_than(ledger_before),
-        "The ledger must show the spend on the personal CLI budget",
+        response.status_code,
+        equal_to(403),
+        "A regular user must not be able to name a project they cannot use",
+    )
+
+
+@pytest.mark.budget
+@pytest.mark.api
+@pytest.mark.enterprise
+@pytest.mark.timeout(1800)
+def test_cli_non_member_project_header_is_ignored_for_admin(
+    keycloak_user_2,
+    user2_id,
+    user_utils,
+    user2_proxy_utils,
+    default_llm,
+    budget_project_factory,
+    lite_llm_budget_utils,
+):
+    email, _ = keycloak_user_2
+    default_project = budget_project_factory(CLI_BUDGET_CATEGORIES, (user2_id,))
+    named_project = budget_project_factory(CLI_BUDGET_CATEGORIES, ())
+    user_utils.set_default_project(user2_id, default_project)
+    sleep(BUDGET_CACHE_DELAY)
+    keys = {
+        "default_project": project_key_alias(default_project, "cli"),
+        "named_project": project_key_alias(named_project, "cli"),
+    }
+    customers = {
+        "personal": email,
+        "personal_cli": f"{email}_{DEFAULT_CLI_BUDGET_ID}",
+    }
+
+    logger.info("Admin names a project they are not a member of")
+    before = lite_llm_budget_utils.get_spends(keys, customers)
+    user2_proxy_utils.send_messages_request(
+        model=default_llm.base_name,
+        messages=[{"role": "user", "content": budget_chat_prompt()}],
+        extra_headers={**CLI_CLIENT_HEADER, CLI_PROJECT_HEADER: named_project},
+    ).raise_for_status()
+
+    assert_that(
+        lite_llm_budget_utils.wait_for_charged_sources(before, keys, customers),
+        equal_to({"default_project"}),
+        "The named project must be ignored and the default project charged",
+    )
+
+
+# ── TC-26 ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.budget
+@pytest.mark.api
+@pytest.mark.enterprise
+@pytest.mark.marketplace
+@pytest.mark.timeout(1800)
+def test_sub_assistant_is_charged_by_its_own_attribution_row(
+    keycloak_user_2,
+    user2_id,
+    user_utils,
+    budget_project_factory,
+    user1_published_assistant,
+    user1_orchestrator,
+    user2_assistant_utils,
+    lite_llm_budget_utils,
+):
+    email, _ = keycloak_user_2
+    orchestrator_project = budget_project_factory(
+        PLATFORM_BUDGET_CATEGORIES, (user2_id,)
+    )
+    sub_assistant_project = budget_project_factory(PLATFORM_BUDGET_CATEGORIES, ())
+    default_project = budget_project_factory(PLATFORM_BUDGET_CATEGORIES, (user2_id,))
+    sub_assistant = user1_published_assistant(sub_assistant_project)
+    orchestrator = user1_orchestrator(orchestrator_project, sub_assistant, "math")
+    user_utils.set_default_project(user2_id, default_project)
+    sleep(BUDGET_CACHE_DELAY)
+    keys = {
+        "orchestrator_project": project_key_alias(orchestrator_project),
+        "sub_assistant_project": project_key_alias(sub_assistant_project),
+        "default_project": project_key_alias(default_project),
+    }
+    customers = {"personal": email}
+
+    logger.info(
+        "Asking a math question that the orchestrator hands to its sub-assistant"
+    )
+    before = lite_llm_budget_utils.get_spends(keys, customers)
+    user2_assistant_utils.ask_assistant(orchestrator, budget_math_prompt(), stream=True)
+
+    assert_that(
+        lite_llm_budget_utils.wait_for_charged_sources(before, keys, customers),
+        equal_to({"orchestrator_project", "default_project"}),
+        "The orchestrator must be charged to its own project and the marketplace "
+        "sub-assistant to the default project, never to the sub-assistant's project",
     )

@@ -83,20 +83,31 @@ class KeycloakUtils:
             "Content-Type": "application/json",
         }
 
-    def create_test_user(self, email: str, project_name: str) -> str:
-        return self._create_user(email, project_name, role_names=("developer", "admin"))
+    def create_test_user(
+        self, email: str, project_name: str, username: str | None = None
+    ) -> str:
+        """Create a platform admin; the login name is the e-mail unless `username` is given."""
+        return self._create_user(
+            email, project_name, role_names=("developer", "admin"), username=username
+        )
 
     def create_platform_user(self, email: str) -> str:
         """Create a user with developer role only (no platform admin)."""
         return self._create_user(email, email, role_names=("developer",))
 
-    def _create_user(self, email: str, project_name: str, role_names: tuple) -> str:
+    def _create_user(
+        self,
+        email: str,
+        project_name: str,
+        role_names: tuple,
+        username: str | None = None,
+    ) -> str:
         password = self._generate_password()
         headers = self._get_headers()
 
         create_url = f"{self._server_url}admin/realms/{self._realm}/users"
         user_payload = {
-            "username": email,
+            "username": username or email,
             "email": email,
             "firstName": "AutoTest",
             "lastName": email.split("@")[0],
