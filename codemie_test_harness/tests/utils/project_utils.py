@@ -27,6 +27,7 @@ from codemie_sdk.models.project import (
     BulkAssignmentUserItem,
     CsvImportValidationResponse,
     PaginatedProjectListResponse,
+    ProjectAllowedModelsResponse,
     ProjectAssignmentResponse,
     ProjectBudgetItem,
     ProjectCreateResponse,
@@ -378,6 +379,18 @@ class ProjectUtils(BaseUtils):
             chargeback_attribution=chargeback_attribution,
             cli_analytics_enabled=cli_analytics_enabled,
         )
+
+    def set_default_model(
+        self, project_name: str, default_model: str
+    ) -> ProjectAllowedModelsResponse:
+        """Set the model a project starts on, keeping its model restriction."""
+        return self.client.projects.update_allowed_models(
+            project_name, default_model=default_model
+        )
+
+    def reset_model_settings(self, project_name: str) -> ProjectAllowedModelsResponse:
+        """Remove the project's model restriction and default model."""
+        return self.client.projects.reset_allowed_models(project_name)
 
     def delete_project_with_all_members(self, project_name: str) -> None:
         """Remove every member, then delete the project.
