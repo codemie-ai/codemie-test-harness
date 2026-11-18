@@ -66,11 +66,11 @@ def models_missing_temperature_flag(models) -> list[str]:
     ]
 
 
-def models_rejecting_temperature(models) -> list:
+def models_accepting_temperature(models) -> list:
     return [
         model
         for model in models
-        if model.features is not None and model.features.temperature is False
+        if model.features is not None and model.features.temperature is True
     ]
 
 

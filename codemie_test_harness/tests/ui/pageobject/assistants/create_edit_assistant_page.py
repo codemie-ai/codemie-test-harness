@@ -524,8 +524,11 @@ class CreateEditAssistantPage(BasePage):
 
     @property
     def effort_options(self) -> Locator:
-        """Options of the open Effort select (one per effort level of the model)."""
-        return self.page.get_by_role("option")
+        """Options of the open Effort select (one per effort level of the model).
+        Scoped to the overlay listbox: PrimeVue dropdowns also render a hidden native
+        select whose options (the placeholder, 'Auto') are always in the DOM.
+        """
+        return self.page.locator('ul[role="listbox"]').get_by_role("option")
 
     @property
     def effort_token_usage_warning(self) -> Locator:
@@ -1220,7 +1223,7 @@ class CreateEditAssistantPage(BasePage):
         """Open the Effort select and choose a level; returns once the options closed."""
         self.expand_extra_configuration()
         self.effort_select.click()
-        self.page.get_by_role("option", name=level, exact=True).click()
+        self.effort_options.get_by_text(level, exact=True).click()
         expect(self.effort_options).to_have_count(0)
         return self
 
