@@ -340,6 +340,43 @@ class WorkflowUtils(BaseUtils):
 
         return completed_execution
 
+    def send_workflow_chat_message(
+        self,
+        workflow_id,
+        conversation_id: str,
+        user_input: str,
+        timeout: Optional[int] = None,
+    ):
+        """
+        Send one more message in a workflow conversation and wait for its execution.
+
+        From the second message on, the stored prompt of an execution is the user
+        input with the previous-executions block prepended, so it is no longer equal
+        to ``user_input`` and ``create_workflow_execution`` cannot find it by prompt.
+        This helper takes the execution id from the create response instead.
+
+        Args:
+            workflow_id: Workflow ID
+            conversation_id: Workflow conversation the message belongs to
+            user_input: Message sent as is (no nonce is appended)
+            timeout: Override the shared ``DEFAULT_TIMEOUT`` completion poll timeout
+
+        Returns:
+            Completed workflow execution
+        """
+        executions_service = self.client.workflows.executions(workflow_id)
+        created = executions_service.create(
+            user_input=user_input,
+            conversation_id=conversation_id,
+        )
+        execution_id = created["execution_id"]
+
+        wait_kwargs = {"timeout": timeout} if timeout is not None else {}
+        self.wait_for_completion(
+            service=executions_service, _id=execution_id, **wait_kwargs
+        )
+        return executions_service.get(execution_id)
+
     def create_workflow_execution_no_wait(
         self,
         workflow_id,
