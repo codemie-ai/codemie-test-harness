@@ -434,3 +434,58 @@ FIXED_CONTENT_HEADERS = {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
 }
+
+
+INVALID_REQUEST_CODE = "INVALID_REQUEST"
+INVALID_CATEGORIES_CODE = "INVALID_CATEGORIES"
+INVALID_FILTER_CODE = "INVALID_FILTER"
+IDEMPOTENCY_CONFLICT_CODE = "IDEMPOTENCY_CONFLICT"
+UNPROCESSABLE = 422
+CONFLICT = 409
+PUBLISHED_NEEDS_CATEGORY = "A published application needs at least one category"
+CATEGORY_IN_USE = "Cannot delete category"
+MAX_HOSTED_CATEGORIES = 3
+
+
+@dataclass(frozen=True)
+class PublishRefusal:
+    """A publish body the platform refuses: the body, the code and a part of the message.
+
+    A malformed body is refused before its ids are looked up, so they need not exist.
+    """
+
+    id: str
+    body: dict
+    code: str
+    message_part: str
+
+
+PUBLISH_REFUSALS = [
+    PublishRefusal(
+        "empty-body", {}, INVALID_REQUEST_CODE, "At least one category is required"
+    ),
+    PublishRefusal(
+        "empty-list",
+        {"categories": []},
+        INVALID_REQUEST_CODE,
+        "At least one category is required",
+    ),
+    PublishRefusal(
+        "more-than-three",
+        {"categories": ["first", "second", "third", "fourth"]},
+        INVALID_REQUEST_CODE,
+        "Maximum 3 categories allowed",
+    ),
+    PublishRefusal(
+        "duplicate",
+        {"categories": ["same", "same"]},
+        INVALID_REQUEST_CODE,
+        "category IDs must be unique",
+    ),
+    PublishRefusal(
+        "unknown-id",
+        {"categories": ["autotest-no-such-category"]},
+        INVALID_CATEGORIES_CODE,
+        "Invalid category IDs",
+    ),
+]
