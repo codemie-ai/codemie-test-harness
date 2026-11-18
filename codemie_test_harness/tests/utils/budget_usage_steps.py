@@ -289,13 +289,13 @@ def assert_every_row_carries_is_default_outside_the_columns(
     rows_without_default: list[dict],
     rows_with_default: list[dict],
 ):
-    """Every row has the six column keys plus a boolean is_default, which is not a column."""
+    """Every row has the seven column keys plus a boolean is_default, which is not a column."""
     all_rows = [*rows_without_default, *rows_with_default]
     row_keys = [set(row.keys()) for row in all_rows]
     assert_that(
         [BUDGET_USAGE_ROW_KEYS - keys for keys in row_keys],
         only_contains(set()),
-        "Every row must carry the six column keys plus is_default",
+        "Every row must carry the seven column keys plus is_default",
     )
     assert_that(
         [

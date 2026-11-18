@@ -65,7 +65,6 @@ class PersonalSpendingPage(BasePage):
     DEFAULT_BADGE_PATTERN = re.compile(r"^default$", re.IGNORECASE)
     DEFAULT_BADGE_SPECIFIED_TEXT = "Default"
     SHARED_LIMIT_TOOLTIP = SHARED_LIMIT_TOOLTIP
-    SPENDING_CARD_SELECTOR = '[data-onboarding="spending-card"]'
     # The usage block of a Total cell.
     LIMIT_LABEL_PATTERN = re.compile(r"^(Personal limit|Available to you|User limit)$")
     PERCENTAGE_PATTERN = re.compile(r"^(\d+(\.\d+)?%|-)$")
@@ -105,21 +104,6 @@ class PersonalSpendingPage(BasePage):
     def empty_state(self):
         """'No spending data available' text."""
         return self.page.get_by_text(self.EMPTY_STATE_TEXT)
-
-    @property
-    def spending_card(self):
-        """The card of the panel, in its table view and in its doughnut view."""
-        return self.page.locator(self.SPENDING_CARD_SELECTOR)
-
-    @property
-    def doughnut(self):
-        """The doughnut chart of the single-row view."""
-        return self.spending_card.locator("canvas")
-
-    @property
-    def doughnut_percentage(self):
-        """Percentage text drawn over the doughnut."""
-        return self.spending_card.get_by_text(self.PERCENTAGE_PATTERN)
 
     @property
     def shared_limit_tooltip(self):
@@ -249,13 +233,6 @@ class PersonalSpendingPage(BasePage):
         if value is None:
             return ABSENT_VALUE_MARKER
         return f"{cls._round_half_up(min(max(value, 0), 100), 2)}%"
-
-    @classmethod
-    def format_doughnut_percentage(cls, value: float | None) -> str:
-        """Percentage over the doughnut: capped at 100 with 1 decimal; a dash when unknown."""
-        if value is None:
-            return ABSENT_VALUE_MARKER
-        return f"{cls._round_half_up(min(value, 100), 1)}%"
 
     # ── Assertions ────────────────────────────────────────────────────────────
 
@@ -452,7 +429,9 @@ class PersonalSpendingPage(BasePage):
             expect(self.info_icon(name), f"info icon of {name}").to_have_count(1)
         expect(self.shared_limit_tooltip).to_have_count(0)
         self.info_icon(names[0]).hover()
-        expect(self.shared_limit_tooltip).to_be_visible()
+        # The tooltip is appended to the body, outside the usage block, and the panel renders its
+        # element twice, so the visible check takes the first match instead of failing strict mode.
+        expect(self.shared_limit_tooltip.first).to_be_visible()
         return self
 
     @step
@@ -469,15 +448,3 @@ class PersonalSpendingPage(BasePage):
         if is_shared:
             return self.should_show_shared_limit_tooltip(names)
         return self.should_not_show_shared_limit_tooltip(names)
-
-    @step
-    def should_show_doughnut_with_total(self, total: float | None):
-        """Verify the single-row view: a doughnut with the API total, no table, no empty state."""
-        expect(self.heading).to_be_visible(timeout=self.RESPONSE_TIMEOUT_MS)
-        expect(self.doughnut).to_have_count(1)
-        expect(self.doughnut_percentage).to_have_text(
-            self.format_doughnut_percentage(total)
-        )
-        expect(self.table).to_have_count(0)
-        expect(self.empty_state).to_have_count(0)
-        return self

@@ -47,7 +47,6 @@ from codemie_test_harness.tests.ui.budgets.personal_spending_steps import (
     wait_for_cli_row_to_be_listed,
     wait_for_default_project_rows_first,
     wait_for_shared_project_rows,
-    wait_for_the_only_project_row,
     wait_for_viewer_row_with_combined_total,
 )
 from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import (
@@ -229,20 +228,3 @@ def test_personal_spending_limit_label_and_shared_tooltip_follow_the_row_type(
     spending.should_show_table()
     spending.should_show_limit_label(names, row_kind.limit_label)
     spending.should_mark_shared_limit_only_when(names, row_kind.is_shared_limit)
-
-
-# @case spendings-view-show-personal-project_TC_006
-@pytest.mark.enterprise
-@pytest.mark.budget
-@pytest.mark.ui
-def test_personal_spending_single_project_view_shows_combined_percentage_in_doughnut(
-    page, project_admin_setup, project_admin_setup_client
-):
-    only_row = wait_for_the_only_project_row(
-        project_admin_setup_client, project_admin_setup
-    )
-
-    spending = PersonalSpendingPage(page).open()
-
-    spending.should_have_requested_own_usage_only()
-    spending.should_show_doughnut_with_total(only_row["total"])

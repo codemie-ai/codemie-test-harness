@@ -424,23 +424,3 @@ def set_up_project_rows(
         default=row_kind.is_default_project,
     )
     return project_rows
-
-
-# ---------------------------------------------------------------------------
-# Single-project view
-# ---------------------------------------------------------------------------
-
-
-def wait_for_the_only_project_row(client, project_admin_setup) -> dict:
-    """The user's single budget row: the project of ``project_admin_setup``."""
-    project_name = project_admin_setup[0]
-    rows = BudgetUsageUtils(client).wait_for_rows_where(
-        lambda listed: project_name in row_names(listed)
-    )
-    assert_that(
-        row_names(rows),
-        equal_to([project_name]),
-        "Precondition failed: the doughnut view needs the project's row to be the only "
-        "budget row of the user",
-    )
-    return rows[0]
