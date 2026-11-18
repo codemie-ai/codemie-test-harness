@@ -79,6 +79,7 @@ class AssistantUtils(BaseUtils):
         enabled_builtin_subagents=None,
         tool_permissions: ToolPermissionsConfig | None = None,
         prompt_variables=None,
+        effort=None,
     ):
         # Generate a random name if assistant_name is not provided
         assistant_name = assistant_name if assistant_name else get_random_name()
@@ -101,6 +102,7 @@ class AssistantUtils(BaseUtils):
             mcp_servers=mcp_servers,
             top_p=top_p,
             temperature=temperature,
+            effort=effort,
             assistant_ids=list(assistant_ids) if assistant_ids else [],
             categories=list(categories) if categories else [],
             conversation_starters=list(conversation_starters)
@@ -135,6 +137,7 @@ class AssistantUtils(BaseUtils):
         enabled_builtin_subagents=None,
         tool_permissions: ToolPermissionsConfig | None = None,
         prompt_variables=None,
+        effort=None,
     ):
         # Generate a random name if assistant_name is not provided
         assistant_name = assistant_name if assistant_name else get_random_name()
@@ -164,6 +167,7 @@ class AssistantUtils(BaseUtils):
             enabled_builtin_subagents=enabled_builtin_subagents,
             tool_permissions=tool_permissions,
             prompt_variables=prompt_variables,
+            effort=effort,
         )
 
         return wait_for_entity(
@@ -501,6 +505,25 @@ class AssistantUtils(BaseUtils):
     ):
         return self.client.assistants.update(
             assistant_id=assistant_id, request=update_request
+        )
+
+    def update_assistant_effort(self, assistant_id: str, effort: Optional[str]):
+        """Set (or clear, with ``None``) the effort of an existing assistant.
+
+        Sends the stored required fields unchanged; ``effort=None`` is passed
+        explicitly so the SDK sends a JSON null and the stored effort is cleared.
+        """
+        assistant = self.get_assistant_by_id(assistant_id)
+        return self.update_assistant(
+            assistant_id,
+            AssistantUpdateRequest(
+                name=assistant.name,
+                description=assistant.description,
+                system_prompt=assistant.system_prompt,
+                project=assistant.project,
+                llm_model_type=assistant.llm_model_type,
+                effort=effort,
+            ),
         )
 
     def rollback_to_version(
