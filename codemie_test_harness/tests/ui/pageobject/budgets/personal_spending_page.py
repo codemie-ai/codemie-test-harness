@@ -17,10 +17,14 @@
 URL: /settings/profile
 
 The panel loads GET /v1/analytics/budget_usage. With two or more rows it draws a table,
-with one row or none a doughnut or an empty-state text; only the table is modelled here.
-The panel has no test ids, so it is found by its heading, the table by its column headers
-and the rows by their cell text. The budget_limit column is hidden by design, so the visible
-columns are project_name, current_spending, budget_reset_at, time_until_reset and total.
+with one row a doughnut with the combined percentage, with none an empty-state text.
+The panel has no test ids, so it is found by its heading (the card also carries the
+data-onboarding attribute "spending-card"), the table by its column headers and the rows by
+their cell text. The budget_limit, current_spending and is_shared_limit columns are hidden by
+design, so the visible columns are project_name, budget_reset_at, time_until_reset and total.
+The Total cell holds a usage block: the limit label with the percentage (2 decimals) and,
+for a shared limit, an info icon with a tooltip; a progress bar; "Your spending: <amount>" and
+"Available: <amount>".
 """
 
 import logging
@@ -33,16 +37,21 @@ from playwright.sync_api import expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import (
+    SHARED_LIMIT_TOOLTIP,
+)
 from codemie_test_harness.tests.utils.base_utils import poll_until
 
 logger = logging.getLogger(__name__)
 
 # Positions of the visible cells in a table row.
 LABEL_CELL = 0
-SPENDING_CELL = 1
-RESET_AT_CELL = 2
-TIME_UNTIL_RESET_CELL = 3
-TOTAL_CELL = 4
+RESET_AT_CELL = 1
+TIME_UNTIL_RESET_CELL = 2
+TOTAL_CELL = 3
+
+# What the panel shows for a value it does not know.
+ABSENT_VALUE_MARKER = "-"
 
 
 class PersonalSpendingPage(BasePage):
@@ -55,6 +64,13 @@ class PersonalSpendingPage(BasePage):
     # The badge renders DEFAULT while the specification says Default.
     DEFAULT_BADGE_PATTERN = re.compile(r"^default$", re.IGNORECASE)
     DEFAULT_BADGE_SPECIFIED_TEXT = "Default"
+    SHARED_LIMIT_TOOLTIP = SHARED_LIMIT_TOOLTIP
+    SPENDING_CARD_SELECTOR = '[data-onboarding="spending-card"]'
+    # The usage block of a Total cell.
+    LIMIT_LABEL_PATTERN = re.compile(r"^(Personal limit|Available to you|User limit)$")
+    PERCENTAGE_PATTERN = re.compile(r"^(\d+(\.\d+)?%|-)$")
+    SPENDING_PATTERN = re.compile(r"^(Your spending|Spending):")
+    AVAILABLE_PATTERN = re.compile(r"^Available:")
     RESPONSE_TIMEOUT_MS = 30000
 
     def __init__(self, page):
@@ -90,6 +106,26 @@ class PersonalSpendingPage(BasePage):
         """'No spending data available' text."""
         return self.page.get_by_text(self.EMPTY_STATE_TEXT)
 
+    @property
+    def spending_card(self):
+        """The card of the panel, in its table view and in its doughnut view."""
+        return self.page.locator(self.SPENDING_CARD_SELECTOR)
+
+    @property
+    def doughnut(self):
+        """The doughnut chart of the single-row view."""
+        return self.spending_card.locator("canvas")
+
+    @property
+    def doughnut_percentage(self):
+        """Percentage text drawn over the doughnut."""
+        return self.spending_card.get_by_text(self.PERCENTAGE_PATTERN)
+
+    @property
+    def shared_limit_tooltip(self):
+        """Tooltip of the info icon of a shared limit, in the DOM only while it is hovered."""
+        return self.page.get_by_text(self.SHARED_LIMIT_TOOLTIP)
+
     def column_header(self, label: str):
         """Column header with exactly this label."""
         return self.page.get_by_role("columnheader", name=label, exact=True)
@@ -97,6 +133,53 @@ class PersonalSpendingPage(BasePage):
     def row_cells(self, index: int):
         """Cells of the body row at this position."""
         return self.rows.nth(index).get_by_role("cell")
+
+    def row_named(self, name: str):
+        """The body row whose label cell holds exactly this project name."""
+        return self.rows.filter(has=self.page.get_by_text(name, exact=True))
+
+    def usage_cell(self, name: str):
+        """The Total cell, holding the usage block, of the row with this project name."""
+        return self.row_named(name).get_by_role("cell").nth(TOTAL_CELL)
+
+    def limit_label(self, name: str):
+        """Limit label ('Personal limit' or 'Available to you') of the row's usage block."""
+        return self.usage_cell(name).get_by_text(self.LIMIT_LABEL_PATTERN)
+
+    def info_icon(self, name: str):
+        """Info icon beside the limit label; only a shared limit has one."""
+        return self.limit_label(name).get_by_role("img")
+
+    def usage_percentages(self, name: str):
+        """Every percentage text of the row's usage block; the progress bar adds none."""
+        return self.usage_cell(name).get_by_text(self.PERCENTAGE_PATTERN)
+
+    def usage_label_line(self, name: str):
+        """The line of the usage block that holds the limit label and the percentage."""
+        return (
+            self.usage_cell(name)
+            .locator("div")
+            .filter(has=self.page.get_by_text(self.LIMIT_LABEL_PATTERN))
+            .filter(has=self.page.get_by_text(self.PERCENTAGE_PATTERN))
+            .filter(has_not=self.page.get_by_text(self.SPENDING_PATTERN))
+        )
+
+    def usage_bar_fill(self, name: str):
+        """Filled part of the usage block's progress bar.
+
+        The bar is plain divs with no role or test id. Its fill is the childless div of the
+        usage block that carries an inline width, set to the clamped percentage
+        (SpendingProgressBar.tsx); the track has a colour only and wrappers have children.
+        """
+        return self.usage_cell(name).locator('div[style*="width:"]:not(:has(*))')
+
+    def usage_spending(self, name: str):
+        """'Your spending: <amount>' text of the row's usage block."""
+        return self.usage_cell(name).get_by_text(self.SPENDING_PATTERN)
+
+    def usage_available(self, name: str):
+        """'Available: <amount>' text of the row's usage block."""
+        return self.usage_cell(name).get_by_text(self.AVAILABLE_PATTERN)
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
@@ -136,19 +219,43 @@ class PersonalSpendingPage(BasePage):
     # ── Formatting, as the panel renders values ──────────────────────────────
 
     @staticmethod
-    def format_currency(value: float) -> str:
-        """Currency cell text: dollar sign, thousands separators, 2 decimals."""
+    def format_currency(value: float | None) -> str:
+        """Currency text: dollar sign, thousands separators, 2 decimals; a dash when unknown."""
+        if value is None:
+            return ABSENT_VALUE_MARKER
         return f"${value:,.2f}"
 
     @staticmethod
-    def format_percentage(value: float) -> str:
-        """Total cell text: the value clamped to 0..100 with 1 decimal, rounded like JS toFixed.
+    def format_available(spent: float | None, limit: float | None) -> str:
+        """'Available' amount: the limit less the spend, never below zero; a dash when unknown."""
+        if spent is None or limit is None:
+            return ABSENT_VALUE_MARKER
+        return PersonalSpendingPage.format_currency(max(0, limit - spent))
 
-        ``toFixed`` rounds half up on the exact binary value of the number, not on its shortest
-        decimal form, so the number goes into ``Decimal`` as it is: 16.95 is shown as 16.9.
+    @staticmethod
+    def _round_half_up(value: float, places: int) -> str:
+        """Round like JS toFixed: half up on the exact binary value of the number.
+
+        The number goes into ``Decimal`` as it is, not through its shortest decimal form, so a
+        value such as 16.95 (stored a little below) is shown as 16.9 with one decimal.
         """
-        clamped = min(max(value, 0), 100)
-        return f"{Decimal(clamped).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)}%"
+        return str(
+            Decimal(value).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP)
+        )
+
+    @classmethod
+    def format_percentage(cls, value: float | None) -> str:
+        """Percentage of the usage block: clamped to 0..100 with 2 decimals; a dash when unknown."""
+        if value is None:
+            return ABSENT_VALUE_MARKER
+        return f"{cls._round_half_up(min(max(value, 0), 100), 2)}%"
+
+    @classmethod
+    def format_doughnut_percentage(cls, value: float | None) -> str:
+        """Percentage over the doughnut: capped at 100 with 1 decimal; a dash when unknown."""
+        if value is None:
+            return ABSENT_VALUE_MARKER
+        return f"{cls._round_half_up(min(value, 100), 1)}%"
 
     # ── Assertions ────────────────────────────────────────────────────────────
 
@@ -224,20 +331,62 @@ class PersonalSpendingPage(BasePage):
         return labels
 
     @step
+    def should_show_usage_block(self, api_row: dict):
+        """Verify the row's usage block shows the API row's values, in the panel's formats.
+
+        Exactly one percentage text (the progress bar has no label of its own), 2 decimals, on
+        the line of the limit label; 'Your spending: <amount>' equal to current_spending and
+        'Available: <amount>' equal to max(0, budget_limit - current_spending).
+        """
+        name = api_row["project_name"]
+        expect(
+            self.usage_percentages(name), f"percentage texts of {name}"
+        ).to_have_count(1)
+        expect(self.usage_percentages(name)).to_have_text(
+            self.format_percentage(api_row["total"])
+        )
+        expect(
+            self.usage_label_line(name), f"limit label line of {name}"
+        ).to_have_count(1)
+        expect(self.usage_spending(name)).to_have_text(
+            f"Your spending: {self.format_currency(api_row['current_spending'])}"
+        )
+        expect(self.usage_available(name)).to_have_text(
+            "Available: "
+            + self.format_available(
+                api_row["current_spending"], api_row["budget_limit"]
+            )
+        )
+        return self
+
+    @staticmethod
+    def format_bar_width(total: float | None) -> str:
+        """Inline width of the bar fill: the total clamped to 0..100, as JS prints the number."""
+        return f"{min(max(total or 0, 0), 100):g}%"
+
+    @step
+    def should_show_usage_bar(self, api_row: dict):
+        """Verify the progress bar of the row's usage block is filled to the API row's total."""
+        name = api_row["project_name"]
+        expect(self.usage_bar_fill(name), f"bar fill of {name}").to_have_count(1)
+        expect(self.usage_bar_fill(name)).to_have_attribute(
+            "style",
+            re.compile(
+                rf"(^|;)\s*width:\s*{re.escape(self.format_bar_width(api_row['total']))}\s*(;|$)"
+            ),
+        )
+        return self
+
+    @step
     def should_show_row_values(self, api_rows: list[dict]):
-        """Verify, row by row, the spend and total the table shows equal the API's values.
+        """Verify, row by row, the usage block equals the API's spend, limit and total.
 
         Reset columns are only checked to be filled when the API has a reset date: their
         text depends on the time zone and on the moment of the request.
         """
         for index, api_row in enumerate(api_rows):
+            self.should_show_usage_block(api_row)
             cells = self.row_cells(index)
-            expect(cells.nth(SPENDING_CELL)).to_have_text(
-                self.format_currency(api_row["current_spending"])
-            )
-            expect(cells.nth(TOTAL_CELL)).to_have_text(
-                self.format_percentage(api_row["total"])
-            )
             if api_row["budget_reset_at"] is not None:
                 expect(cells.nth(RESET_AT_CELL)).not_to_have_text(re.compile(r"^-?$"))
                 expect(cells.nth(TIME_UNTIL_RESET_CELL)).not_to_have_text(
@@ -280,4 +429,55 @@ class PersonalSpendingPage(BasePage):
                         text,
                         self.DEFAULT_BADGE_SPECIFIED_TEXT,
                     )
+        return self
+
+    @step
+    def should_show_limit_label(self, names: list[str], label: str):
+        """Verify the usage block of each of these rows is headed by exactly this limit label."""
+        for name in names:
+            expect(self.limit_label(name), f"limit label of {name}").to_have_text(label)
+        return self
+
+    @step
+    def should_show_usage_blocks(self, api_rows: list[dict]):
+        """Verify the usage block of each of these API rows, by project name."""
+        for api_row in api_rows:
+            self.should_show_usage_block(api_row)
+        return self
+
+    @step
+    def should_show_shared_limit_tooltip(self, names: list[str]):
+        """Verify each row has an info icon and hovering the first one shows the shared-budget tooltip."""
+        for name in names:
+            expect(self.info_icon(name), f"info icon of {name}").to_have_count(1)
+        expect(self.shared_limit_tooltip).to_have_count(0)
+        self.info_icon(names[0]).hover()
+        expect(self.shared_limit_tooltip).to_be_visible()
+        return self
+
+    @step
+    def should_not_show_shared_limit_tooltip(self, names: list[str]):
+        """Verify none of these rows has an info icon, and no shared-budget tooltip is shown."""
+        for name in names:
+            expect(self.info_icon(name), f"info icon of {name}").to_have_count(0)
+        expect(self.shared_limit_tooltip).to_have_count(0)
+        return self
+
+    @step
+    def should_mark_shared_limit_only_when(self, names: list[str], is_shared: bool):
+        """Verify the info icon and tooltip of a shared limit show on these rows only when shared."""
+        if is_shared:
+            return self.should_show_shared_limit_tooltip(names)
+        return self.should_not_show_shared_limit_tooltip(names)
+
+    @step
+    def should_show_doughnut_with_total(self, total: float | None):
+        """Verify the single-row view: a doughnut with the API total, no table, no empty state."""
+        expect(self.heading).to_be_visible(timeout=self.RESPONSE_TIMEOUT_MS)
+        expect(self.doughnut).to_have_count(1)
+        expect(self.doughnut_percentage).to_have_text(
+            self.format_doughnut_percentage(total)
+        )
+        expect(self.table).to_have_count(0)
+        expect(self.empty_state).to_have_count(0)
         return self

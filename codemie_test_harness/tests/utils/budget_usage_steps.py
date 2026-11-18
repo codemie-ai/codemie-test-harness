@@ -30,6 +30,7 @@ from hamcrest import (
     equal_to,
     greater_than,
     greater_than_or_equal_to,
+    has_entry,
     has_item,
     has_items,
     is_not,
@@ -58,6 +59,8 @@ from codemie_test_harness.tests.test_data.budget_usage_project_rows_test_data im
     PREMIUM_ROW_SUFFIX,
     ROUNDING_TOLERANCE,
     ROW_WAIT_INTERVAL,
+    SHARED_LIMIT_COLUMN_ID,
+    SHARED_LIMIT_COLUMN_LABEL,
     ROW_WAIT_TIMEOUT,
     SCALED_OVERRIDE_EQUAL_TO_LIMIT_SOFT,
     SCALED_OVERRIDE_MAX,
@@ -241,6 +244,43 @@ def assert_default_project_row_first_and_personal_row_unflagged(
         flags[email],
         equal_to(False),
         "The personal row must lose is_default once another project is the default",
+    )
+
+
+def assert_project_row_flags_shared_limit(
+    rows: list[dict], project: MemberProject, is_shared_limit: bool
+):
+    """The project's row says whether its limit is the project's whole pooled budget."""
+    project_row = next(row for row in rows if row["project_name"] == project.name)
+    assert_that(
+        project_row[SHARED_LIMIT_COLUMN_ID],
+        equal_to(is_shared_limit),
+        "The project row's is_shared_limit does not follow the enforcement of member spend limits",
+    )
+
+
+def assert_personal_rows_are_not_shared_limit(rows: list[dict], user_credentials):
+    """Personal budget rows are never a shared limit."""
+    personal_rows = [
+        row for row in rows if row["project_name"] in _personal_labels(user_credentials)
+    ]
+    assert_that(
+        personal_rows,
+        is_not(empty()),
+        "Control failed: the response has no personal row to check",
+    )
+    assert_that(
+        [row[SHARED_LIMIT_COLUMN_ID] for row in personal_rows],
+        only_contains(False),
+        "A personal row must carry is_shared_limit false",
+    )
+
+
+def assert_shared_limit_column_is_listed(usage: BudgetUsageUtils):
+    assert_that(
+        usage.get_column_labels(),
+        has_entry(SHARED_LIMIT_COLUMN_ID, SHARED_LIMIT_COLUMN_LABEL),
+        "The response columns must list is_shared_limit labelled 'Shared Limit'",
     )
 
 

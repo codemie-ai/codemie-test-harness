@@ -33,6 +33,11 @@ BUDGET_USAGE_SPEND_ANNOTATION_KEYS = {
     "spend_missing_amount",
 }
 
+# Column of GET /v1/analytics/budget_usage that says whether a row's budget_limit is the project's
+# whole pooled budget, shared by every member, and its label.
+SHARED_LIMIT_COLUMN_ID = "is_shared_limit"
+SHARED_LIMIT_COLUMN_LABEL = "Shared Limit"
+
 # Column ids of GET /v1/analytics/budget_usage, in response order.
 BUDGET_USAGE_COLUMN_IDS = [
     "project_name",
