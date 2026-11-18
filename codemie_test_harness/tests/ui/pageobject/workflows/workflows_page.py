@@ -22,6 +22,7 @@ from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.pageobject.components import (
+    FavoriteStar,
     WorkflowCard,
     WorkflowSidebar,
 )
@@ -150,6 +151,32 @@ class WorkflowsPage(BasePage):
         )
         return WorkflowCard(self.page, card_locator)
 
+    def workflow_favorite_star(self, workflow_name: str) -> FavoriteStar:
+        """Favorite star of the named workflow card."""
+        card_locator = self.get_workflow_card_by_name(workflow_name).card
+        return FavoriteStar(self.page, card_locator)
+
+    @step
+    def open_my_workflows(self):
+        """Open the 'My Workflows' list and wait for it to load."""
+        self.navigate_to()
+        self.sidebar.navigate_to_my_workflows()
+        self.wait_for_page_load()
+        return self
+
+    @step
+    def favorite_workflow(self, workflow_name: str):
+        """Click the star of the named workflow card and wait for the save toast."""
+        self.workflow_favorite_star(workflow_name).favorite()
+        return self
+
+    @step
+    def unfavorite_workflow_if_favorited(self, workflow_name: str):
+        """Open 'My Workflows' and restore the unfavorited state of the named workflow."""
+        self.open_my_workflows()
+        self.workflow_favorite_star(workflow_name).unfavorite_if_favorited()
+        return self
+
     @step
     def get_workflow_card_by_index(self, index: int):
         """Get WorkflowCard component by index (0-based)."""
@@ -275,6 +302,18 @@ class WorkflowsPage(BasePage):
         """Verify workflow is not shared with project."""
         workflow_card = self.get_workflow_card_by_name(workflow_name)
         workflow_card.should_not_be_shared_with_project()
+        return self
+
+    @step
+    def should_show_workflow_favorited(self, workflow_name: str):
+        """Verify the named workflow card shows a filled star."""
+        self.workflow_favorite_star(workflow_name).should_be_filled()
+        return self
+
+    @step
+    def should_show_workflow_not_favorited(self, workflow_name: str):
+        """Verify the named workflow card shows an unfilled star."""
+        self.workflow_favorite_star(workflow_name).should_be_unfilled()
         return self
 
     @step

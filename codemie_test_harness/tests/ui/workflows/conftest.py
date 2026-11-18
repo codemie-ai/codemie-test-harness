@@ -23,6 +23,9 @@ from hamcrest import assert_that, greater_than
 from codemie_test_harness.tests.ui import conversation_ids
 from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
 from codemie_test_harness.tests.ui.pageobject.workflows import WorkflowDetailsPage
+from codemie_test_harness.tests.ui.pageobject.workflows.workflows_page import (
+    WorkflowsPage,
+)
 from codemie_test_harness.tests.ui.test_data.workflow_node_state_settings_test_data import (
     build_node_workflow_yaml,
     build_simple_assistant_workflow_yaml,
@@ -104,6 +107,23 @@ def cleanup_generated_workflow(workflow_utils):
                 workflow_utils.delete_workflow(match)
         except Exception:
             pass
+
+
+@pytest.fixture
+def workflow_to_favorite(page, workflow_with_virtual_assistant):
+    """Create a workflow through the API and undo its favorite state after the test.
+
+    The favorite is stored in the user's preferences, not on the workflow, so deleting
+    the workflow does not clear it. Teardown opens 'My Workflows' and removes the
+    favorite through the UI when the test left it set; it runs before the ``workflow``
+    factory deletes the workflow.
+    """
+    created_workflow = workflow_with_virtual_assistant(get_random_name())
+    yield created_workflow
+    try:
+        WorkflowsPage(page).unfavorite_workflow_if_favorited(created_workflow.name)
+    except Exception:
+        pass
 
 
 @pytest.fixture(scope="function")
