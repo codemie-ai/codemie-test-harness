@@ -240,4 +240,6 @@ def test_move_chat_popup_does_not_offer_agent_folder_of_imported_chats(
     folders.search_move_popup_folder(control_folder)
     folders.should_offer_move_target(control_folder)
     folders.search_move_popup_folder(agent.folder)
+    # The control folder drops out once the new search ran; only then does absence count.
+    folders.should_have_refreshed_move_suggestions(control_folder)
     folders.should_not_offer_move_target(agent.folder)

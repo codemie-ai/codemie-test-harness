@@ -352,6 +352,17 @@ class ChatFoldersSection(BasePage):
         return self
 
     @step
+    def should_have_refreshed_move_suggestions(self, previous_folder_name: str):
+        """Verify the suggestions were re-searched: a folder from the previous query is gone.
+
+        The picker searches after a delay, so the panel of the previous query stays
+        visible for a moment. Call this before a ``should_not_offer_move_target`` check
+        so that check runs against the new query's suggestions, not the stale panel.
+        """
+        expect(self.folder_option(previous_folder_name)).to_have_count(0)
+        return self
+
+    @step
     def should_not_offer_move_target(self, folder_name: str):
         """Verify the Move popup does not suggest the folder."""
         expect(self.folder_option(folder_name)).to_have_count(0)
