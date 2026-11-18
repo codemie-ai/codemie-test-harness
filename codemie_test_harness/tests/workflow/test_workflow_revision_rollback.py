@@ -15,10 +15,12 @@
 """API tests for listing workflow revisions and rolling back to one, through the SDK."""
 
 import pytest
+from codemie_sdk.models.mcp_config import MCPConfigUpdateRequest
 from codemie_sdk.models.workflow import WorkflowMode
 from hamcrest import assert_that, equal_to, greater_than, has_length, not_none
 from requests import HTTPError
 
+from codemie_test_harness.tests import API_DOMAIN, VERIFY_SSL
 from codemie_test_harness.tests.test_data.workflow_revision_test_data import (
     ACCESS_DENIED_MESSAGE,
     DEFAULT_REVISIONS_PER_PAGE,
@@ -33,6 +35,7 @@ from codemie_test_harness.tests.test_data.workflow_revision_test_data import (
     revision_prompt,
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name
+from codemie_test_harness.tests.utils.http_utils import RequestHandler
 from codemie_test_harness.tests.utils.workflow_revision_utils import (
     WorkflowRevisionUtils,
 )
@@ -287,3 +290,106 @@ def test_user_without_edit_access_cannot_list_revisions_or_roll_back(
         equal_to(total_before),
         "A denied request must not add a revision",
     )
+
+
+def _raw_workflow(client, workflow_id: str) -> dict:
+    """GET /v1/workflows/id/{id} unwrapped: carries the derived ``assistants``/``tools``
+    columns the SDK's thin ``Workflow`` model drops."""
+    return RequestHandler(API_DOMAIN, client.token, VERIFY_SSL).get(
+        f"/v1/workflows/id/{workflow_id}", dict
+    )
+
+
+@pytest.mark.parametrize(
+    "catalog_state, expected_reason",
+    [
+        pytest.param("missing", "missing", id="missing"),
+        pytest.param("inactive", "inactive", id="inactive"),
+        pytest.param("not_public", "not_public", id="not_public"),
+    ],
+)
+@pytest.mark.workflow
+@pytest.mark.mcp
+@pytest.mark.api
+def test_rollback_disables_unavailable_link_and_leaves_yaml_byte_identical(
+    revision_utils,
+    client,
+    catalog_mcp_config,
+    default_llm,
+    catalog_state,
+    expected_reason,
+):
+    # @case mcp-link-predicate-save-validation_TC_006
+    config = catalog_mcp_config()
+    server_name = get_random_name()
+    original_yaml_config = (
+        "assistants:\n"
+        "- id: mcp_rollback_node\n"
+        f"  model: {default_llm.base_name}\n"
+        "  system_prompt: Rollback revision marker\n"
+        "  # Catalog link kept across rollbacks; see runbook.\n"
+        "  mcp_servers:\n"
+        f"  - name: {server_name}\n"
+        "    enabled: true  # link to the shared catalog entry\n"
+        f"    mcp_config_id: {config.id}\n"
+        "    use_custom_config: false\n"
+        "states:\n"
+        "- id: mcp_rollback_node\n"
+        "  assistant_id: mcp_rollback_node\n"
+        "  next:\n"
+        "    state_id: end\n"
+    )
+    workflow = revision_utils.create_workflow(
+        workflow_name=get_random_name(),
+        workflow_type=WorkflowMode.SEQUENTIAL,
+        shared=True,
+        workflow_yaml=original_yaml_config,
+    )
+    try:
+        # Save one more revision so the hand-authored config above becomes history[0],
+        # the rollback target below.
+        revision_utils.save_workflow_yaml(
+            workflow,
+            build_revision_yaml(default_llm.base_name, 1),
+        )
+
+        if catalog_state == "missing":
+            client.mcp_configs.delete(config.id)
+        elif catalog_state == "inactive":
+            client.mcp_configs.update(
+                config.id, MCPConfigUpdateRequest(is_active=False)
+            )
+        elif catalog_state == "not_public":
+            client.mcp_configs.update(
+                config.id, MCPConfigUpdateRequest(is_public=False)
+            )
+
+        response = revision_utils.rollback_workflow(workflow.id, 0)
+
+        assert_that(response["disabled_mcp_servers"], has_length(1))
+        disabled = response["disabled_mcp_servers"][0]
+        assert_that(disabled["name"], equal_to(server_name))
+        assert_that(disabled["mcp_config_id"], equal_to(config.id))
+        assert_that(disabled["reason"], equal_to(expected_reason))
+
+        expected_yaml_config = original_yaml_config.replace(
+            "enabled: true  # link to the shared catalog entry",
+            "enabled: false  # link to the shared catalog entry",
+            1,
+        )
+        restored_yaml_config = revision_utils.get_workflow(workflow.id).yaml_config
+        assert_that(
+            restored_yaml_config,
+            equal_to(expected_yaml_config),
+            "only the disabled node's enabled value may change; every comment and "
+            "all other formatting must stay byte-identical",
+        )
+
+        raw = _raw_workflow(client, workflow.id)
+        assert_that(
+            raw["assistants"][0]["mcp_servers"][0]["enabled"],
+            equal_to(False),
+            "the derived assistants column must reflect the disabled link",
+        )
+    finally:
+        revision_utils.delete_workflow(workflow)

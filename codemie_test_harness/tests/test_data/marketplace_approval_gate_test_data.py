@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 import pytest
+from codemie_sdk.models.assistant import MCPServerDetails
 
 from codemie_test_harness.tests.test_data.marketplace_test_data import (
     COMPLETE_CATEGORIES,
@@ -74,6 +75,7 @@ class MarketplaceSubmission:
     system_prompt: str
     categories: List[str] = field(default_factory=list)
     conversation_starters: List[str] = field(default_factory=list)
+    mcp_servers: List[MCPServerDetails] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -104,11 +106,13 @@ def build_marketplace_submission(
     gates: CoreGates,
     name: Optional[str] = None,
     categories: Optional[List[str]] = None,
+    mcp_servers: Optional[List[MCPServerDetails]] = None,
 ) -> MarketplaceSubmission:
     """A submission with a unique name and content that clears the stand's core gates.
 
     The description reaches ``description_min`` and the system prompt reaches both
     ``system_prompt_min`` and ``substance_prompt_alt_min``, whatever their values.
+    ``mcp_servers`` defaults to none, so existing callers are unaffected.
     """
     prompt_minimum = max(gates.system_prompt_min, gates.substance_prompt_alt_min)
     return MarketplaceSubmission(
@@ -121,6 +125,7 @@ def build_marketplace_submission(
         ),
         categories=list(categories or [COMPLETE_CATEGORIES]),
         conversation_starters=list(GOOD_CONVERSATION_STARTERS),
+        mcp_servers=list(mcp_servers or []),
     )
 
 

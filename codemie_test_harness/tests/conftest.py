@@ -37,6 +37,7 @@ from codemie_sdk.models.assistant import (
     ToolPermissionsConfig,
 )
 from codemie_sdk.models.datasource import DataSource
+from codemie_sdk.models.mcp_config import MCPConfigUpdateRequest
 from codemie_sdk.models.integration import (
     IntegrationType,
     CredentialValues,
@@ -90,6 +91,10 @@ from codemie_test_harness.tests.utils.env_resolver import (
 )
 from codemie_test_harness.tests.utils import cleanup_utils
 from codemie_test_harness.tests.utils.gitbud_utils import GitBudUtils
+from codemie_test_harness.tests.utils.mcp_config_utils import McpConfigUtils
+from codemie_test_harness.tests.test_data.mcp_link_test_data import (
+    catalog_entry_create_request,
+)
 from codemie_test_harness.tests.utils.gitlab_seed import (
     GITLAB_SEED_FAKE_PNG_UPLOAD,
     GITLAB_SEED_IMAGE_UPLOAD,
@@ -543,6 +548,40 @@ def workflow_utils(client):
 
 
 @pytest.fixture(scope="session")
+def mcp_config_utils(client):
+    return McpConfigUtils(client)
+
+
+@pytest.fixture
+def catalog_mcp_config(client):
+    """Factory: a public, active catalog MCP config used as an mcp_servers link target.
+
+    Deletes every config it created on teardown, unless the test already deleted it
+    (e.g. to simulate a dead ``mcp_config_id``); a repeat delete is swallowed.
+    """
+    created = []
+
+    def _create(name=None, is_public=True, is_active=True):
+        config = client.mcp_configs.create(
+            catalog_entry_create_request(name=name, is_public=is_public)
+        )
+        if not is_active:
+            config = client.mcp_configs.update(
+                config.id, MCPConfigUpdateRequest(is_active=False)
+            )
+        created.append(config)
+        return config
+
+    yield _create
+
+    for config in created:
+        try:
+            client.mcp_configs.delete(config.id)
+        except Exception:
+            pass
+
+
+@pytest.fixture(scope="session")
 def providers_utils(client):
     utils = ProviderUtils(client)
     yield utils
@@ -843,6 +882,33 @@ def project_admin_user(keycloak_utils, user_utils, default_project_member):
             user.user_id, default_project_member.project_a, is_project_admin=True
         )
         yield user
+
+
+@pytest.fixture
+def mixed_case_personal_user(keycloak_utils):
+    """Function-scoped user whose email contains uppercase letters; deleted after each test.
+
+    Built with the same helper as `disposable_user` (keycloak_utils.create_test_user) and
+    logged in once (about_me), so the personal project is created under the application's
+    real (mixed-case) name rather than a lowercase orphan.
+    """
+    uid = secrets.token_hex(4)
+    email = f"AutoTest.Mixed.{uid}@Email.com"
+    password = keycloak_utils.create_test_user(email=email, project_name=email)
+    try:
+        user_client = get_client(username=email, password=password)
+        user_id = user_client.users.about_me().user_id
+    except Exception:
+        try:
+            keycloak_utils.delete_user(email)
+        except Exception as e:
+            logger.warning(f"Failed to delete user {email} after setup failure: {e}")
+        raise
+    yield email, user_id, user_client
+    try:
+        keycloak_utils.delete_user(email)
+    except Exception as e:
+        logger.warning(f"Failed to delete user {email}: {e}")
 
 
 @pytest.fixture
@@ -2984,10 +3050,13 @@ def draft_assistant(
 ):
     """Factory: an assistant of the submitter that was never published."""
 
-    def _create(name=None, categories=None):
+    def _create(name=None, categories=None, mcp_servers=None):
         assistant = marketplace_submitter.create_assistant(
             build_marketplace_submission(
-                marketplace_core_gates, name=name, categories=categories
+                marketplace_core_gates,
+                name=name,
+                categories=categories,
+                mcp_servers=mcp_servers,
             )
         )
         marketplace_assistants_to_delete.append(assistant)
@@ -3002,8 +3071,10 @@ def pending_assistant(
 ):
     """Factory: an assistant the submitter published, waiting in the review queue."""
 
-    def _create(name=None, categories=None):
-        assistant = draft_assistant(name=name, categories=categories)
+    def _create(name=None, categories=None, mcp_servers=None):
+        assistant = draft_assistant(
+            name=name, categories=categories, mcp_servers=mcp_servers
+        )
         marketplace_submitter.submit_for_review(assistant)
         return assistant
 

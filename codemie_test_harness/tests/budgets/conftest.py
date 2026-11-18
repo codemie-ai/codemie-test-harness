@@ -26,6 +26,7 @@ from codemie_sdk.models.integration import CredentialTypes, CredentialValues
 from codemie_sdk.models.workflow import WorkflowMode
 
 from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
+    COMPLETE_CATEGORIES,
     build_marketplace_submission,
 )
 from codemie_test_harness.tests.test_data.budget_member_override_test_data import (
@@ -36,6 +37,7 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
     ALL_BUDGET_CATEGORIES,
     budget_chat_prompt,
     BUDGET_CACHE_DELAY,
+    BUDGET_WORKFLOW_STATE,
     CLI_BUDGET_CATEGORIES,
     CLI_CLIENT_HEADER,
     DEFAULT_CLI_BUDGET_ID,
@@ -57,7 +59,9 @@ from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.budget_utils import BudgetUtils
 from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.constants import FILES_PATH
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
+from codemie_test_harness.tests.utils.datasource_utils import DataSourceUtils
 from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
@@ -69,6 +73,7 @@ from codemie_test_harness.tests.utils.user_lifecycle_utils import (
     user_email,
 )
 from codemie_test_harness.tests.utils.user_utils import UserUtils
+from codemie_test_harness.tests.utils.webhook_utils import WebhookUtils
 from codemie_test_harness.tests.utils.workflow_utils import WorkflowUtils
 from codemie_test_harness.tests.utils.yaml_utils import (
     AssistantModel,
@@ -468,6 +473,24 @@ def keycloak_user_2(keycloak_utils, lite_llm_budget_utils):
 
 
 @pytest.fixture(scope="function")
+def mixed_case_keycloak_user(keycloak_utils, lite_llm_budget_utils):
+    """Same shape as keycloak_user_2, but the email contains uppercase letters."""
+    uid = secrets.token_hex(4)
+    email = f"AutoTest.Budget.{uid}@Email.com"
+    password = keycloak_utils.create_test_user(email=email, project_name=email)
+    yield email, password
+    keycloak_utils.delete_user(email)
+    # LiteLLM customers are keyed by the lowercased username, not by the mixed-case email.
+    username = email.lower()
+    for customer_id in (
+        username,
+        f"{username}_{DEFAULT_PREMIUM_BUDGET_ID}",
+        f"{username}_{DEFAULT_CLI_BUDGET_ID}",
+    ):
+        lite_llm_budget_utils.delete_customer(customer_id)
+
+
+@pytest.fixture(scope="function")
 def user1_client(keycloak_user_1):
     email, password = keycloak_user_1
     return get_client(username=email, password=password)
@@ -476,6 +499,12 @@ def user1_client(keycloak_user_1):
 @pytest.fixture(scope="function")
 def user2_client(keycloak_user_2):
     email, password = keycloak_user_2
+    return get_client(username=email, password=password)
+
+
+@pytest.fixture(scope="function")
+def mixed_case_client(mixed_case_keycloak_user):
+    email, password = mixed_case_keycloak_user
     return get_client(username=email, password=password)
 
 
@@ -497,6 +526,11 @@ def user2_assistant_utils(user2_client):
 @pytest.fixture(scope="function")
 def user2_proxy_utils(user2_client):
     return ProxyUtils(user2_client)
+
+
+@pytest.fixture(scope="function")
+def mixed_case_proxy_utils(mixed_case_client):
+    return ProxyUtils(mixed_case_client)
 
 
 @pytest.fixture(scope="function")
@@ -716,8 +750,168 @@ def user_workflow(default_llm, user_workflow_utils):
         user_workflow_utils.delete_workflow(created_workflow)
 
 
+def _single_state_workflow_yaml(model: str, assistant=None) -> str:
+    """One state that runs a saved assistant when given, otherwise an inline one.
+
+    With a saved assistant the result summary step is switched off, so the node is the
+    workflow's only LLM call and its charge can be told apart from the workflow's own.
+    """
+    assistant_model = AssistantModel(
+        id=BUDGET_WORKFLOW_STATE,
+        model=model,
+        assistant_id=assistant.id if assistant else None,
+        system_prompt=(
+            None if assistant else "You are a helpful assistant. Say hello when asked."
+        ),
+    )
+    state_model = StateModel(
+        id=BUDGET_WORKFLOW_STATE,
+        assistant_id=BUDGET_WORKFLOW_STATE,
+        task="Say hello",
+    )
+    return prepare_yaml_content(
+        WorkflowYamlModel(
+            assistants=[assistant_model],
+            states=[state_model],
+            enable_summarization_node=False if assistant else None,
+        ).model_dump(exclude_none=True)
+    )
+
+
+@pytest.fixture(scope="function")
+def user1_workflow_utils(user1_client):
+    return WorkflowUtils(user1_client)
+
+
+@pytest.fixture(scope="function")
+def user2_workflow_utils(user2_client):
+    return WorkflowUtils(user2_client)
+
+
+@pytest.fixture(scope="function")
+def user1_workflow(default_llm, user1_workflow_utils):
+    """Factory ``(project_name, assistant=None) -> workflow`` of user 1, shared with the project."""
+    created = []
+
+    def _create(project_name: str, assistant=None):
+        workflow = user1_workflow_utils.create_workflow(
+            workflow_type=WorkflowMode.SEQUENTIAL,
+            workflow_yaml=_single_state_workflow_yaml(default_llm.base_name, assistant),
+            project_name=project_name,
+            shared=True,
+        )
+        created.append(workflow)
+        return workflow
+
+    yield _create
+
+    for workflow in created:
+        try:
+            user1_workflow_utils.delete_workflow(workflow)
+        except HTTPError as e:
+            logger.warning(f"Failed to delete workflow {workflow.id}: {e}")
+
+
+@pytest.fixture(scope="function")
+def user1_published_workflow(user1_workflow, user1_workflow_utils):
+    """Factory ``(project_name, assistant=None) -> workflow`` of user 1, published to the marketplace."""
+    published = []
+
+    def _create(project_name: str, assistant=None):
+        workflow = user1_workflow(project_name, assistant)
+        user1_workflow_utils.publish_workflow_to_marketplace(
+            workflow.id, [COMPLETE_CATEGORIES]
+        )
+        published.append(workflow)
+        return workflow
+
+    yield _create
+
+    for workflow in published:
+        try:
+            user1_workflow_utils.unpublish_workflow_from_marketplace(workflow.id)
+        except HTTPError as e:
+            logger.warning(f"Failed to unpublish workflow {workflow.id}: {e}")
+
+
+@pytest.fixture(scope="function")
+def user2_trigger(user2_integration_utils, user2_client, budget_scheduler_integration):
+    """Triggers of user 2 by name: ``(project_name, assistant)`` creates the integration in
+    the assistant's project and starts a run of the assistant (the scheduler starts it by
+    itself)."""
+    webhooks = []
+    webhook_utils = WebhookUtils(user2_client)
+
+    def _webhook(project_name: str, assistant):
+        webhook_id = get_random_name()
+        webhooks.append(
+            user2_integration_utils.create_integration(
+                CredentialTypes.WEBHOOK,
+                [
+                    CredentialValues(
+                        key="url", value=CredentialsManager.AUTO_GENERATED
+                    ),
+                    CredentialValues(key="webhook_id", value=webhook_id),
+                    CredentialValues(key="is_enabled", value=True),
+                    CredentialValues(key="resource_type", value="assistant"),
+                    CredentialValues(key="resource_id", value=assistant.id),
+                ],
+                project_name=project_name,
+            )
+        )
+        webhook_utils.trigger_webhook(webhook_id, data=budget_chat_prompt())
+
+    def _scheduler(project_name: str, assistant):
+        budget_scheduler_integration(
+            "assistant",
+            assistant.id,
+            prompt=budget_chat_prompt(),
+            project_name=project_name,
+            owner_utils=user2_integration_utils,
+        )
+
+    yield {"webhook": _webhook, "scheduler": _scheduler}
+
+    for integration in webhooks:
+        try:
+            user2_integration_utils.delete_integration(integration)
+        except HTTPError:
+            pass
+
+
+@pytest.fixture(scope="function")
+def user2_datasource_utils(user2_client):
+    return DataSourceUtils(user2_client)
+
+
+@pytest.fixture(scope="function")
+def user2_file_datasource(user2_datasource_utils, default_embedding_llm):
+    """Factory ``(project_name) -> datasource``: user 2 indexes a small file in the project."""
+    created = []
+
+    def _create(project_name: str):
+        # Large enough for the embedding cost to show in the spend, which a tiny file rounds to zero.
+        file_name = "test_extended.docx"
+        datasource = user2_datasource_utils.create_file_datasource(
+            name=get_random_name(),
+            description=f"[Autotest] {file_name} indexed for a budget attribution check",
+            files=[str(FILES_PATH / file_name)],
+            embeddings_model=default_embedding_llm.base_name,
+            project_name=project_name,
+        )
+        created.append(datasource)
+        return datasource
+
+    yield _create
+
+    for datasource in created:
+        user2_datasource_utils.safe_delete_datasource(datasource)
+
+
 @pytest.fixture(scope="function")
 def budget_scheduler_integration(integration_utils):
+    """Factory for scheduler integrations, owned by the admin unless ``owner_utils`` (the
+    ``IntegrationUtils`` of the user who owns the schedule) is given, in ``project_name``."""
     created_integrations = []
 
     def _create(
@@ -725,7 +919,10 @@ def budget_scheduler_integration(integration_utils):
         resource_id: str,
         prompt: str = None,
         schedule: str = None,
+        project_name: str = None,
+        owner_utils: IntegrationUtils = None,
     ):
+        owner_utils = owner_utils or integration_utils
         if schedule is None:
             next_minute = (datetime.now() + timedelta(minutes=2)).minute
             schedule = f"{next_minute} * * * *"
@@ -738,17 +935,20 @@ def budget_scheduler_integration(integration_utils):
             CredentialValues(key="resource_id", value=resource_id),
             CredentialValues(key="prompt", value=prompt),
         ]
-        integration = integration_utils.create_integration(
-            CredentialTypes.SCHEDULER, credential_values, integration_alias=alias
+        integration = owner_utils.create_integration(
+            CredentialTypes.SCHEDULER,
+            credential_values,
+            project_name=project_name,
+            integration_alias=alias,
         )
-        created_integrations.append(integration)
+        created_integrations.append((owner_utils, integration))
         return integration
 
     yield _create
 
-    for integration in created_integrations:
+    for owner_utils, integration in created_integrations:
         try:
-            integration_utils.delete_integration(integration)
+            owner_utils.delete_integration(integration)
         except HTTPError:
             pass
 
@@ -1081,6 +1281,17 @@ def user2_skills_utils(user2_client):
 
 
 @pytest.fixture(scope="function")
+def mixed_case_user_id(mixed_case_client):
+    """Id of the mixed-case user; the first request is the login that creates the personal project."""
+    return mixed_case_client.users.about_me().user_id
+
+
+@pytest.fixture(scope="function")
+def mixed_case_skills_utils(mixed_case_client):
+    return SkillsUtils(mixed_case_client)
+
+
+@pytest.fixture(scope="function")
 def budget_project_factory(
     user1_project_utils,
     admin_project_utils,
@@ -1125,6 +1336,36 @@ def budget_project_factory(
             admin_project_utils.delete_project_cascade(project_name)
         except Exception as e:
             logger.warning(f"Failed to delete project {project_name}: {e}")
+
+
+@pytest.fixture(scope="function")
+def user1_orchestrator(default_llm, user1_assistant_utils):
+    """Factory ``(project_name, sub_assistant, subject) -> assistant`` of user 1, shared with the
+    project, that always hands requests about the subject over to the sub-assistant."""
+    created = []
+
+    def _create(project_name: str, sub_assistant, subject: str):
+        orchestrator = user1_assistant_utils.create_assistant(
+            llm_model_type=default_llm.base_name,
+            project_name=project_name,
+            shared=True,
+            system_prompt=(
+                "You are a coordinator assistant that delegates tasks to a specialized "
+                f"sub-assistant. ALWAYS use the sub-assistant {sub_assistant.name} for "
+                f"every {subject} request and never answer {subject} requests yourself."
+            ),
+            assistant_ids=[sub_assistant.id],
+        )
+        created.append(orchestrator)
+        return orchestrator
+
+    yield _create
+
+    for orchestrator in created:
+        try:
+            user1_assistant_utils.delete_assistant(orchestrator)
+        except HTTPError as e:
+            logger.warning(f"Failed to delete assistant {orchestrator.id}: {e}")
 
 
 @pytest.fixture(scope="function")

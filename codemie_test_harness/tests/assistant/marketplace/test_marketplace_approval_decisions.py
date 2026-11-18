@@ -49,6 +49,7 @@ from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data im
     WITHDRAWN,
     build_marketplace_submission,
 )
+from codemie_test_harness.tests.test_data.mcp_link_test_data import link_server
 from codemie_test_harness.tests.utils.marketplace_management_utils import (
     poll_marketplace_listing,
 )
@@ -430,4 +431,39 @@ def test_unapproved_assistants_are_never_verified(
     assert_that(
         assistant,
         has_properties(marketplace_status=expected_status, is_verified=False),
+    )
+
+
+@pytest.mark.marketplace
+@pytest.mark.assistant
+@pytest.mark.mcp
+@pytest.mark.api
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_moderation_decision_leaves_mcp_servers_unchanged(
+    pending_assistant, marketplace_management_utils, catalog_mcp_config, decision
+):
+    # @case mcp-link-predicate-save-validation_TC_009
+    config = catalog_mcp_config()
+    servers = [
+        link_server(mcp_config_id=config.id, enabled=True),
+        link_server(mcp_config_id=None, enabled=False),
+    ]
+    submitted = pending_assistant(mcp_servers=servers)
+    version = marketplace_management_utils.get_detail(submitted.id).marketplace_version
+    before = marketplace_management_utils.get_assistant(submitted.id).mcp_servers
+
+    if decision == "approve":
+        marketplace_management_utils.approve(submitted.id, expected_version=version)
+    else:
+        marketplace_management_utils.reject(
+            submitted.id, VALID_REASON, expected_version=version
+        )
+
+    after = marketplace_management_utils.get_assistant(submitted.id).mcp_servers
+    assert_that(
+        [(server.name, server.mcp_config_id, server.enabled) for server in after],
+        equal_to(
+            [(server.name, server.mcp_config_id, server.enabled) for server in before]
+        ),
+        "a moderation decision must not change the assistant's mcp_servers",
     )
