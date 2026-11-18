@@ -503,6 +503,27 @@ class AssistantUtils(BaseUtils):
             assistant_id=assistant_id, request=update_request
         )
 
+    def move_assistant_to_project(self, assistant_id: str, project_name: str):
+        """Move an assistant to another project, keeping every other field as stored.
+
+        Returns the assistant as stored after the update, so a caller can confirm
+        the move took effect.
+        """
+        current = self.get_assistant_by_id(assistant_id)
+        self.update_assistant(
+            assistant_id,
+            AssistantUpdateRequest(
+                name=current.name,
+                slug=current.slug,
+                description=current.description or "",
+                shared=current.shared,
+                system_prompt=current.system_prompt,
+                project=project_name,
+                llm_model_type=current.llm_model_type,
+            ),
+        )
+        return self.get_assistant_by_id(assistant_id)
+
     def rollback_to_version(
         self, assistant_id: str, version_number: int, change_notes: Optional[str] = None
     ) -> dict:

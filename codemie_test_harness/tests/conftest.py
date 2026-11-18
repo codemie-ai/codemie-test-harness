@@ -1917,6 +1917,7 @@ def scheduler_integration(integration_utils):
         schedule: str = None,
         is_enabled: bool = True,
         timezone: str = None,
+        project_name: str = None,
     ):
         # If schedule is not provided, calculate cron for every hour starting at current time + 1 minute
         if schedule is None:
@@ -1934,7 +1935,10 @@ def scheduler_integration(integration_utils):
         if timezone is not None:
             credential_values.append(CredentialValues(key="timezone", value=timezone))
         integration = integration_utils.create_integration(
-            CredentialTypes.SCHEDULER, credential_values, integration_alias=alias
+            CredentialTypes.SCHEDULER,
+            credential_values,
+            integration_alias=alias,
+            project_name=project_name,
         )
         created_integrations.append(integration)
         return integration
