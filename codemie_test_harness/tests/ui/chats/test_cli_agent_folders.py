@@ -159,7 +159,7 @@ def test_synced_agent_chat_appears_in_one_entry(page, folder_setup, agent):
 @pytest.mark.chat
 @pytest.mark.xdist_group("cli_agent_folders")
 @pytest.mark.ui
-def test_synced_claude_chat_appears_in_claude_imports_entry(page, folder_setup):
+def test_synced_claude_chat_appears_in_claude_cli_entry(page, folder_setup):
     # @case show-each-cli-agent-once_TC_006
     chat_id = folder_setup.import_chat(CLAUDE)
 
@@ -169,6 +169,7 @@ def test_synced_claude_chat_appears_in_claude_imports_entry(page, folder_setup):
 
     folders.should_list_single_entry(CLAUDE.label, CLAUDE.group_key)
     folders.should_contain_chat(CLAUDE.group_key, chat_id)
+    folders.should_not_list_folder(custom_folder_key(CLAUDE.folder))
 
 
 @pytest.mark.chat
@@ -194,7 +195,7 @@ def test_synced_copilot_chat_appears_in_one_entry_for_any_folder_spelling(
 @pytest.mark.xdist_group("cli_agent_folders")
 @pytest.mark.parametrize("agent", MOVE_AGENTS)
 @pytest.mark.ui
-def test_imported_chat_moved_to_custom_folder_leaves_agent_entry(
+def test_imported_chat_has_no_folder_action_and_stays_in_agent_entry(
     page, folder_setup, agent
 ):
     # @case show-each-cli-agent-once_TC_008
@@ -204,12 +205,17 @@ def test_imported_chat_moved_to_custom_folder_leaves_agent_entry(
     folders = ChatFoldersSection(page)
     folders.open_chat(chat_id)
     folders.open_folders_section()
+
+    folders.open_chat_menu(agent.group_key, chat_id)
+    # The other items prove the menu has rendered before the folder item's absence counts.
+    folders.should_offer_chat_menu_items("Pin", "Rename", "Delete")
+    folders.should_not_offer_move_to_folder_item()
+    folders.close_chat_menu()
+
+    folders.should_list_single_entry(agent.label, agent.group_key)
     folders.should_contain_chat(agent.group_key, chat_id)
-
-    folders.move_chat_to_folder(agent.group_key, chat_id, custom_folder)
-
-    folders.should_contain_chat(custom_folder_key(custom_folder), chat_id)
-    folders.should_not_contain_chat(agent.group_key, chat_id)
+    folders.should_not_list_folder(custom_folder_key(agent.folder))
+    folders.should_not_contain_chat(custom_folder_key(custom_folder), chat_id)
 
 
 @pytest.mark.chat
@@ -220,16 +226,18 @@ def test_move_chat_popup_does_not_offer_agent_folder_of_imported_chats(
     page, folder_setup, agent
 ):
     # @case show-each-cli-agent-once_TC_010
-    custom_folder = folder_setup.register_random_folder()
-    chat_id = folder_setup.import_chat(agent)
+    chat_folder = folder_setup.register_random_folder()
+    control_folder = folder_setup.register_random_folder()
+    regular_chat_id = folder_setup.create_chat(chat_folder)
+    folder_setup.import_chat(agent)
 
     folders = ChatFoldersSection(page)
-    folders.open_chat(chat_id)
+    folders.open_chat(regular_chat_id)
     folders.open_folders_section()
-    folders.open_move_chat_popup(agent.group_key, chat_id)
+    folders.open_move_chat_popup(custom_folder_key(chat_folder), regular_chat_id)
 
-    # The custom control folder proves the popup lists folders at all.
-    folders.search_move_popup_folder(custom_folder)
-    folders.should_offer_move_target(custom_folder)
+    # The control folder proves the popup lists folders at all.
+    folders.search_move_popup_folder(control_folder)
+    folders.should_offer_move_target(control_folder)
     folders.search_move_popup_folder(agent.folder)
     folders.should_not_offer_move_target(agent.folder)

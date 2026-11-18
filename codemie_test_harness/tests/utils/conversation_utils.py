@@ -37,6 +37,11 @@ from codemie_test_harness.tests import API_DOMAIN, VERIFY_SSL
 from codemie_test_harness.tests.utils.base_utils import BaseUtils
 
 
+# The history upsert route requires ``assistant_id`` and documents it as "can be placeholder
+# for imports"; the SDK request model leaves it optional, so a CLI sync has to send one.
+CLI_IMPORT_ASSISTANT_ID = "cli-import"
+
+
 class ConversationUtils(BaseUtils):
     def list_conversations(self, is_finished: Optional[bool] = None):
         return self.client.conversations.list(is_finished=is_finished)
@@ -133,10 +138,13 @@ class ConversationUtils(BaseUtils):
         The backend derives the chat's write-once import source from the
         ``X-CodeMie-Client`` header (e.g. ``codemie-gemini``). The SDK's
         ``upsert_history`` cannot set request headers, so this call goes over
-        HTTP directly, with the client's own token.
+        HTTP directly, with the client's own token. The route rejects a body without
+        ``assistant_id`` (422), so ``CLI_IMPORT_ASSISTANT_ID`` is sent when none is given.
         """
         request = UpsertHistoryRequest(
-            history=history, assistant_id=assistant_id, folder=folder
+            history=history,
+            assistant_id=assistant_id or CLI_IMPORT_ASSISTANT_ID,
+            folder=folder,
         )
         response = requests.put(
             f"{API_DOMAIN}/v1/conversations/{conversation_id}/history",

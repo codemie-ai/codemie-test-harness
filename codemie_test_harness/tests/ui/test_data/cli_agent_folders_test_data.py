@@ -45,9 +45,9 @@ COPILOT_CLI = CliAgent(
 )
 OPENCODE = CliAgent("opencode", "codemie-opencode", "Opencode", "import:opencode")
 PI = CliAgent("pi", "codemie-pi", "Pi", "import:pi")
-CLAUDE = CliAgent(
-    "claude", "codemie-claude", "Claude Imports", "legacy-import:Claude Imports"
-)
+# The header maps to the claude_cli import source, which takes priority over the legacy
+# "Claude Imports" mapping of the folder name "claude".
+CLAUDE = CliAgent("claude", "codemie-claude", "Claude CLI", "import:claude_cli")
 
 # Registered empty folders that must not get an entry: every spelling the frontend
 # normalizes (trim, lower case, "-" read as "_") to an agent import source.

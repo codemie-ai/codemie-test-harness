@@ -19,6 +19,11 @@ A folder entry is identified by its ``data-folder`` key: ``custom:<name>`` for a
 the user created, ``import:<kind>`` for the group of chats synced by a CLI agent and
 ``legacy-import:<label>`` for the older import groups. Because the shared test account
 changes under parallel runs, every check targets an entry or chat the test owns.
+
+The folder list is virtualized: only the rows in view (plus a small overscan) are in the
+DOM, folders holding chats come first and empty folders follow, newest first. On an account
+with many folders a freshly created empty folder is therefore not rendered until the list
+is scrolled to it, and "no such entry" can only be asserted after scanning the whole list.
 """
 
 import re
@@ -35,14 +40,38 @@ def custom_folder_key(folder_name: str) -> str:
     return f"custom:{folder_name}"
 
 
+# Scrolls the container that holds the virtualized folder rows (the nearest scrollable
+# ancestor of an entry). Returns False when the container cannot move any further.
+_SCROLL_FOLDER_LIST_JS = """
+(entry, position) => {
+  let box = entry.parentElement;
+  while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) {
+    box = box.parentElement;
+  }
+  if (!box) return false;
+  if (position === 'top') { box.scrollTop = 0; return true; }
+  const before = box.scrollTop;
+  box.scrollTop = before + box.clientHeight * 0.8;
+  return box.scrollTop > before;
+}
+"""
+
+
 class ChatFoldersSection(BasePage):
     """The sidebar Folders accordion, its entries and the chat Move popup."""
+
+    _opened_chat_id: str | None = None
 
     # ==================== FOLDERS SECTION ====================
 
     @property
     def folders_header(self) -> Locator:
-        """Folders accordion header; collapsed (aria-expanded=false) by default."""
+        """Folders accordion header.
+
+        It starts expanded, then the sidebar opens the section holding the current chat once
+        the chat list has loaded (Recent Chats for a chat outside any folder), which
+        collapses it.
+        """
         return self.page.get_by_role("treeitem", name="Folders Create Folder")
 
     @property
@@ -86,10 +115,23 @@ class ChatFoldersSection(BasePage):
         )
 
     @property
+    def chat_menu(self) -> Locator:
+        """The open chat context menu."""
+        return self.page.locator('[role="menu"]')
+
+    def chat_menu_item(self, label: str) -> Locator:
+        """Item of the open chat menu with exactly this label."""
+        return self.chat_menu.get_by_role("menuitem", name=label, exact=True)
+
+    @property
     def move_chat_menu_item(self) -> Locator:
-        """Chat menu item that opens the Move to folder popup."""
-        return self.page.locator(
-            '[role="menu"] button[role="menuitem"][aria-label="Add to folder..."]'
+        """Chat menu item that opens the Move to folder popup.
+
+        It reads "Add to folder..." for a chat outside any folder and "Move to folder..."
+        for a chat inside one.
+        """
+        return self.chat_menu.locator(
+            'button[role="menuitem"][aria-label$="to folder..."]'
         )
 
     @property
@@ -122,19 +164,60 @@ class ChatFoldersSection(BasePage):
             has_text=re.compile(rf"^\s*{re.escape(folder_name)}\s*$", re.IGNORECASE)
         )
 
+    # ==================== VIRTUALIZED FOLDER LIST ====================
+
+    def _scroll_folder_list(self, position: str) -> bool:
+        """Scroll the folder list to its top ('top') or one page down ('next')."""
+        return self.folder_entries.first.evaluate(_SCROLL_FOLDER_LIST_JS, position)
+
+    def _wait_for_list_render(self):
+        """Let the virtualized list render the rows of the new scroll position."""
+        self.page.evaluate(
+            "() => new Promise(done => requestAnimationFrame("
+            "() => requestAnimationFrame(done)))"
+        )
+
+    def _scan_folder_list(self):
+        """Yield once per page of the folder list, top to bottom, with that page rendered.
+
+        A page is 80% of the list's height, so consecutive pages overlap and every
+        folder is in the DOM on at least one of them.
+        """
+        expect(self.folder_entries.first).to_be_visible()
+        self._scroll_folder_list("top")
+        self._wait_for_list_render()
+        while True:
+            yield
+            if not self._scroll_folder_list("next"):
+                return
+            self._wait_for_list_render()
+
+    def _reveal_folder(self, key: str):
+        """Scroll the folder list until the entry is rendered (stays put once it is)."""
+        for _ in self._scan_folder_list():
+            if self.folder_entry(key).count():
+                return
+
     # ==================== NAVIGATION ====================
 
     @step
     def open_chat(self, chat_id: str):
         """Open a chat; the sidebar renders on every chat page."""
         self.page.goto(f"/chats/{chat_id}")
+        self._opened_chat_id = chat_id
         expect(self.folders_header).to_be_visible()
         return self
 
     @step
     def open_folders_section(self):
-        """Expand the Folders accordion."""
+        """Expand the Folders accordion, once the sidebar has opened the open chat's section.
+
+        The chat's row is rendered only after the sidebar expanded the section that holds
+        it; until then it may still collapse or expand sections on its own.
+        """
         expect(self.folders_header).to_be_visible()
+        if self._opened_chat_id:
+            expect(self.chat_item(self._opened_chat_id)).to_be_visible()
         if self.folders_header.get_attribute("aria-expanded") != "true":
             self.folders_header_label.click()
         expect(self.folders_header).to_have_attribute("aria-expanded", "true")
@@ -144,6 +227,7 @@ class ChatFoldersSection(BasePage):
     def expand_folder(self, key: str):
         """Expand a folder entry so its chats render."""
         entry = self.folder_entry(key)
+        self._reveal_folder(key)
         expect(entry).to_be_visible()
         if entry.get_attribute("aria-expanded") != "true":
             entry.click()
@@ -153,13 +237,27 @@ class ChatFoldersSection(BasePage):
     # ==================== ACTIONS ====================
 
     @step
-    def open_move_chat_popup(self, group_key: str, chat_id: str):
-        """Open the Move to folder popup of a chat listed in the given folder entry."""
+    def open_chat_menu(self, group_key: str, chat_id: str):
+        """Open the context menu of a chat listed in the given folder entry."""
         self.expand_folder(group_key)
         chat = self.chat_item(chat_id)
         expect(chat).to_be_visible()
         chat.hover()
         self.chat_menu_button(chat_id).click()
+        expect(self.chat_menu).to_be_visible()
+        return self
+
+    @step
+    def close_chat_menu(self):
+        """Close the open chat menu."""
+        self.page.keyboard.press("Escape")
+        expect(self.chat_menu).to_have_count(0)
+        return self
+
+    @step
+    def open_move_chat_popup(self, group_key: str, chat_id: str):
+        """Open the Move to folder popup of a chat listed in the given folder entry."""
+        self.open_chat_menu(group_key, chat_id)
         self.move_chat_menu_item.click()
         expect(self.move_popup).to_be_visible()
         return self
@@ -185,17 +283,19 @@ class ChatFoldersSection(BasePage):
     @step
     def should_list_folder(self, key: str):
         """Verify the sidebar lists the folder entry with this key."""
+        self._reveal_folder(key)
         expect(self.folder_entry(key)).to_have_count(1)
         return self
 
     @step
     def should_not_list_folder(self, key: str):
-        """Verify the sidebar has no folder entry with this key.
+        """Verify the sidebar has no folder entry with this key, on any page of the list.
 
         Only meaningful once the list has rendered; check an entry the test owns
         first (``should_list_folder``).
         """
-        expect(self.folder_entry(key)).to_have_count(0)
+        for _ in self._scan_folder_list():
+            expect(self.folder_entry(key)).to_have_count(0)
         return self
 
     @step
@@ -220,11 +320,29 @@ class ChatFoldersSection(BasePage):
     @step
     def should_not_contain_chat(self, key: str, chat_id: str):
         """Verify the folder entry, when it exists, does not list the chat."""
+        self._reveal_folder(key)
         if self.folder_entry(key).count():
             self.expand_folder(key)
         expect(
             self.chats_group(key).locator(f'li[data-chat-id="{chat_id}"]')
         ).to_have_count(0)
+        return self
+
+    @step
+    def should_offer_chat_menu_items(self, *labels: str):
+        """Verify the open chat menu has every one of these items."""
+        for label in labels:
+            expect(self.chat_menu_item(label)).to_have_count(1)
+        return self
+
+    @step
+    def should_not_offer_move_to_folder_item(self):
+        """Verify the open chat menu has no Add to / Move to folder item.
+
+        Only meaningful once the menu has rendered; check an item it must hold first
+        (``should_offer_chat_menu_items``).
+        """
+        expect(self.move_chat_menu_item).to_have_count(0)
         return self
 
     @step
