@@ -39,7 +39,7 @@ def test_card_menu_details_item_opens_details_for_the_owner(page, ui_live_app):
     applications = HostedApplicationsPage(page).open_my_apps()
 
     menu = applications.open_card_menu(app.name)
-    applications.should_still_list_card(app.name)
+    applications.should_be_on_applications_route()
     menu.should_list_item("Details")
     menu.choose_item("Details")
 

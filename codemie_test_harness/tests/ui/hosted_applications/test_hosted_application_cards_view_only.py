@@ -19,8 +19,6 @@ This module overrides that login: the browser session is a fresh platform user t
 each application with, so the user can view an application but not manage it.
 """
 
-import os
-
 import pytest
 
 from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_application_details_page import (
@@ -34,6 +32,7 @@ from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_applica
     HostedApplicationsPage,
 )
 from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
+from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 
 CAPABILITY = "features:hostedApplications"
 
@@ -45,7 +44,7 @@ def login(page, platform_user):
         platform_user.email,
         platform_user.password,
         platform_user.user_id,
-        os.getenv("FRONTEND_URL", ""),
+        CredentialsManager.get_parameter("FRONTEND_URL", ""),
     )
 
 

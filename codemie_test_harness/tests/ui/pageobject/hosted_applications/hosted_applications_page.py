@@ -222,6 +222,9 @@ class HostedApplicationsPage(HostedPageBase):
         expect(self.card(name).get_by_role("button")).to_have_count(
             CARD_BUTTONS_WITHOUT_NEXT_STEP
         )
+        expect(
+            self.open_card_button(name).or_(self.unopenable_card_button(name))
+        ).to_have_count(1)
         expect(self.more_options_button(name)).to_be_visible()
         return self
 
@@ -229,12 +232,6 @@ class HostedApplicationsPage(HostedPageBase):
     def should_show_next_step_button(self, name: str, label: str):
         """The card shows the next-step button with this label."""
         expect(self.next_step_button(name, label)).to_be_visible()
-        return self
-
-    @step
-    def should_still_list_card(self, name: str):
-        """The collection still shows the card, so nothing navigated away from the list."""
-        expect(self.card(name)).to_be_visible()
         return self
 
     @step
