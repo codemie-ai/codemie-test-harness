@@ -27,13 +27,13 @@ from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
 
 @pytest.mark.analytics
 @pytest.mark.ui
-def test_insights_assistants_chats_rows_ordered_by_total_messages(analytics_page):
-    """Assistants Chats rows are ordered by Total Messages descending, then Assistant ascending."""
+def test_insights_assistants_chats_rows_ordered_by_total_cost(analytics_page):
+    """Assistants Chats rows are ordered by Total Cost ($) descending, equal costs in any order."""
     # @case insights-page-fix-sorting-and_TC_001
     widget = InsightsTableWidget(analytics_page.page, ASSISTANTS_CHATS_TABLE).open()
 
-    widget.should_list_rows_with_different_counts()
-    widget.should_order_rows_by_count_then_name()
+    widget.should_list_rows_with_different_costs()
+    widget.should_order_rows_by_cost_descending()
 
 
 @pytest.mark.analytics

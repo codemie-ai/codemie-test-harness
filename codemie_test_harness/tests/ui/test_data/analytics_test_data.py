@@ -38,15 +38,23 @@ class InsightsTable:
     ``title`` is the widget heading. ``name_column`` and ``count_column`` are the exact column
     headers the rows are ordered by: the count descending, then the name ascending. The count
     column also identifies the table, because the name column header is not unique on the page.
+    ``cost_column`` is set for a widget whose rows are ordered by that column instead.
     """
 
     title: str
     name_column: str
     count_column: str
+    cost_column: str | None = None
 
 
+ASSISTANTS_CHATS_COST_COLUMN = "Total Cost ($)"
+
+# Located by its Total Messages column; its rows are ordered by Total Cost ($), see the cost check.
 ASSISTANTS_CHATS_TABLE = InsightsTable(
-    title="Assistants Chats", name_column="Assistant", count_column="Total Messages"
+    title="Assistants Chats",
+    name_column="Assistant",
+    count_column="Total Messages",
+    cost_column=ASSISTANTS_CHATS_COST_COLUMN,
 )
 WORKFLOWS_TABLE = InsightsTable(
     title="Workflows", name_column="Workflow Name", count_column="Total Runs"
