@@ -503,6 +503,20 @@ class AssistantUtils(BaseUtils):
             assistant_id=assistant_id, request=update_request
         )
 
+    def rollback_to_version(
+        self, assistant_id: str, version_number: int, change_notes: Optional[str] = None
+    ) -> dict:
+        """Roll the assistant back to ``version_number``.
+
+        Returns the raw backend response, unparsed: ``message`` plus
+        ``disabledMcpServers`` (camelCase at the top level; each entry's own
+        ``name``/``mcp_config_id``/``reason``/``address`` stays snake_case) for any
+        link the restore disabled because its catalog entry is unavailable.
+        """
+        return self.client.assistants.rollback_to_version(
+            assistant_id, version_number, change_notes=change_notes
+        )
+
     def delete_assistant(self, assistant):
         response = self.client.assistants.delete(assistant.id)
         for conversation in self.client.conversations.list_by_assistant_id(
