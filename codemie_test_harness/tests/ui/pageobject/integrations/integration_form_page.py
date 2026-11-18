@@ -19,7 +19,6 @@ The form opens from the list's 'New Integration' button, from the admin project 
 field. Selectors come from the recon walk of the stand.
 """
 
-import re
 from typing import Optional
 
 from hamcrest import assert_that, less_than
@@ -28,11 +27,10 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
-
-
-def _label_pattern(label: str):
-    """Option text that starts with the label as a whole word, before any badge or hint."""
-    return re.compile(rf"^\s*{re.escape(label)}(?!\w)")
+from codemie_test_harness.tests.ui.pageobject.integrations.integrations_list_page import (
+    labelled,
+    multiselect_label_container,
+)
 
 
 # noinspection PyArgumentList
@@ -107,15 +105,11 @@ class IntegrationFormPage(BasePage):
 
     def option(self, label: str) -> Locator:
         """Option of the open list whose text starts with the label."""
-        return self.options.filter(has_text=_label_pattern(label))
+        return labelled(self.options, label)
 
     def disabled_option(self, label: str) -> Locator:
         """Disabled marker of the option; PrimeReact or the item template carries it."""
-        return (
-            self.page.locator("[aria-disabled='true']")
-            .filter(has_text=_label_pattern(label))
-            .first
-        )
+        return labelled(self.page.locator("[aria-disabled='true']"), label).first
 
     # ====================
     # ACTIONS
@@ -152,16 +146,27 @@ class IntegrationFormPage(BasePage):
         return self
 
     @step
+    def ensure_scope(self, label: str):
+        """Make the form's Scope 'User' or 'Project'; leave it when it is already that."""
+        if self.selected_scope_button(label).count() == 0:
+            self.select_scope(label)
+        return self
+
+    @step
     def pick_project(self, name: str):
         """Open the Project selector and choose the project."""
-        self.project_combobox.click()
+        self.open_project_list()
         self.option(name).click()
         return self
 
     @step
     def open_project_list(self):
-        """Open the Project selector's list."""
-        self.project_combobox.click()
+        """Open the Project selector's list.
+
+        The combobox is the multiselect's read-only input; its label container lies over it
+        and takes the pointer, so the click goes to the container.
+        """
+        multiselect_label_container(self.project_combobox).click()
         return self
 
     @step
@@ -179,8 +184,16 @@ class IntegrationFormPage(BasePage):
 
     @step
     def switch_global_on(self):
-        """Turn the 'Global Integration' switch on."""
-        self.global_switch.check()
+        """Turn the 'Global Integration' switch on.
+
+        The switch input is screen-reader-only and the visible track lies over it, so the
+        click goes to the track that follows the input.
+        """
+        if not self.global_switch.is_checked():
+            self.global_switch.locator(
+                "xpath=following-sibling::span[contains(@class, 'switch')]"
+            ).click()
+        expect(self.global_switch).to_be_checked()
         return self
 
     @step
@@ -233,6 +246,12 @@ class IntegrationFormPage(BasePage):
     @step
     def should_have_scope_first(self):
         """Scope sits above the Project selector, which sits above Credential Type."""
+        for field in (
+            self.scope_button("User"),
+            self.project_selector,
+            self.credential_type_combobox,
+        ):
+            expect(field).to_be_visible()
         scope_y = self.scope_button("User").bounding_box()["y"]
         project_y = self.project_selector.bounding_box()["y"]
         type_y = self.credential_type_combobox.bounding_box()["y"]
@@ -265,10 +284,13 @@ class IntegrationFormPage(BasePage):
 
     @step
     def should_have_project_scope_disabled(self, reason: str):
-        """The Project scope button is disabled and its description is the reason."""
+        """The Project scope button is disabled and carries the reason in its content.
+
+        The reason is text inside the button (it is not exposed as an accessible description).
+        """
         button = self.scope_button("Project")
         expect(button).to_be_disabled()
-        expect(button).to_have_accessible_description(re.compile(re.escape(reason)))
+        expect(button).to_contain_text(reason)
         return self
 
     @step

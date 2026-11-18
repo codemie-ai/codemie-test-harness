@@ -37,6 +37,26 @@ def _label_pattern(label: str):
     return re.compile(rf"^\s*{re.escape(label)}(?!\w)")
 
 
+def labelled(items: Locator, label: str) -> Locator:
+    """Items of an open list (options, disabled markers) whose label is the given text.
+
+    An option with a badge or hint keeps the label in its own paragraph and the hint in a
+    sibling ('DIAL' next to 'Project only'), so its text runs on without a space; a plain
+    option (a project name) has only the label. Both shapes match, and 'Git' never
+    matches 'GitHub'.
+    """
+    own_paragraph = items.filter(has=items.page.get_by_text(label, exact=True))
+    plain_text = items.filter(has_text=_label_pattern(label))
+    return own_paragraph.or_(plain_text)
+
+
+def multiselect_label_container(combobox: Locator) -> Locator:
+    """Clickable label area of the PrimeReact multiselect that owns the combobox input."""
+    return combobox.locator(
+        "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' p-multiselect ')][1]"
+    ).locator("[data-pc-section='labelcontainer']")
+
+
 # noinspection PyArgumentList
 class IntegrationsListPage(BasePage):
     """Integrations page: scope-aware table and Filters sidebar."""
@@ -82,8 +102,14 @@ class IntegrationsListPage(BasePage):
 
     @property
     def created_by_filter(self) -> Locator:
-        """'Created By' control of the Filters sidebar; offered only at Project scope."""
-        return self.page.get_by_role("button", name="Created By")
+        """'Created By' section header of the Filters sidebar; offered only at Project scope.
+
+        The section's autocomplete also carries a button labelled 'Created By', so the
+        accordion header is picked out by its class.
+        """
+        return self.page.get_by_role(
+            "button", name=re.compile(r"^created by$", re.I)
+        ).and_(self.page.locator(".p-accordion-header-link"))
 
     @property
     def scope_hint(self) -> Locator:
@@ -128,15 +154,16 @@ class IntegrationsListPage(BasePage):
 
     def type_option(self, label: str) -> Locator:
         """Option of the open Type filter whose text starts with the label."""
-        return self.type_options.filter(has_text=_label_pattern(label))
+        return labelled(self.type_options, label)
 
     def disabled_type_option(self, label: str) -> Locator:
-        """Disabled marker of the Type option; PrimeReact or the item template carries it."""
-        return (
-            self.page.locator("[aria-disabled='true']")
-            .filter(has_text=_label_pattern(label))
-            .first
-        )
+        """Disabled marker of the Type option; PrimeReact sets data-p-disabled on a disabled option."""
+        return labelled(
+            self.page.locator(
+                "[role='option'][data-p-disabled='true'], [aria-disabled='true']"
+            ),
+            label,
+        ).first
 
     def page_button(self, number: int) -> Locator:
         """Pagination button of a page number (1-based)."""
@@ -191,8 +218,12 @@ class IntegrationsListPage(BasePage):
 
     @step
     def open_type_filter(self):
-        """Open the Type filter's option list."""
-        self.type_filter.click()
+        """Open the Type filter's option list.
+
+        The combobox is the multiselect's read-only input; its label container lies over it
+        and takes the pointer, so the click goes to the container.
+        """
+        multiselect_label_container(self.type_filter).click()
         return self
 
     @step
