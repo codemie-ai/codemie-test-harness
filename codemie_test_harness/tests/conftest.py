@@ -885,6 +885,33 @@ def project_admin_user(keycloak_utils, user_utils, default_project_member):
 
 
 @pytest.fixture
+def mixed_case_personal_user(keycloak_utils):
+    """Function-scoped user whose email contains uppercase letters; deleted after each test.
+
+    Built with the same helper as `disposable_user` (keycloak_utils.create_test_user) and
+    logged in once (about_me), so the personal project is created under the application's
+    real (mixed-case) name rather than a lowercase orphan.
+    """
+    uid = secrets.token_hex(4)
+    email = f"AutoTest.Mixed.{uid}@Email.com"
+    password = keycloak_utils.create_test_user(email=email, project_name=email)
+    try:
+        user_client = get_client(username=email, password=password)
+        user_id = user_client.users.about_me().user_id
+    except Exception:
+        try:
+            keycloak_utils.delete_user(email)
+        except Exception as e:
+            logger.warning(f"Failed to delete user {email} after setup failure: {e}")
+        raise
+    yield email, user_id, user_client
+    try:
+        keycloak_utils.delete_user(email)
+    except Exception as e:
+        logger.warning(f"Failed to delete user {email}: {e}")
+
+
+@pytest.fixture
 def new_user_id_factory(user_utils):
     """Factory for a fresh id to remap a disposable user onto.
 

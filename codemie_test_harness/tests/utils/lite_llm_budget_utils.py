@@ -351,21 +351,22 @@ class LiteLLMBudgetUtils:
         before: dict[str, float],
         key_aliases: dict[str, str],
         customers: dict[str, str],
+        timeout: float = _CHARGE_POLL_TIMEOUT,
     ) -> set[str]:
         """Labels whose spend grew since ``before``.
 
         Waits for the first growth, then a grace period so that a request wrongly charged
-        to a second source is still noticed. Raises TimeoutError if nothing grew in time,
-        so a timeout is never mistaken for "nothing was charged".
+        to a second source is still noticed. Raises TimeoutError if nothing grew within
+        ``timeout`` seconds, so a timeout is never mistaken for "nothing was charged".
         """
-        deadline = time.monotonic() + _CHARGE_POLL_TIMEOUT
+        deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self._grown(before, self.get_spends(key_aliases, customers)):
                 time.sleep(_CHARGE_GRACE)
                 return self._grown(before, self.get_spends(key_aliases, customers))
             time.sleep(_SPENDING_POLL_INTERVAL)
         raise TimeoutError(
-            f"No spend growth within {_CHARGE_POLL_TIMEOUT}s for "
+            f"No spend growth within {timeout}s for "
             f"{sorted({*key_aliases, *customers})}"
         )
 

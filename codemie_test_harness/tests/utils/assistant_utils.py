@@ -551,6 +551,20 @@ class AssistantUtils(BaseUtils):
     def send_evaluate_assistant_request(self, assistant_id: str, evaluation_request):
         return self.client.assistants.evaluate(assistant_id, evaluation_request)
 
+    def generate_assistant_details(self, text: str):
+        """Ask the platform to generate assistant details; nothing is created."""
+        return self.client.assistants.generate(text=text)
+
+    def generate_assistant_prompt(self, text: str):
+        """Ask the platform to generate a system prompt; nothing is created."""
+        return self.client.assistants.generate_prompt(text=text)
+
+    def refine_assistant(self, system_prompt: str, refine_prompt: str):
+        """Ask the platform for recommendations on an assistant draft."""
+        return self.client.assistants.refine(
+            system_prompt=system_prompt, refine_prompt=refine_prompt
+        )
+
     def publish_assistant_to_marketplace(
         self, assistant_id: str, categories=None, ignore_recommendations=False
     ):

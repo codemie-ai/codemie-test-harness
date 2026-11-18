@@ -428,3 +428,13 @@ class SkillsUtils(BaseUtils):
         return self.client.skills.generate_instructions(
             description=description, skill_name=skill_name
         )
+
+    def generate_skill(self, text: str):
+        """Ask the platform to generate skill details; nothing is created."""
+        return self.client.skills.generate(text=text)
+
+    def refine_skill(self, instructions: str, refine_prompt: str):
+        """Ask the platform for recommendations on a skill draft."""
+        return self.client.skills.refine(
+            instructions=instructions, refine_prompt=refine_prompt
+        )

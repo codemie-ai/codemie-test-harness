@@ -42,10 +42,12 @@ class LocalUserUtils:
         random.SystemRandom().shuffle(chars)
         return "".join(chars)
 
-    def create_test_user(self, email: str, project_name: str) -> str:
+    def create_test_user(
+        self, email: str, project_name: str, username: str | None = None
+    ) -> str:
         password = self._generate_password()
         self._client.admin.create_local_user(
-            email=email, username=email, password=password, is_admin=True
+            email=email, username=username or email, password=password, is_admin=True
         )
         return password
 
@@ -55,6 +57,15 @@ class LocalUserUtils:
         self._client.admin.create_local_user(
             email=email, username=email, password=password, is_admin=False
         )
+        return password
+
+    def create_external_user(self, email: str) -> str:
+        """Create a non-admin user and mark it as an external user (editable in local mode only)."""
+        password = self._generate_password()
+        user = self._client.admin.create_local_user(
+            email=email, username=email, password=password, is_admin=False
+        )
+        self._client.users.update_admin_user(user.id, user_type="external")
         return password
 
     def delete_user(self, email: str) -> None:

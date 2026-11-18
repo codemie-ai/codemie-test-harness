@@ -253,6 +253,24 @@ class ProjectUtils(BaseUtils):
                 return found
             page += 1
 
+    def get_member_budget_spending(
+        self, budget_id: str, category: str, user_id: str
+    ) -> float:
+        """The user's current ledger spending for the budget and category.
+
+        A user holds no assignment for a category until the first request of that kind is
+        charged, so a missing assignment reads as 0.0 rather than as an error.
+        """
+        for user in self._users_holding_budget(budget_id, user_id):
+            for assignment in user.budget_assignments:
+                if (
+                    assignment.budget_id == budget_id
+                    and assignment.category == category
+                    and assignment.current_spending is not None
+                ):
+                    return assignment.current_spending
+        return 0.0
+
     def wait_for_member_budget_spending_above(
         self,
         budget_id: str,
