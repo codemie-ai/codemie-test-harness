@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from time import sleep
 
 import pytest
-from hamcrest import assert_that, is_
+from hamcrest import assert_that, is_, is_not, none
 from requests.exceptions import HTTPError
 
 from codemie_sdk.models.integration import CredentialTypes, CredentialValues
@@ -32,6 +32,9 @@ from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data im
 from codemie_test_harness.tests.test_data.budget_member_override_test_data import (
     MEMBER_OVERRIDE_MAX,
     MEMBER_OVERRIDE_SOFT,
+)
+from codemie_test_harness.tests.test_data.budget_delete_test_data import (
+    LITELLM_PRESENT,
 )
 from codemie_test_harness.tests.test_data.budget_test_data import (
     ALL_BUDGET_CATEGORIES,
@@ -56,7 +59,7 @@ from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
 from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
-from codemie_test_harness.tests.utils.base_utils import get_random_name
+from codemie_test_harness.tests.utils.base_utils import get_random_name, poll_until
 from codemie_test_harness.tests.utils.budget_utils import BudgetUtils
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.constants import FILES_PATH
@@ -1401,3 +1404,58 @@ def user1_published_assistant(
             logger.warning(
                 f"Failed to unpublish assistant {published_assistant.id}: {e}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Deleting a manually created budget
+# ---------------------------------------------------------------------------
+
+LITELLM_BUDGET_TIMEOUT = 30
+
+
+@pytest.fixture(scope="function")
+def maintainer_budget_utils(maintainer_client):
+    """AdminBudgetUtils acting as the maintainer, the only role that deletes budgets."""
+    return AdminBudgetUtils(maintainer_client)
+
+
+@pytest.fixture(scope="function")
+def maintainer_activity_utils(maintainer_client):
+    """ActivityUtils acting as the maintainer (the activity events API is maintainer-only)."""
+    return ActivityUtils(maintainer_client)
+
+
+@pytest.fixture(scope="function")
+def budget_in_litellm_state(request, manual_budget, lite_llm_budget_utils):
+    """Indirect-parametrized: ``manual_budget`` once it is in the requested LiteLLM state.
+
+    ``request.param`` is ``LITELLM_PRESENT`` (waits until LiteLLM returns the budget) or
+    ``LITELLM_ALREADY_ABSENT`` (removes it from LiteLLM first, as if it was lost there).
+    """
+    budget_id = manual_budget["budget_id"]
+    expect_present = request.param == LITELLM_PRESENT
+    if not expect_present:
+        lite_llm_budget_utils.delete_budget(budget_id)
+    in_litellm = poll_until(
+        lambda: lite_llm_budget_utils.get_budget_info(budget_id),
+        lambda info: (info is not None) == expect_present,
+        timeout=LITELLM_BUDGET_TIMEOUT,
+        interval=2.0,
+    )
+    assert_that(
+        in_litellm,
+        is_not(none()) if expect_present else none(),
+        f"Budget {budget_id} should be {request.param} in LiteLLM before it is deleted",
+    )
+    return manual_budget
+
+
+@pytest.fixture(scope="function")
+def assigned_users(request, assign_budget_user):
+    """Indirect-parametrized: the first ``request.param`` (1 or 2) platform users, each
+    assigned to ``manual_budget``. Returns the list of users."""
+    fixture_names = ("platform_user", "second_platform_user")[: request.param]
+    users = [request.getfixturevalue(name) for name in fixture_names]
+    for user in users:
+        assign_budget_user(user.user_id)
+    return users

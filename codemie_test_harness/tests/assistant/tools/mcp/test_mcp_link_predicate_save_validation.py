@@ -1,0 +1,144 @@
+# Copyright 2026 EPAM Systems, Inc. (“EPAM”)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""API tests for the assistant save-time MCP link predicate (catalog + duplicate checks).
+
+A link is an mcp_servers entry that is enabled, carries ``mcp_config_id`` and does not
+use its own configuration. Only links are run through the catalog-availability and
+duplicate checks on save; a disabled or custom-config entry is never checked, even
+when its ``mcp_config_id`` points at a catalog entry that no longer exists.
+"""
+
+import pytest
+from hamcrest import assert_that, equal_to
+from requests import HTTPError
+
+from codemie_sdk.models.assistant import AssistantUpdateRequest
+from codemie_test_harness.tests.test_data.mcp_link_test_data import (
+    DUPLICATE_CATALOG_MESSAGE,
+    catalog_unavailable_message,
+    link_server,
+)
+from codemie_test_harness.tests.utils.base_utils import get_random_name
+
+
+@pytest.fixture
+def dead_catalog_config_id(client, catalog_mcp_config):
+    """A catalog config id that existed, then was deleted: resolves to no catalog entry."""
+    config = catalog_mcp_config()
+    client.mcp_configs.delete(config.id)
+    return config.id
+
+
+def _update_mcp_servers(assistant_utils, assistant, mcp_servers):
+    """Re-save ``assistant`` with a new mcp_servers list, keeping every other field unchanged."""
+    return assistant_utils.update_assistant(
+        assistant.id,
+        AssistantUpdateRequest(
+            name=assistant.name,
+            description=assistant.description or "",
+            system_prompt=assistant.system_prompt,
+            project=assistant.project,
+            llm_model_type=assistant.llm_model_type,
+            mcp_servers=mcp_servers,
+        ),
+    )
+
+
+@pytest.mark.assistant
+@pytest.mark.mcp
+@pytest.mark.api
+@pytest.mark.parametrize(
+    "enabled, use_custom_config",
+    [
+        pytest.param(False, False, id="disabled_dead_id_saves"),
+        pytest.param(True, True, id="custom_config_dead_id_saves"),
+    ],
+)
+def test_disabled_or_custom_config_dead_catalog_id_saves(
+    assistant_factory,
+    assistant_utils,
+    dead_catalog_config_id,
+    enabled,
+    use_custom_config,
+):
+    # @case mcp-link-predicate-save-validation_TC_001
+    server_name = get_random_name()
+    server = link_server(
+        name=server_name,
+        mcp_config_id=dead_catalog_config_id,
+        enabled=enabled,
+        use_custom_config=use_custom_config,
+    )
+
+    created = assistant_factory.create(mcp_servers=[server])
+    # assistant_factory.create()/assistant_utils.create_assistant() returns the
+    # minimal list-response entity (client.assistants.list(minimal_response=True) by
+    # default); mcp_servers only exists on the full Assistant detail object.
+    full = assistant_utils.get_assistant_by_id(created.id)
+
+    assert_that(len(full.mcp_servers), equal_to(1))
+    stored = full.mcp_servers[0]
+    assert_that(stored.mcp_config_id, equal_to(dead_catalog_config_id))
+    assert_that(stored.enabled, equal_to(enabled))
+    assert_that(stored.use_custom_config, equal_to(use_custom_config))
+
+
+@pytest.mark.assistant
+@pytest.mark.mcp
+@pytest.mark.api
+def test_re_enabling_dead_catalog_id_entry_fails(
+    assistant_factory, assistant_utils, dead_catalog_config_id
+):
+    # @case mcp-link-predicate-save-validation_TC_001
+    server_name = get_random_name()
+    disabled_server = link_server(
+        name=server_name, mcp_config_id=dead_catalog_config_id, enabled=False
+    )
+    created = assistant_factory.create(mcp_servers=[disabled_server])
+    # _update_mcp_servers needs system_prompt/project/llm_model_type, which only the
+    # full Assistant detail carries (see test_disabled_or_custom_config_dead_catalog_id_saves).
+    full_created = assistant_utils.get_assistant_by_id(created.id)
+    re_enabled_server = link_server(
+        name=server_name, mcp_config_id=dead_catalog_config_id, enabled=True
+    )
+
+    with pytest.raises(HTTPError) as exc_info:
+        _update_mcp_servers(assistant_utils, full_created, [re_enabled_server])
+
+    response = exc_info.value.response
+    assert_that(response.status_code, equal_to(400), response.text)
+    assert_that(
+        response.json()["error"]["message"],
+        equal_to(catalog_unavailable_message(server_name)),
+    )
+
+
+@pytest.mark.assistant
+@pytest.mark.mcp
+@pytest.mark.api
+def test_duplicate_catalog_id_links_refused(assistant_utils, catalog_mcp_config):
+    # @case mcp-link-predicate-save-validation_TC_001
+    config = catalog_mcp_config()
+    first = link_server(mcp_config_id=config.id)
+    second = link_server(mcp_config_id=config.id)
+
+    with pytest.raises(HTTPError) as exc_info:
+        assistant_utils.create_assistant(mcp_servers=[first, second])
+
+    response = exc_info.value.response
+    assert_that(response.status_code, equal_to(400), response.text)
+    assert_that(
+        response.json()["error"]["message"], equal_to(DUPLICATE_CATALOG_MESSAGE)
+    )
