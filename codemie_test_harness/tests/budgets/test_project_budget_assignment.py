@@ -92,12 +92,14 @@ def test_admin_creates_platform_project_budget_routes_spending_from_personal(
         close_to(personal_spend_after_phase1, 0.0001),
     )
     assert_that(
-        lite_llm_budget_utils.get_customer_info(f"{email}_{DEFAULT_CLI_BUDGET_ID}"),
-        none(),
+        lite_llm_budget_utils.get_customer_spend(f"{email}_{DEFAULT_CLI_BUDGET_ID}"),
+        equal_to(0),
     )
     assert_that(
-        lite_llm_budget_utils.get_customer_info(f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}"),
-        none(),
+        lite_llm_budget_utils.get_customer_spend(
+            f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}"
+        ),
+        equal_to(0),
     )
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(cli_alias), none())
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(premium_alias), none())
@@ -198,10 +200,12 @@ def test_admin_creates_cli_project_budget_routes_spending_from_personal(
         float(current_cli["spend"]),
         close_to(personal_cli_spend_after_phase1, 0.0001),
     )
-    assert_that(lite_llm_budget_utils.get_customer_info(email), none())
+    assert_that(lite_llm_budget_utils.get_customer_spend(email), equal_to(0))
     assert_that(
-        lite_llm_budget_utils.get_customer_info(f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}"),
-        none(),
+        lite_llm_budget_utils.get_customer_spend(
+            f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}"
+        ),
+        equal_to(0),
     )
     assert_that(
         lite_llm_budget_utils.get_key_spend_by_alias(platform_alias),
@@ -311,10 +315,10 @@ def test_admin_creates_premium_project_budget_routes_spending_from_personal(
         float(current_premium["spend"]),
         close_to(personal_premium_spend_after_phase1, 0.0001),
     )
-    assert_that(lite_llm_budget_utils.get_customer_info(email), none())
+    assert_that(lite_llm_budget_utils.get_customer_spend(email), equal_to(0))
     assert_that(
-        lite_llm_budget_utils.get_customer_info(f"{email}_{DEFAULT_CLI_BUDGET_ID}"),
-        none(),
+        lite_llm_budget_utils.get_customer_spend(f"{email}_{DEFAULT_CLI_BUDGET_ID}"),
+        equal_to(0),
     )
     assert_that(
         lite_llm_budget_utils.get_key_spend_by_alias(platform_alias),
@@ -400,7 +404,7 @@ def test_all_project_budgets_created_platform_request_routes_to_platform_key(
     assert_that(premium_key_info, not_none())
     assert_that(float(premium_key_info["spend"]), equal_to(0))
 
-    assert_that(lite_llm_budget_utils.get_customer_info(email), none())
+    assert_that(lite_llm_budget_utils.get_customer_spend(email), equal_to(0))
 
     logger.info(
         "Waiting for platform budget spend in ledger (project=%s)", project_name
@@ -455,7 +459,7 @@ def test_all_project_budgets_created_cli_request_routes_to_cli_key(
     assert_that(premium_key_info, not_none())
     assert_that(float(premium_key_info["spend"]), equal_to(0))
 
-    assert_that(lite_llm_budget_utils.get_customer_info(cli_customer_id), none())
+    assert_that(lite_llm_budget_utils.get_customer_spend(cli_customer_id), equal_to(0))
 
     logger.info("Waiting for cli budget spend in ledger (project=%s)", project_name)
     budget = admin_project_utils.wait_for_project_budget_spending_above(
@@ -507,7 +511,9 @@ def test_all_project_budgets_created_premium_request_routes_to_premium_key(
     assert_that(cli_key_info, not_none())
     assert_that(float(cli_key_info["spend"]), equal_to(0))
 
-    assert_that(lite_llm_budget_utils.get_customer_info(premium_customer_id), none())
+    assert_that(
+        lite_llm_budget_utils.get_customer_spend(premium_customer_id), equal_to(0)
+    )
 
     logger.info(
         "Waiting for premium_models budget spend in ledger (project=%s)", project_name
@@ -590,10 +596,12 @@ def test_admin_creates_platform_project_budget_routes_cli_spending_from_personal
         float(current_cli["spend"]),
         close_to(personal_cli_spend_after_phase1, 0.0001),
     )
-    assert_that(lite_llm_budget_utils.get_customer_info(email), none())
+    assert_that(lite_llm_budget_utils.get_customer_spend(email), equal_to(0))
     assert_that(
-        lite_llm_budget_utils.get_customer_info(f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}"),
-        none(),
+        lite_llm_budget_utils.get_customer_spend(
+            f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}"
+        ),
+        equal_to(0),
     )
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(cli_alias), none())
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(premium_alias), none())
@@ -701,10 +709,10 @@ def test_admin_creates_platform_project_budget_routes_premium_spending_from_pers
         float(current_premium["spend"]),
         close_to(personal_premium_spend_after_phase1, 0.0001),
     )
-    assert_that(lite_llm_budget_utils.get_customer_info(email), none())
+    assert_that(lite_llm_budget_utils.get_customer_spend(email), equal_to(0))
     assert_that(
-        lite_llm_budget_utils.get_customer_info(f"{email}_{DEFAULT_CLI_BUDGET_ID}"),
-        none(),
+        lite_llm_budget_utils.get_customer_spend(f"{email}_{DEFAULT_CLI_BUDGET_ID}"),
+        equal_to(0),
     )
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(cli_alias), none())
     assert_that(lite_llm_budget_utils.get_key_info_by_alias(premium_alias), none())
@@ -812,10 +820,10 @@ def test_admin_creates_cli_project_budget_routes_premium_spending_from_personal(
         float(current_premium["spend"]),
         close_to(personal_premium_spend_after_phase1, 0.0001),
     )
-    assert_that(lite_llm_budget_utils.get_customer_info(email), none())
+    assert_that(lite_llm_budget_utils.get_customer_spend(email), equal_to(0))
     assert_that(
-        lite_llm_budget_utils.get_customer_info(f"{email}_{DEFAULT_CLI_BUDGET_ID}"),
-        none(),
+        lite_llm_budget_utils.get_customer_spend(f"{email}_{DEFAULT_CLI_BUDGET_ID}"),
+        equal_to(0),
     )
     assert_that(
         lite_llm_budget_utils.get_key_spend_by_alias(platform_alias),
@@ -920,10 +928,10 @@ def test_admin_creates_premium_project_budget_routes_chat_premium_spending_from_
         float(current_premium["spend"]),
         close_to(personal_premium_spend_after_phase1, 0.0001),
     )
-    assert_that(lite_llm_budget_utils.get_customer_info(email), none())
+    assert_that(lite_llm_budget_utils.get_customer_spend(email), equal_to(0))
     assert_that(
-        lite_llm_budget_utils.get_customer_info(f"{email}_{DEFAULT_CLI_BUDGET_ID}"),
-        none(),
+        lite_llm_budget_utils.get_customer_spend(f"{email}_{DEFAULT_CLI_BUDGET_ID}"),
+        equal_to(0),
     )
     assert_that(
         lite_llm_budget_utils.get_key_spend_by_alias(platform_alias),
@@ -1004,7 +1012,9 @@ def test_all_project_budgets_created_chat_premium_request_routes_to_premium_key(
     assert_that(cli_key_info, not_none())
     assert_that(float(cli_key_info["spend"]), equal_to(0))
 
-    assert_that(lite_llm_budget_utils.get_customer_info(premium_customer_id), none())
+    assert_that(
+        lite_llm_budget_utils.get_customer_spend(premium_customer_id), equal_to(0)
+    )
 
     logger.info(
         "Waiting for premium_models budget spend in ledger (project=%s)", project_name
