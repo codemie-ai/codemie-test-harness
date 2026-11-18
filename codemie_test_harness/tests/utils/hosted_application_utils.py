@@ -14,18 +14,12 @@
 
 """Create hosted applications and their versions through the SDK, wait for validation, and
 remove everything afterwards.
-
-The SDK's hosted-application service does not send or read ``categories`` yet. Until it does, the
-calls that carry them (create, patch, publish, get) go through the service's own authenticated
-request handler with a model that keeps the ``categories`` of the reply; everything else is the
-plain SDK call.
 """
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
-from uuid import uuid4
 
 from codemie_sdk import CodeMieClient
 from codemie_sdk.models.hosted_application import (
@@ -34,7 +28,6 @@ from codemie_sdk.models.hosted_application import (
     HostedApplicationVersionStart,
 )
 from hamcrest import assert_that, equal_to, is_not, empty
-from pydantic import Field
 from requests import HTTPError
 
 from codemie_test_harness.tests.test_data.hosted_application_test_data import (
@@ -87,16 +80,6 @@ def error_field_messages(error: HTTPError) -> list[str]:
         return []
 
 
-class CategorizedApplication(HostedApplication):
-    """An application with the ``categories`` the platform replies with, as ``[{"id", "name"}]``."""
-
-    categories: list[dict[str, Any]] = Field(default_factory=list)
-
-    @property
-    def category_ids(self) -> list[str]:
-        return [category["id"] for category in self.categories]
-
-
 def error_message(error: HTTPError) -> str:
     """The readable message of a failed hosted-application call."""
     try:
@@ -120,12 +103,14 @@ class HostedApplicationUtils(BaseUtils):
         shared: bool = False,
         name: Optional[str] = None,
         description: Optional[str] = None,
+        categories: Optional[list[str]] = None,
     ) -> HostedApplication:
         app = self.service.create_application(
             name or get_random_name(),
             description or "Application created by an automated test",
             project,
             shared=shared,
+            categories=categories,
         )
         self._app_ids.append(app.id)
         return app
@@ -133,62 +118,10 @@ class HostedApplicationUtils(BaseUtils):
     def get_app(self, app_id: str) -> HostedApplication:
         return self.service.get_application(app_id)
 
-    def _send(
-        self,
-        method: str,
-        app_id: Optional[str],
-        *path: str,
-        body: Optional[dict[str, Any]] = None,
-        if_match: Optional[str] = None,
-        idempotency_key: Optional[str] = None,
-    ) -> CategorizedApplication:
-        """One call that carries or reads ``categories``, through the SDK's own request handler."""
-        endpoint = (
-            self.service._path(app_id, *path)
-            if app_id is not None
-            else self.service._path()
-        )
-        headers = None
-        if method != "GET":
-            headers = self.service._headers(if_match, idempotency_key)
-        return self.service._api.request(
-            method,
-            endpoint,
-            CategorizedApplication,
-            json_data=body,
-            extra_headers=headers,
-            wrap_response=False,
-        )
-
-    def get_categorized(self, app_id: str) -> CategorizedApplication:
-        return self._send("GET", app_id)
-
-    def create_categorized_app(
-        self,
-        project: str,
-        categories: list[str],
-        name: Optional[str] = None,
-        shared: bool = False,
-    ) -> CategorizedApplication:
-        """Create an application with ``categories``; it is deleted on cleanup like any other."""
-        app = self._send(
-            "POST",
-            None,
-            body={
-                "name": name or get_random_name(),
-                "description": "Application created by an automated test",
-                "project": project,
-                "shared": shared,
-                "categories": categories,
-            },
-        )
-        self._app_ids.append(app.id)
-        return app
-
-    def patch_app(self, app_id: str, **changes: Any) -> CategorizedApplication:
+    def patch_app(self, app_id: str, **changes: Any) -> HostedApplication:
         """Change the metadata of an application, ``categories`` included."""
-        return self._send(
-            "PATCH", app_id, body=changes, if_match=self.get_app(app_id).etag
+        return self.service.update_application(
+            app_id, self.get_app(app_id).etag, **changes
         )
 
     def start_upload(
@@ -288,32 +221,26 @@ class HostedApplicationUtils(BaseUtils):
         app_id: str,
         categories: Optional[list[str]] = None,
         idempotency_key: Optional[str] = None,
-    ) -> CategorizedApplication:
+    ) -> HostedApplication:
         """Publish an application to the marketplace with 1-3 ``categories``.
 
         Without ``categories`` it goes live with one category the platform already has.
         """
         if categories is None:
             categories = [self.existing_category_id()]
-        return self.publish_with_body(
-            app_id, {"categories": categories}, idempotency_key
+        return self.service.marketplace_publish(
+            app_id,
+            self.get_app(app_id).etag,
+            idempotency_key=idempotency_key,
+            categories=categories,
         )
 
-    def publish_with_body(
-        self,
-        app_id: str,
-        body: Optional[dict[str, Any]],
-        idempotency_key: Optional[str] = None,
-    ) -> CategorizedApplication:
-        """Send ``body`` (none at all when ``None``) as it is to the publish route, for the requests the platform must refuse."""
-        return self._send(
-            "POST",
-            app_id,
-            "marketplace",
-            "publish",
-            body=body,
-            if_match=self.get_app(app_id).etag,
-            idempotency_key=idempotency_key or str(uuid4()),
+    def publish_as_given(
+        self, app_id: str, categories: Optional[list[str]]
+    ) -> HostedApplication:
+        """Publish with exactly ``categories`` (none at all when ``None``), for the requests the platform must refuse."""
+        return self.service.marketplace_publish(
+            app_id, self.get_app(app_id).etag, categories=categories
         )
 
     def unpublish(self, app_id: str) -> HostedApplication:

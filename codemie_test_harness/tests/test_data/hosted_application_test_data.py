@@ -23,7 +23,7 @@ import io
 import stat
 import zipfile
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Optional
 
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 
@@ -449,42 +449,40 @@ MAX_HOSTED_CATEGORIES = 3
 
 @dataclass(frozen=True)
 class PublishRefusal:
-    """A publish body the platform refuses: the body, the code and a part of the message.
+    """Categories the platform refuses to publish with: the list (``None`` sends none at all),
+    the error code and a part of the message.
 
-    A malformed body is refused before its ids are looked up, so they need not exist.
+    A malformed list is refused before its ids are looked up, so they need not exist.
     """
 
     id: str
-    body: dict
+    categories: Optional[list[str]]
     code: str
     message_part: str
 
 
 PUBLISH_REFUSALS = [
     PublishRefusal(
-        "empty-body", {}, INVALID_REQUEST_CODE, "At least one category is required"
+        "no-categories", None, INVALID_REQUEST_CODE, "At least one category is required"
     ),
     PublishRefusal(
-        "empty-list",
-        {"categories": []},
-        INVALID_REQUEST_CODE,
-        "At least one category is required",
+        "empty-list", [], INVALID_REQUEST_CODE, "At least one category is required"
     ),
     PublishRefusal(
         "more-than-three",
-        {"categories": ["first", "second", "third", "fourth"]},
+        ["first", "second", "third", "fourth"],
         INVALID_REQUEST_CODE,
         "Maximum 3 categories allowed",
     ),
     PublishRefusal(
         "duplicate",
-        {"categories": ["same", "same"]},
+        ["same", "same"],
         INVALID_REQUEST_CODE,
         "category IDs must be unique",
     ),
     PublishRefusal(
         "unknown-id",
-        {"categories": ["autotest-no-such-category"]},
+        ["autotest-no-such-category"],
         INVALID_CATEGORIES_CODE,
         "Invalid category IDs",
     ),
