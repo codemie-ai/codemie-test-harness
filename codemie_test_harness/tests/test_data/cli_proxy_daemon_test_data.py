@@ -77,11 +77,13 @@ DESKTOP_CONNECTIONS = [
     pytest.param("named", "hook cold start", id="named-key-hook"),
 ]
 
-DESKTOP_CHANGES = [
-    pytest.param("another port", id="another-port"),
-    pytest.param("another key", id="another-key"),
-    pytest.param("config removed", id="config-removed"),
-]
+# What `proxy status` prints once Desktop's applied config no longer connects it. Another port: the
+# Desktop line. Another key: the daemon refuses the key, so this client notice replaces the Desktop line.
+DESKTOP_NOT_COLLECTING_LINE = "Desktop: NOT collecting"
+DESKTOP_REFUSED_KEY_LINE = (
+    "Claude Desktop: points at a local gateway with a key this proxy does not accept "
+    "\u2014 if it should use CodeMie, run: codemie proxy connect --claude-desktop"
+)
 
 REUSE_COMMANDS = [
     pytest.param("proxy connect", id="connect"),

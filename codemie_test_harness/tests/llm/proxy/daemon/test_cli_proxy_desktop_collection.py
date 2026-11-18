@@ -38,7 +38,8 @@ from hamcrest import (
 
 from codemie_test_harness.tests.test_data.cli_proxy_daemon_test_data import (
     CLIENT_CLAUDE_DESKTOP,
-    DESKTOP_CHANGES,
+    DESKTOP_NOT_COLLECTING_LINE,
+    DESKTOP_REFUSED_KEY_LINE,
     DESKTOP_CONNECTIONS,
 )
 from codemie_test_harness.tests.utils.cli_proxy_utils import stays_true, wait_until
@@ -142,23 +143,14 @@ def test_desktop_is_collected_while_its_applied_config_points_at_the_daemon(
     )
 
 
-@pytest.mark.llm
-@pytest.mark.proxy
-@pytest.mark.api
-@pytest.mark.parametrize("change", DESKTOP_CHANGES)
-def test_collection_stops_when_desktop_stays_disconnected_and_a_new_session_is_ignored(
-    daemon_env, change
-):
-    # @case cli-proxy-one-daemon-serves_TC_007
-    env = daemon_env
+def _connect_desktop_and_collect_a_session(env) -> None:
     env.write_desktop_gateway(env.port, env.bearer())
     env.start_daemon()
     env.wait_for_state(
         lambda s: s.get("desktopConnectedSince"), CONNECT_WAIT, "Desktop collected"
     )
-    now = _now_ms()
     env.write_desktop_session(
-        *ACTIVE_SESSION, last_activity_ms=_now_ms(), created_ms=now
+        *ACTIVE_SESSION, last_activity_ms=_now_ms(), created_ms=_now_ms()
     )
     wait_until(
         lambda: env.is_session_collected(ACTIVE_SESSION[0]),
@@ -166,13 +158,9 @@ def test_collection_stops_when_desktop_stays_disconnected_and_a_new_session_is_i
         "the first session to be collected",
     )
 
-    if change == "another port":
-        env.write_desktop_gateway(env.port + 1, env.bearer())
-    elif change == "another key":
-        env.write_desktop_gateway(env.port, "some-other-gateway-key")
-    else:
-        env.remove_desktop_gateway()
 
+def _assert_collection_stopped(env) -> str:
+    """The daemon cleared desktopConnectedSince and ignores a new session; returns `proxy status`."""
     state = env.wait_for_state(
         lambda s: not s.get("desktopConnectedSince"),
         DISCONNECT_WAIT,
@@ -187,11 +175,6 @@ def test_collection_stops_when_desktop_stays_disconnected_and_a_new_session_is_i
     assert_that(
         status, not_(contains_string("Desktop: collecting")), "no longer collecting"
     )
-    assert_that(
-        status,
-        contains_string("Desktop: NOT collecting"),
-        "proxy status says NOT collecting",
-    )
     env.write_desktop_session(
         *NEW_SESSION, last_activity_ms=_now_ms(), created_ms=_now_ms()
     )
@@ -199,6 +182,75 @@ def test_collection_stops_when_desktop_stays_disconnected_and_a_new_session_is_i
         lambda: not env.is_session_collected(NEW_SESSION[0]),
         POLL_SECONDS + 5,
         "the new session stays undiscovered across a full poll cycle",
+    )
+    return status
+
+
+@pytest.mark.llm
+@pytest.mark.proxy
+@pytest.mark.api
+def test_collection_stops_and_status_names_the_port_when_desktop_points_at_another_port(
+    daemon_env,
+):
+    # @case cli-proxy-one-daemon-serves_TC_007
+    env = daemon_env
+    _connect_desktop_and_collect_a_session(env)
+
+    env.write_desktop_gateway(env.port + 1, env.bearer())
+
+    status = _assert_collection_stopped(env)
+
+    assert_that(
+        status,
+        contains_string(DESKTOP_NOT_COLLECTING_LINE),
+        "proxy status prints the NOT collecting line",
+    )
+
+
+@pytest.mark.llm
+@pytest.mark.proxy
+@pytest.mark.api
+def test_collection_stops_and_status_names_the_refused_key_when_desktop_holds_another_key(
+    daemon_env,
+):
+    # @case cli-proxy-one-daemon-serves_TC_007
+    env = daemon_env
+    _connect_desktop_and_collect_a_session(env)
+
+    env.write_desktop_gateway(env.port, "some-other-gateway-key")
+
+    status = _assert_collection_stopped(env)
+
+    assert_that(
+        status,
+        contains_string(DESKTOP_REFUSED_KEY_LINE),
+        "proxy status prints the refused-key notice",
+    )
+    assert_that(
+        status,
+        not_(contains_string(DESKTOP_NOT_COLLECTING_LINE)),
+        "no NOT collecting line: the refused key replaces it",
+    )
+
+
+@pytest.mark.llm
+@pytest.mark.proxy
+@pytest.mark.api
+def test_collection_stops_and_status_prints_no_desktop_line_when_the_config_is_removed(
+    daemon_env,
+):
+    # @case cli-proxy-one-daemon-serves_TC_007
+    env = daemon_env
+    _connect_desktop_and_collect_a_session(env)
+
+    env.remove_desktop_gateway()
+
+    status = _assert_collection_stopped(env)
+
+    assert_that(
+        [line for line in status.splitlines() if "Desktop:" in line],
+        equal_to([]),
+        "proxy status prints no Desktop line",
     )
 
 

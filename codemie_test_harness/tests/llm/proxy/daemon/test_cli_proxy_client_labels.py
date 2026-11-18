@@ -130,20 +130,22 @@ def test_two_clients_stream_concurrently_through_one_daemon_with_own_labels(
 @pytest.mark.llm
 @pytest.mark.proxy
 @pytest.mark.api
-@pytest.mark.parametrize("client", NON_DESKTOP_CLIENTS)
+@pytest.mark.parametrize("client_name", NON_DESKTOP_CLIENTS)
 def test_non_desktop_client_carries_own_label_and_no_cowork_repository(
-    daemon_env, client
+    daemon_env, client_name
 ):
     # @case cli-proxy-one-daemon-serves_TC_002
     daemon_env.start_daemon()
 
     response = daemon_env.post(
-        "/v1/responses", daemon_env.bearer(client), {"model": "gpt-5.2", "input": []}
+        "/v1/responses",
+        daemon_env.bearer(client_name),
+        {"model": "gpt-5.2", "input": []},
     )
 
     assert_that(response.status_code, equal_to(200), "request is forwarded")
     seen = daemon_env.stub.model_requests()[-1]
-    assert_that(seen.client, equal_to(client), "own label")
+    assert_that(seen.client, equal_to(client_name), "own label")
     assert_that(
         seen.client, is_not(equal_to(CLIENT_CLAUDE_DESKTOP)), "no Desktop label"
     )
