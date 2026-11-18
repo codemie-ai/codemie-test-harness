@@ -24,7 +24,9 @@ from codemie_test_harness.tests.test_data.workflow_chat_history_test_data import
 
 HISTORY_HEADER = "# Previous Workflow Executions"
 CURRENT_REQUEST_HEADER = "## Current Request"
+OUTPUT_LABEL = "**Workflow Output:**"
 EXECUTION_HEADING = re.compile(r"(?m)^## Execution \d+$")
+USER_INPUT_LINE = re.compile(r"(?m)^\*\*User Input:\*\* (.*)$")
 
 
 @pytest.fixture
@@ -63,7 +65,9 @@ def test_workflow_chat_third_execution_holds_each_earlier_input_and_output_once(
 
     The stored prompt of an execution is its history block followed by the raw user
     input. The history must be built from the raw inputs of the earlier executions,
-    not from their stored prompts, or the earlier blocks nest and repeat.
+    not from their stored prompts, or the earlier blocks nest and repeat. User inputs
+    are counted on their ``**User Input:**`` lines: a workflow output may quote an
+    input in its own text, so a raw count of the input text would be wrong.
     """
     created_workflow, conversation_id = workflow_conversation
     data = workflow_chat_history_data()
@@ -76,20 +80,12 @@ def test_workflow_chat_third_execution_holds_each_earlier_input_and_output_once(
         created_workflow.id, conversation_id, data.second_input
     )
 
-    # The outputs the history is expected to render come from the execution states
-    first_output = next(
-        iter(
-            workflow_utils.get_state_outputs(
-                created_workflow.id, first_execution.execution_id
-            ).values()
-        )
+    # The history renders the output of the latest state of each earlier run
+    first_output = workflow_utils.get_last_state_output(
+        created_workflow.id, first_execution.execution_id
     )
-    second_output = next(
-        iter(
-            workflow_utils.get_state_outputs(
-                created_workflow.id, second_execution.execution_id
-            ).values()
-        )
+    second_output = workflow_utils.get_last_state_output(
+        created_workflow.id, second_execution.execution_id
     )
     assert_that(len(first_output), greater_than(0), "First execution has no output")
     assert_that(len(second_output), greater_than(0), "Second execution has no output")
@@ -116,24 +112,29 @@ def test_workflow_chat_third_execution_holds_each_earlier_input_and_output_once(
     first_block, second_block = execution_blocks
 
     assert_that(
-        prompt.count(data.first_input),
-        equal_to(1),
-        "First user input must appear exactly once",
+        USER_INPUT_LINE.findall(history),
+        has_length(2),
+        "The history must hold one user input line per earlier execution",
     )
     assert_that(
-        prompt.count(data.second_input),
-        equal_to(1),
-        "Second user input must appear exactly once",
+        USER_INPUT_LINE.findall(first_block),
+        equal_to([data.first_input]),
+        "Execution 1 must list only the first user input, once",
     )
     assert_that(
-        first_block.count(data.first_input),
-        equal_to(1),
-        "First user input must be listed under Execution 1",
+        USER_INPUT_LINE.findall(second_block),
+        equal_to([data.second_input]),
+        "Execution 2 must list only the second user input, once",
     )
     assert_that(
-        second_block.count(data.second_input),
+        first_block.count(OUTPUT_LABEL),
         equal_to(1),
-        "Second user input must be listed under Execution 2",
+        "Execution 1 must render one workflow output",
+    )
+    assert_that(
+        second_block.count(OUTPUT_LABEL),
+        equal_to(1),
+        "Execution 2 must render one workflow output",
     )
     assert_that(
         first_block.count(first_output),

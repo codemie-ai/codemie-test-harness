@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 import time
@@ -728,6 +729,27 @@ class WorkflowUtils(BaseUtils):
             state.name: states_service.get_output(state.id).output
             for state in states_service.list(per_page=50)
         }
+
+    def get_last_state_output(self, workflow_id: str, execution_id: str) -> str:
+        """Return the output of the latest state of the run.
+
+        A run can hold more than one state: besides the states of the workflow
+        itself the platform may add a closing state (for example a conversation
+        summary). The history of a workflow conversation renders the output of the
+        latest state, so this is the output a later execution sees for this run.
+        """
+        states_service = self.client.workflows.executions(workflow_id).states(
+            execution_id
+        )
+        states = states_service.list(per_page=50)
+        last_state = max(
+            states,
+            key=lambda state: (
+                state.started_at or datetime.min,
+                state.completed_at or datetime.min,
+            ),
+        )
+        return states_service.get_output(last_state.id).output
 
     def wait_for_state_status(
         self,

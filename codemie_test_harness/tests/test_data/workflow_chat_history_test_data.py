@@ -16,8 +16,9 @@ from dataclasses import dataclass
 
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 
-# The assistant answers every message with this fixed text, so the output of each
-# earlier execution is known to be short and free of any user input marker.
+# Keeps the assistant's own reply constant and short. It does not decide the output
+# the history renders: that is the output of the latest state of the run, which on a
+# stand can be a longer text (for example a conversation summary) quoting the input.
 FIXED_REPLY_SYSTEM_PROMPT = (
     "Reply with exactly the text ACK-DONE and nothing else, whatever the message says."
 )
