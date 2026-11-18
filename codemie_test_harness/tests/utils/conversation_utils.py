@@ -33,6 +33,7 @@ from codemie_sdk.models.conversation import (
 )
 from codemie_sdk.models.assistant import AssistantChatRequest
 
+from codemie_test_harness.tests import API_DOMAIN, VERIFY_SSL
 from codemie_test_harness.tests.utils.base_utils import BaseUtils
 
 
@@ -118,6 +119,38 @@ class ConversationUtils(BaseUtils):
             history=history, assistant_id=assistant_id, folder=folder
         )
         return self.client.conversations.upsert_history(conversation_id, request)
+
+    def upsert_history_as_cli(
+        self,
+        conversation_id: str,
+        history: List[HistoryItem],
+        cli_client: str,
+        folder: str = None,
+        assistant_id: str = None,
+    ) -> requests.Response:
+        """Upsert history the way a CLI agent syncs a chat (raw HTTP).
+
+        The backend derives the chat's write-once import source from the
+        ``X-CodeMie-Client`` header (e.g. ``codemie-gemini``). The SDK's
+        ``upsert_history`` cannot set request headers, so this call goes over
+        HTTP directly, with the client's own token.
+        """
+        request = UpsertHistoryRequest(
+            history=history, assistant_id=assistant_id, folder=folder
+        )
+        response = requests.put(
+            f"{API_DOMAIN}/v1/conversations/{conversation_id}/history",
+            headers={
+                "Authorization": f"Bearer {self.client.token}",
+                "Content-Type": "application/json",
+                "X-CodeMie-Client": cli_client,
+            },
+            json=request.model_dump(mode="json", exclude_none=True),
+            verify=VERIFY_SSL,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response
 
     def delete_history(self, conversation_id: str):
         """Clear all history from a conversation."""
