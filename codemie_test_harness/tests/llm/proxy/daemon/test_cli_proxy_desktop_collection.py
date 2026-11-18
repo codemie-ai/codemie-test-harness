@@ -30,6 +30,7 @@ from hamcrest import (
     contains_string,
     equal_to,
     has_item,
+    has_length,
     is_,
     is_not,
     none,
@@ -38,7 +39,10 @@ from hamcrest import (
 
 from codemie_test_harness.tests.test_data.cli_proxy_daemon_test_data import (
     CLIENT_CLAUDE_DESKTOP,
+    DESKTOP_CLIENT_ROW_LABEL,
+    DESKTOP_CONNECT_HINT,
     DESKTOP_NOT_COLLECTING_LINE,
+    DESKTOP_NOT_CONNECTED_TEXT,
     DESKTOP_REFUSED_KEY_LINE,
     DESKTOP_CONNECTIONS,
 )
@@ -231,7 +235,7 @@ def test_collection_stops_and_status_names_the_refused_key_when_desktop_holds_an
 @pytest.mark.llm
 @pytest.mark.proxy
 @pytest.mark.api
-def test_collection_stops_and_status_prints_no_desktop_line_when_the_config_is_removed(
+def test_collection_stops_and_status_says_desktop_is_not_connected_when_the_config_is_removed(
     daemon_env,
 ):
     # @case cli-proxy-one-daemon-serves_TC_007
@@ -242,10 +246,19 @@ def test_collection_stops_and_status_prints_no_desktop_line_when_the_config_is_r
 
     status = _assert_collection_stopped(env)
 
+    desktop_rows = [
+        line for line in status.splitlines() if DESKTOP_CLIENT_ROW_LABEL in line
+    ]
+    assert_that(desktop_rows, has_length(1), "proxy status has one Claude Desktop row")
     assert_that(
-        [line for line in status.splitlines() if "Desktop:" in line],
-        equal_to([]),
-        "proxy status prints no Desktop line",
+        desktop_rows[0],
+        contains_string(DESKTOP_NOT_CONNECTED_TEXT),
+        "the row says Desktop is not connected",
+    )
+    assert_that(
+        desktop_rows[0],
+        contains_string(DESKTOP_CONNECT_HINT),
+        "the row names the command that connects it",
     )
 
 

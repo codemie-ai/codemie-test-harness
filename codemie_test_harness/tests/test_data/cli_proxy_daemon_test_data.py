@@ -79,7 +79,12 @@ DESKTOP_CONNECTIONS = [
 
 # What `proxy status` prints once Desktop's applied config no longer connects it. Another port: the
 # Desktop line. Another key: the daemon refuses the key, so this client notice replaces the Desktop line.
+# Config removed: the `Claude Desktop:` row of the client table reads "not connected" with the aggregate
+# connect command (its label is padded to a column, so only the label and the text after it are named).
 DESKTOP_NOT_COLLECTING_LINE = "Desktop: NOT collecting"
+DESKTOP_CLIENT_ROW_LABEL = "Claude Desktop:"
+DESKTOP_NOT_CONNECTED_TEXT = "not connected"
+DESKTOP_CONNECT_HINT = "codemie proxy connect --claude-otlp"
 DESKTOP_REFUSED_KEY_LINE = (
     "Claude Desktop: points at a local gateway with a key this proxy does not accept "
     "\u2014 if it should use CodeMie, run: codemie proxy connect --claude-desktop"
