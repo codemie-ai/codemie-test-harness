@@ -92,12 +92,7 @@ def test_desktop_is_collected_while_its_applied_config_points_at_the_daemon(
     )
     env.write_desktop_gateway(env.port, _desktop_key(env, key_kind))
 
-    result = env.run_start_command(command)
-    assert_that(
-        result.returncode,
-        equal_to(0),
-        f"{command} succeeds: {result.stdout}{result.stderr}",
-    )
+    _start_daemon_with_desktop_configured(env, command)
 
     state = env.wait_for_state(
         lambda s: s.get("desktopConnectedSince"),
