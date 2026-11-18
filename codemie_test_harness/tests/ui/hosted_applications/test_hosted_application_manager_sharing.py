@@ -166,7 +166,8 @@ def test_manager_who_is_not_the_creator_manages_people_and_the_link_in_the_share
     details.open_overflow_menu(world.app_name).choose_menu_item(SHARE_MENU_ITEM)
     dialog = HostedShareDialog(page, world.app_name).should_be_open()
 
-    dialog.search(world.creator.email).should_offer_nobody()
+    dialog.search(person.email).should_offer(person.name)
+    dialog.search(world.creator.email).should_offer_nobody_instead_of(person.name)
 
     dialog.add(person.email, person.name).should_be_closed_after_sharing()
     assert_that(

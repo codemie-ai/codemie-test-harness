@@ -18,6 +18,8 @@ Adding a person takes effect on Save; removing one takes effect on the click. Th
 created by the first copy when the application has none.
 """
 
+import re
+
 from hamcrest import assert_that, contains_string
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
@@ -55,30 +57,59 @@ class HostedShareDialog(BasePage):
 
     @property
     def search_input(self) -> Locator:
-        """People search of the dialog."""
+        """People search of the dialog: a multiselect whose own input is read-only and hidden.
+
+        It takes no click; its visible label container opens the search panel.
+        """
         return self.dialog.get_by_role("combobox", name="Search users by name or email")
+
+    @property
+    def search_trigger(self) -> Locator:
+        """Visible label of the people search, beside its hidden input; a click opens or closes the panel.
+
+        The dialog holds one multiselect, the people search.
+        """
+        return self.dialog.locator('[data-pc-section="labelcontainer"]')
+
+    @property
+    def search_panel(self) -> Locator:
+        """Panel of the people search; rendered at the end of the page, outside the dialog."""
+        return self.page.locator('[data-pc-section="panel"]').filter(
+            has=self.page.get_by_role("listbox")
+        )
+
+    @property
+    def search_box(self) -> Locator:
+        """Text box of the search panel that takes the query."""
+        return self.search_panel.get_by_role("searchbox")
 
     @property
     def options(self) -> Locator:
         """Every person the search offers."""
-        return self.dialog.get_by_role("option")
+        return self.search_panel.get_by_role("option")
 
     def option(self, name: str) -> Locator:
         """The person the search offers under this display name."""
-        return self.dialog.get_by_role("option", name=name)
+        return self.search_panel.get_by_role("option", name=name)
 
     @property
     def search_empty_text(self) -> Locator:
         """Text the search shows when it offers nobody."""
-        return self.dialog.get_by_text(SEARCH_EMPTY_TEXT)
+        return self.search_panel.get_by_text(SEARCH_EMPTY_TEXT)
 
     def access_entry(self, email: str) -> Locator:
         """The 'People With Access' entry of the person with this e-mail."""
         return self.dialog.get_by_role("listitem").filter(has_text=email)
 
     def remove_button(self, name: str) -> Locator:
-        """'Remove <name>' button of a 'People With Access' entry."""
-        return self.dialog.get_by_role("button", name=f"Remove {name}")
+        """'Remove <name>' button of a 'People With Access' entry.
+
+        Scoped to the list: a person picked in the search but not saved yet carries a chip with
+        the same label.
+        """
+        return self.dialog.get_by_role("listitem").get_by_role(
+            "button", name=f"Remove {name}", exact=True
+        )
 
     @property
     def save_button(self) -> Locator:
@@ -97,42 +128,62 @@ class HostedShareDialog(BasePage):
 
     @property
     def revoke_confirmation(self) -> Locator:
-        """Confirmation asked before the link is revoked.
+        """Confirmation asked before the link is revoked: its own dialog, named by its title.
 
-        VERIFY: not walked live; title text from the frontend's ShareLinkSection.
+        Title from frontend src/components/sharing/ShareLinkSection.tsx:39.
         """
-        return self.page.get_by_role("dialog").filter(has_text=REVOKE_LINK_CONFIRMATION)
+        return self.page.get_by_role(
+            "dialog", name=REVOKE_LINK_CONFIRMATION, exact=True
+        )
 
     @property
     def confirm_revoke_button(self) -> Locator:
         """'Revoke link' button of the confirmation.
 
-        VERIFY: not walked live; label from the frontend's ShareLinkSection.
+        Label from frontend src/components/sharing/ShareLinkSection.tsx:150.
         """
-        return self.revoke_confirmation.get_by_role("button", name="Revoke link")
+        return self.revoke_confirmation.get_by_role(
+            "button", name="Revoke link", exact=True
+        )
 
     def error_text(self, message: str) -> Locator:
         """The refusal message the dialog shows under the list after a failed Save.
 
-        VERIFY: not walked live; the dialog shows the server's message (frontend SharePopup).
+        Only the paragraph: while the dialog is open it also holds the screen-reader copy of every
+        notification, with the same text. The paragraph holds the server's message (frontend
+        src/components/sharing/SharePopup.tsx:213 and :296).
         """
-        return self.dialog.get_by_text(message, exact=True)
+        return self.dialog.locator("p").filter(
+            has_text=re.compile(rf"^{re.escape(message)}$")
+        )
 
     def toast(self, text: str) -> Locator:
-        """A notification with this text."""
-        return self.page.get_by_text(text, exact=True)
+        """The visible notification with this text, in the notification area.
+
+        The screen-reader copy of the same text lives elsewhere (in the open dialog, or at the
+        end of the page) and is left out.
+        """
+        return self.page.locator("#toast-container").get_by_text(text, exact=True)
 
     # ------------------------------------------------------------------
     # Actions
     # ------------------------------------------------------------------
     @step
+    def open_search(self):
+        """Open the search panel; a panel already open stays open."""
+        if not self.search_box.is_visible():
+            self.search_trigger.click()
+        expect(self.search_box).to_be_visible()
+        return self
+
+    @step
     def search(self, query: str):
-        """Type a search and wait until the platform has answered it."""
+        """Type a search into the panel and wait until the platform has answered it."""
+        self.open_search()
         with self.page.expect_response(
             lambda response: "/sharable-users" in response.url
         ):
-            self.search_input.click()
-            self.search_input.fill(query)
+            self.search_box.fill(query)
         return self
 
     @step
@@ -199,10 +250,22 @@ class HostedShareDialog(BasePage):
         return self
 
     @step
-    def should_offer_nobody(self):
-        """The answered search offers no person."""
-        expect(self.search_empty_text).to_be_visible()
+    def should_offer(self, name: str):
+        """The search offers the person with this display name."""
+        expect(self.option(name)).to_be_visible()
+        return self
+
+    @step
+    def should_offer_nobody_instead_of(self, previous: str):
+        """The latest search offers no person.
+
+        The panel keeps the options of the search before until the new answer replaces them, and
+        shows the empty-search text before any search too. Waiting for ``previous``, a person the
+        search before offered, to go first makes sure the checks read the latest answer.
+        """
+        expect(self.option(previous)).to_have_count(0)
         expect(self.options).to_have_count(0)
+        expect(self.search_empty_text).to_be_visible()
         return self
 
     @step
@@ -254,7 +317,8 @@ class HostedShareDialog(BasePage):
 
     @step
     def should_show_error(self, message: str):
-        """The dialog stays open and shows the refusal message."""
+        """The dialog stays open and shows the refusal message, also as a notification."""
         expect(self.heading).to_be_visible()
         expect(self.error_text(message)).to_be_visible()
+        expect(self.toast(message)).to_be_visible()
         return self

@@ -448,6 +448,8 @@ MANAGERS_ONLY_MESSAGE = (
     "Only the app's managers (its creator, admins of its project, platform admins and "
     "maintainers) can share it or manage its access"
 )
+# The 404 of an application the caller cannot read (backend
+# src/codemie/repository/hosted_applications/repository.py:48), with NOT_FOUND_CODE.
 APPLICATION_NOT_FOUND_MESSAGE = "Application not found"
 CREATOR_ALREADY_HAS_ACCESS_CODE = "CREATOR_ALREADY_HAS_ACCESS"
 CREATOR_ALREADY_HAS_ACCESS_MESSAGE = "The app's creator already has access"

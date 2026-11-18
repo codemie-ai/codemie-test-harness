@@ -35,14 +35,17 @@ MANAGEMENT_ROUTE = "/v1/hosted-applications/capabilities"
 SHARE_MENU_ITEM = "Share"
 SUSPEND_MENU_ITEM = "Suspend"
 REVOKE_LINK_MENU_ITEM = "Revoke share link"
+# Frontend src/components/sharing/SharePopup.tsx:266.
 SEARCH_EMPTY_TEXT = "Type to search users"
+# Frontend src/pages/applications/hosted/HostedSharePopup.tsx:96 and :98.
 SHARING_UPDATED_TOAST = "Application sharing updated."
 USER_REMOVED_TOAST = "User removed from application sharing."
+# Frontend src/components/sharing/ShareLinkSection.tsx:80, :113 and :39.
 LINK_COPIED_TOAST = "Share link copied to clipboard"
-# VERIFY: not walked live; texts of the frontend's ShareLinkSection.
 LINK_REVOKED_TOAST = "Share link revoked"
 REVOKE_LINK_CONFIRMATION = "Revoke the share link?"
-# The copied link opens the share route of the Applications area with the link's token.
+# The copied link opens the share route of the Applications area with the link's token
+# (frontend src/pages/applications/hosted/hostedRoutes.ts:23).
 SHARE_LINK_ROUTE = "/apps/share/"
 CLIPBOARD_PERMISSIONS = ["clipboard-read", "clipboard-write"]
 NON_MANAGER_HINT = "Only signed-in members of your organization can open it."
