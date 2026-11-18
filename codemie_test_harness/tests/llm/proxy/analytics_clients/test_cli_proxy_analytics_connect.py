@@ -269,9 +269,9 @@ def test_found_member_that_fails_prints_its_failure_and_exits_1_with_the_others_
 @pytest.mark.llm
 @pytest.mark.proxy
 @pytest.mark.api
-@pytest.mark.parametrize(("flag", "client", "application"), MEMBER_FLAGS_ALONE)
+@pytest.mark.parametrize(("flag", "member_client", "application"), MEMBER_FLAGS_ALONE)
 def test_member_flag_alone_configures_its_client_when_the_application_is_present(
-    analytics_env_factory, flag, client, application
+    analytics_env_factory, flag, member_client, application
 ):
     # @case cli-proxy-one-analytics-flag_TC_006
     env = analytics_env_factory(application)
@@ -281,7 +281,7 @@ def test_member_flag_alone_configures_its_client_when_the_application_is_present
     assert_that(result.returncode, equal_to(0), f"exit code 0: {output_of(result)}")
     assert_that(
         env.configured_clients(),
-        equal_to([client]),
+        equal_to([member_client]),
         "only its own client is configured",
     )
 
@@ -289,9 +289,9 @@ def test_member_flag_alone_configures_its_client_when_the_application_is_present
 @pytest.mark.llm
 @pytest.mark.proxy
 @pytest.mark.api
-@pytest.mark.parametrize(("flag", "client"), MEMBER_FLAGS_WITHOUT_APPLICATION)
+@pytest.mark.parametrize(("flag", "member_client"), MEMBER_FLAGS_WITHOUT_APPLICATION)
 def test_member_flag_alone_still_configures_its_client_when_the_application_is_absent(
-    analytics_env_factory, flag, client
+    analytics_env_factory, flag, member_client
 ):
     # @case cli-proxy-one-analytics-flag_TC_006
     env = analytics_env_factory()
@@ -305,7 +305,7 @@ def test_member_flag_alone_still_configures_its_client_when_the_application_is_a
     )
     assert_that(
         env.configured_clients(),
-        equal_to([client]),
+        equal_to([member_client]),
         "the client is configured although its application is absent",
     )
 

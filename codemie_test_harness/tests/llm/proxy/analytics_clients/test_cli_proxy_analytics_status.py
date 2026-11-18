@@ -227,14 +227,14 @@ def test_status_with_a_stopped_daemon_shows_the_block_after_status_stopped(
 @pytest.mark.llm
 @pytest.mark.proxy
 @pytest.mark.api
-@pytest.mark.parametrize("client", ROW_CLIENTS)
+@pytest.mark.parametrize("row_client", ROW_CLIENTS)
 def test_the_command_a_not_connected_row_names_makes_the_row_read_connected(
-    analytics_env_factory, client
+    analytics_env_factory, row_client
 ):
     # @case cli-proxy-one-analytics-flag_TC_021
     env = analytics_env_factory(*ALL_FOUND)
     env.start_daemon()
-    label = ANALYTICS_LABELS[client]
+    label = ANALYTICS_LABELS[row_client]
     before = row_values(env.analytics_rows(env.status_output()))[label]
     command = command_named_by(before)
 
