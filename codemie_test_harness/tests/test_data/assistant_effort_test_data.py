@@ -14,6 +14,11 @@
 
 """Catalog helpers and expected values for the assistant effort parameter tests."""
 
+from codemie_sdk.models.llm import LLMProvider
+
+from codemie_test_harness.tests.enums.environment import Environment
+from codemie_test_harness.tests.test_data.llm_test_data import DIAL_ENVS
+
 # Effort levels in ascending order; the catalog lists a model's levels in this order.
 EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max"]
 
@@ -84,6 +89,22 @@ def claude_effort_models(models) -> list:
         and not model.is_router
     ]
     return sorted(candidates, key=lambda model: bool(model.is_premium))
+
+
+def provider_is_available(model, environment) -> bool:
+    """Whether the stand can reach the model's provider.
+
+    Bedrock and Vertex models need the stand's AWS or GCP environments; any other
+    provider (DIAL, direct) is only provisioned on the DIAL stands.
+    """
+    if model.provider == LLMProvider.AWS_BEDROCK:
+        return environment in Environment.get_aws_environments()
+    if model.provider in (
+        LLMProvider.GOOGLE_VERTEXAI,
+        LLMProvider.GOOGLE_VERTEXAI_ANTHROPIC,
+    ):
+        return environment in Environment.get_gcp_environments()
+    return environment in DIAL_ENVS
 
 
 def level_above_ceiling(levels: list[str]):

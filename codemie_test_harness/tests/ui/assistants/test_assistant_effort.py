@@ -134,7 +134,7 @@ def test_max_effort_shows_token_warning_and_is_saved_and_shown_in_details(
     assistants_page, edit_page = _open_edit_page(page, created)
 
     edit_page.select_effort(EFFORT_WITHOUT_WARNING)
-    edit_page.should_not_show_effort_token_usage_warning()
+    edit_page.should_not_show_effort_token_usage_warning(EFFORT_WITHOUT_WARNING)
 
     edit_page.select_effort(EFFORT_WITH_WARNING)
     edit_page.should_show_effort_token_usage_warning()
@@ -170,7 +170,7 @@ def test_switching_max_effort_assistant_to_non_effort_model_clears_effort_and_sa
 
     edit_page.select_llm_model(non_effort_model.label)
     edit_page.should_not_have_effort_select()
-    edit_page.should_not_show_effort_unsupported_alert()
+    edit_page.should_not_show_effort_unsupported_alert(non_effort_model.label)
 
     edit_page.click_save()
     assistants_page.should_see_updating_popup(

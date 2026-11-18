@@ -723,9 +723,16 @@ class CreateEditAssistantPage(BasePage):
         accordion = self.extra_configuration_accordion
         if accordion.get_attribute("aria-expanded") != "true":
             accordion.click()
-            # The LLM model field is always rendered in the accordion; Temperature is
-            # hidden for models with effort levels, so it cannot signal the expansion.
-            self.llm_model_dropdown.wait_for(state="visible", timeout=5000)
+            # Temperature is hidden for models with effort levels, which show the
+            # Effort select instead; either one means the model fields have rendered.
+            try:
+                self.temperature_input.or_(self.effort_select).first.wait_for(
+                    state="visible", timeout=5000
+                )
+            except PlaywrightTimeoutError:
+                # A model with neither field: the always-rendered model field still
+                # confirms the accordion is open.
+                self.llm_model_dropdown.wait_for(state="visible", timeout=5000)
         return self
 
     @step
@@ -1274,14 +1281,17 @@ class CreateEditAssistantPage(BasePage):
         return self
 
     @step
-    def should_not_show_effort_token_usage_warning(self):
-        """Verify the token-usage warning for a high effort is not shown."""
+    def should_not_show_effort_token_usage_warning(self, level: str):
+        """Verify the token-usage warning is not shown once the Effort select shows level."""
+        expect(self.effort_select).to_contain_text(level)
         expect(self.effort_token_usage_warning).to_have_count(0)
         return self
 
     @step
-    def should_not_show_effort_unsupported_alert(self):
-        """Verify the 'Effort is not supported for this model' error is not shown."""
+    def should_not_show_effort_unsupported_alert(self, model_label: str):
+        """Verify the 'Effort is not supported for this model' error is not shown
+        once the model dropdown shows model_label."""
+        expect(self.llm_model_dropdown).to_contain_text(model_label)
         expect(self.effort_unsupported_alert).to_have_count(0)
         return self
 

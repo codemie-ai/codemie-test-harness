@@ -27,7 +27,9 @@ from codemie_test_harness.tests.test_data.assistant_effort_test_data import (
     models_missing_temperature_flag,
     models_with_effort,
     models_without_effort,
+    provider_is_available,
 )
+from codemie_test_harness.tests.utils.env_resolver import get_environment
 
 
 @pytest.fixture(scope="module")
@@ -49,10 +51,16 @@ def claude_models(llm_models):
 
 @pytest.fixture
 def effort_chat_target(claude_models, model_slot, effort_role):
-    """The (model, effort) pair one chat test sends, at most two models in all."""
-    if model_slot >= len(claude_models):
-        pytest.skip(f"Catalog has no Claude effort model in slot {model_slot}")
-    model = claude_models[model_slot]
+    """The (model, effort) pair one chat test sends, at most two models in all.
+
+    Only models whose provider the stand can reach are used, so an unprovisioned
+    provider does not fail the chat with an auth error that looks like an effort bug.
+    """
+    environment = get_environment()
+    reachable = [m for m in claude_models if provider_is_available(m, environment)]
+    if model_slot >= len(reachable):
+        pytest.skip(f"Stand has no reachable Claude effort model in slot {model_slot}")
+    model = reachable[model_slot]
     effort = chat_effort_for(effort_levels(model), effort_role)
     if effort is None:
         pytest.skip(f"{model.base_name} declares every level, none is {effort_role}")
