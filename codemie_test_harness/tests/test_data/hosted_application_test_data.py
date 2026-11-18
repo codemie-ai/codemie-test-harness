@@ -434,3 +434,206 @@ FIXED_CONTENT_HEADERS = {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
 }
+
+
+# Sharing by the app's managers: its creator, admins of its project, platform admins and maintainers.
+ACTIVITY_DOMAIN = "hosted_application"
+ACTIVITY_WAIT_SECONDS = 60
+GRANT_ADDED_EVENT = "hosted_application.grant.added"
+GRANT_REMOVED_EVENT = "hosted_application.grant.removed"
+LINK_CREATED_EVENT = "hosted_application.share_link.created"
+LINK_REVOKED_EVENT = "hosted_application.share_link.revoked"
+ACCESS_DENIED_CODE = "ACCESS_DENIED"
+MANAGERS_ONLY_MESSAGE = (
+    "Only the app's managers (its creator, admins of its project, platform admins and "
+    "maintainers) can share it or manage its access"
+)
+APPLICATION_NOT_FOUND_MESSAGE = "Application not found"
+CREATOR_ALREADY_HAS_ACCESS_CODE = "CREATOR_ALREADY_HAS_ACCESS"
+CREATOR_ALREADY_HAS_ACCESS_MESSAGE = "The app's creator already has access"
+APP_SUSPENDED_STATUS = 409
+APP_SUSPENDED_CODE = "APP_SUSPENDED"
+SHARE_SUSPENDED_MESSAGE = "The application is suspended; share_on is not allowed."
+SHARING_SUSPENSION_REASON = (
+    "Security review of a shared application by an automated test"
+)
+# Any text of two characters or more is a valid people search.
+SHARABLE_USERS_QUERY = "autotest"
+
+SHARING_MANAGERS = ("creator", "project_admin", "platform_admin", "maintainer")
+NON_CREATOR_MANAGERS = ("project_admin", "platform_admin", "maintainer")
+
+
+def unknown_user_id() -> str:
+    """An id no user has."""
+    return f"autotest-unknown-{get_random_name()}"
+
+
+@dataclass(frozen=True)
+class SharingPersona:
+    """A person in one role and whether the application tells them they may share it.
+
+    ``shared`` and ``published`` shape the application so the person can read it.
+    """
+
+    id: str
+    can_share: bool
+    shared: bool = True
+    published: bool = False
+
+    @property
+    def role(self) -> str:
+        return self.id
+
+
+CAN_SHARE_PERSONAS = [
+    SharingPersona("creator", can_share=True),
+    SharingPersona("project_admin", can_share=True),
+    SharingPersona("platform_admin", can_share=True),
+    SharingPersona("maintainer", can_share=True),
+    SharingPersona("project_member", can_share=False),
+    SharingPersona("named_grantee", can_share=False, shared=False),
+    SharingPersona("marketplace_viewer", can_share=False, shared=False, published=True),
+    SharingPersona(
+        "admin_of_other_project", can_share=False, shared=False, published=True
+    ),
+]
+
+
+@dataclass(frozen=True)
+class SharingRefusal:
+    """How every sharing route refuses a non-manager: 403 when they can read the app, else 404."""
+
+    id: str
+    status: int
+    code: str
+    message: str
+    shared: bool = True
+    published: bool = False
+
+    @property
+    def role(self) -> str:
+        return self.id
+
+
+SHARING_REFUSALS = [
+    SharingRefusal("project_member", 403, ACCESS_DENIED_CODE, MANAGERS_ONLY_MESSAGE),
+    SharingRefusal(
+        "named_grantee", 403, ACCESS_DENIED_CODE, MANAGERS_ONLY_MESSAGE, shared=False
+    ),
+    SharingRefusal(
+        "marketplace_viewer",
+        403,
+        ACCESS_DENIED_CODE,
+        MANAGERS_ONLY_MESSAGE,
+        shared=False,
+        published=True,
+    ),
+    SharingRefusal(
+        "admin_of_other_project",
+        HIDDEN_FROM_READER,
+        NOT_FOUND_CODE,
+        APPLICATION_NOT_FOUND_MESSAGE,
+        shared=False,
+    ),
+]
+
+
+@dataclass(frozen=True)
+class SharingRoute:
+    """One sharing route, called with the caller's service, the application id and a user id."""
+
+    id: str
+    call: Callable[[object, str, str], object]
+
+
+SHARING_ROUTES = [
+    SharingRoute(
+        "share",
+        lambda service, app_id, user_id: service.share_with_users(app_id, [user_id]),
+    ),
+    SharingRoute(
+        "unshare", lambda service, app_id, user_id: service.unshare(app_id, [user_id])
+    ),
+    SharingRoute(
+        "shared-with", lambda service, app_id, user_id: service.shared_with(app_id)
+    ),
+    SharingRoute(
+        "sharable-users",
+        lambda service, app_id, user_id: service.sharable_users(
+            app_id, SHARABLE_USERS_QUERY
+        ),
+    ),
+    SharingRoute(
+        "share-link-get",
+        lambda service, app_id, user_id: service.get_share_link(app_id),
+    ),
+    SharingRoute(
+        "share-link-create",
+        lambda service, app_id, user_id: service.create_share_link(app_id),
+    ),
+    SharingRoute(
+        "share-link-revoke",
+        lambda service, app_id, user_id: service.delete_share_link(app_id),
+    ),
+]
+
+
+@dataclass(frozen=True)
+class GrantRemoval:
+    """Who shares the application with a person, and which other manager takes the access away."""
+
+    granter: str
+    remover: str
+
+    @property
+    def id(self) -> str:
+        return f"{self.granter}-grants-{self.remover}-removes"
+
+
+GRANT_REMOVALS = [
+    GrantRemoval("creator", "project_admin"),
+    GrantRemoval("project_admin", "creator"),
+    GrantRemoval("project_admin", "platform_admin"),
+    GrantRemoval("platform_admin", "maintainer"),
+]
+
+
+@dataclass(frozen=True)
+class RefusedShareInput:
+    """A share request a project admin of the app's project makes, and how the platform refuses it whole.
+
+    ``recipients`` builds the user ids from the ``SharingWorld``; ``message`` takes those ids.
+    ``code`` is None for a refusal of the platform's user checks, whose body carries no code.
+    """
+
+    id: str
+    recipients: Callable[[object], list[str]]
+    status: int
+    code: str | None
+    message: Callable[[list[str]], str]
+
+
+REFUSED_SHARE_INPUTS = [
+    RefusedShareInput(
+        "creator-plus-valid-person",
+        lambda world: [world.creator.user_id, world.people.user().user_id],
+        400,
+        CREATOR_ALREADY_HAS_ACCESS_CODE,
+        lambda user_ids: CREATOR_ALREADY_HAS_ACCESS_MESSAGE,
+    ),
+    RefusedShareInput(
+        "unknown-id",
+        lambda world: [unknown_user_id()],
+        404,
+        None,
+        lambda user_ids: f"User {user_ids[0]} not found",
+    ),
+    RefusedShareInput(
+        "external-account",
+        lambda world: [world.people.external_account_id()],
+        400,
+        None,
+        lambda user_ids: f"User {user_ids[0]} is not a sharable internal user",
+    ),
+]

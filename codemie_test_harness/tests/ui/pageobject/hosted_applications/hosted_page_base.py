@@ -28,7 +28,37 @@ MAX_TAB_PRESSES = 120
 
 
 class HostedPageBase(BasePage):
-    """Keyboard route shared by the hosted-application pages."""
+    """Keyboard route and overflow menu shared by the hosted-application pages."""
+
+    @property
+    def menu_items(self) -> Locator:
+        """Every entry of the open overflow menu."""
+        return self.page.get_by_role("menuitem")
+
+    def menu_item(self, label: str) -> Locator:
+        """The entry of the open overflow menu with exactly this label."""
+        return self.page.get_by_role("menuitem", name=label, exact=True)
+
+    @step
+    def choose_menu_item(self, label: str):
+        """Pick an entry of the open overflow menu."""
+        self.menu_item(label).click()
+        return self
+
+    @step
+    def should_offer_menu_items(self, *labels: str):
+        """The open overflow menu holds each of these entries."""
+        for label in labels:
+            expect(self.menu_item(label)).to_be_visible()
+        return self
+
+    @step
+    def should_not_offer_menu_item(self, label: str):
+        """The open overflow menu has rendered and holds no entry with this label."""
+        # The menu renders after the click: wait for it before asserting what it lacks.
+        expect(self.menu_items.first).to_be_visible()
+        expect(self.menu_item(label)).to_have_count(0)
+        return self
 
     @step
     def focus_by_keyboard(self, target: Locator):

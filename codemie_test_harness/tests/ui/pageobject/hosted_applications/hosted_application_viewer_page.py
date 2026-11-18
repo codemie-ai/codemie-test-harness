@@ -44,9 +44,9 @@ class HostedApplicationViewerPage(HostedPageBase):
         return self.page.get_by_role("button", name="Application actions")
 
     @property
-    def menu_items(self) -> Locator:
-        """Every entry of the open overflow menu."""
-        return self.page.get_by_role("menuitem")
+    def share_button(self) -> Locator:
+        """Share button of the viewer header, beside the overflow menu, for the people who may share."""
+        return self.page.get_by_role("button", name="Share", exact=True)
 
     @property
     def new_tab_menu_items(self) -> Locator:
@@ -71,6 +71,25 @@ class HostedApplicationViewerPage(HostedPageBase):
     def open(self, app_id: str):
         """Open the viewer of an application at its address."""
         self.page.goto(f"/apps/{app_id}/view")
+        return self
+
+    @step
+    def open_actions_menu(self):
+        """Open the overflow menu of the viewer."""
+        self.application_actions_button.click()
+        return self
+
+    @step
+    def click_share(self):
+        """Press Share in the viewer header."""
+        self.share_button.click()
+        return self
+
+    @step
+    def should_offer_share(self):
+        """The viewer header offers Share."""
+        expect(self.application_actions_button).to_be_visible()
+        expect(self.share_button).to_be_visible()
         return self
 
     @step
