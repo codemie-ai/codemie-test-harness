@@ -15,23 +15,61 @@
 
 """Shared fixtures for skills UI tests."""
 
-import pytest
+import logging
+import os
 
-from codemie_test_harness.tests.ui.pageobject.skills.skills_page import SkillsPage
+import pytest
+from codemie_sdk.models.skill import SkillVisibility
+
+from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
+from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.skill_utils import SkillsUtils
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
-def skill_to_favorite(page, skill):
-    """Create a skill through the API and undo its favorite state after the test.
+def favorites_user(platform_user):
+    """A fresh user of its own, so the favorites in its preferences are private to the test.
 
-    The favorite is stored in the user's preferences, not on the skill, so deleting
-    the skill does not clear it. Teardown opens the Skills list and removes the
-    favorite through the UI when the test left it set; it runs before the ``skill``
-    factory deletes the skill.
+    Requesting this fixture makes ``login`` below sign in as this user instead of the
+    default one. The user is created by ``platform_user`` and deleted after the test.
     """
-    created_skill = skill()
+    return platform_user
+
+
+@pytest.fixture(autouse=True)
+def login(request, page):
+    """Override tests/ui/conftest.py login.
+
+    A test that requests ``favorites_user`` signs in as that user; every other test of
+    this package signs in as the default AUTH_USERNAME user, exactly as before.
+    """
+    if "favorites_user" in request.fixturenames:
+        user = request.getfixturevalue("favorites_user")
+        username, password, user_id = user.email, user.password, user.user_id
+    else:
+        username, password = os.getenv("AUTH_USERNAME"), os.getenv("AUTH_PASSWORD")
+        user_id = get_client().users.about_me().user_id
+    LoginPage(page).login_suppressing_popups(
+        username, password, user_id, os.getenv("FRONTEND_URL", "")
+    )
+
+
+@pytest.fixture
+def skill_to_favorite(favorites_user):
+    """A skill created and owned by ``favorites_user``, in that user's personal project.
+
+    The skill belongs to the user, so it is on the user's Skills list. Teardown deletes
+    it through the user's client; the favorite lives in the user's preferences and goes
+    with the user.
+    """
+    skill_utils = SkillsUtils(favorites_user.client)
+    created_skill = skill_utils.create_skill(
+        project_name=favorites_user.email, visibility=SkillVisibility.PROJECT
+    )
     yield created_skill
     try:
-        SkillsPage(page).unfavorite_skill_if_favorited(created_skill.name)
-    except Exception:
-        pass
+        skill_utils.delete_skill(created_skill)
+    except Exception as e:
+        logger.warning(f"Failed to delete skill {created_skill.id}: {e}")

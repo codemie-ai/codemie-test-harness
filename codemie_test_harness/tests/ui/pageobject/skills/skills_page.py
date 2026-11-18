@@ -327,13 +327,6 @@ class SkillsPage(BasePage):
         self.skill_favorite_star(skill_name).favorite()
         return self
 
-    @step("Remove skill from favorites when it is a favorite")
-    def unfavorite_skill_if_favorited(self, skill_name: str):
-        """Open the Skills list and restore the unfavorited state of the named skill."""
-        self.navigate_to()
-        self.skill_favorite_star(skill_name).unfavorite_if_favorited()
-        return self
-
     # =============================================================================
     # FILTER METHODS
     # =============================================================================

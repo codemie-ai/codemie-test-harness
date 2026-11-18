@@ -22,13 +22,11 @@ from codemie_test_harness.tests.ui.pageobject.workflows.workflows_page import (
 
 # @case skills-and-workflows-favorite-state_TC_001
 @pytest.mark.workflow
-@pytest.mark.not_for_parallel_run
 @pytest.mark.ui
 def test_workflow_favorite_star_stays_filled_after_reload(page, workflow_to_favorite):
     """A favorited workflow keeps a filled star after the Workflows list is reloaded.
 
-    Favorites live in the user's preferences, shared by every test of the same
-    user, so the test must not run in parallel with other favorite tests.
+    The test runs as its own fresh user, so its favorites are private to it.
     """
     workflows_page = WorkflowsPage(page)
     workflows_page.open_my_workflows()

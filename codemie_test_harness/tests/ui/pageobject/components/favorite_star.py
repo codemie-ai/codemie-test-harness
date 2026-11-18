@@ -14,8 +14,6 @@
 
 """Favorite star shown on a skill or workflow card."""
 
-import re
-
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
@@ -37,13 +35,6 @@ class FavoriteStar:
         """
         self.page = page
         self.card = card_locator
-
-    @property
-    def star(self) -> Locator:
-        """The star button in either state."""
-        return self.card.get_by_role(
-            "button", name=re.compile(r"^(Add to|Remove from) favorites$")
-        )
 
     @property
     def unfilled_star(self) -> Locator:
@@ -83,15 +74,6 @@ class FavoriteStar:
         self.filled_star.click()
         self.confirm_removal_button.click()
         expect(self.unfilled_star).to_be_visible()
-        return self
-
-    @step("Remove the item from favorites when it is a favorite")
-    def unfavorite_if_favorited(self):
-        """Restore the unfavorited state; do nothing when the star is already unfilled."""
-        expect(self.star).to_be_visible()
-        self.page.wait_for_load_state("networkidle")
-        if self.filled_star.is_visible():
-            self.unfavorite()
         return self
 
     @step("Verify the star is filled")

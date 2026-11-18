@@ -20,13 +20,11 @@ from codemie_test_harness.tests.ui.pageobject.skills.skills_page import SkillsPa
 
 # @case skills-and-workflows-favorite-state_TC_001
 @pytest.mark.skill
-@pytest.mark.not_for_parallel_run
 @pytest.mark.ui
 def test_skill_favorite_star_stays_filled_after_reload(page, skill_to_favorite):
     """A favorited skill keeps a filled star after the Skills list is reloaded.
 
-    Favorites live in the user's preferences, shared by every test of the same
-    user, so the test must not run in parallel with other favorite tests.
+    The test runs as its own fresh user, so its favorites are private to it.
     """
     skills_page = SkillsPage(page)
     skills_page.should_see_skill_with_name(skill_to_favorite.name)

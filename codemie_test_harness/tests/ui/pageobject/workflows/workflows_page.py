@@ -171,13 +171,6 @@ class WorkflowsPage(BasePage):
         return self
 
     @step
-    def unfavorite_workflow_if_favorited(self, workflow_name: str):
-        """Open 'My Workflows' and restore the unfavorited state of the named workflow."""
-        self.open_my_workflows()
-        self.workflow_favorite_star(workflow_name).unfavorite_if_favorited()
-        return self
-
-    @step
     def get_workflow_card_by_index(self, index: int):
         """Get WorkflowCard component by index (0-based)."""
         card_locator = self.workflow_cards.nth(index)

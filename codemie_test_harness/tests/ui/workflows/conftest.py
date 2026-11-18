@@ -15,6 +15,7 @@
 """Shared fixtures for workflow UI tests."""
 
 import logging
+import os
 
 import pytest
 from codemie_sdk.models.workflow import WorkflowMode
@@ -22,10 +23,8 @@ from hamcrest import assert_that, greater_than
 
 from codemie_test_harness.tests.ui import conversation_ids
 from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
+from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
 from codemie_test_harness.tests.ui.pageobject.workflows import WorkflowDetailsPage
-from codemie_test_harness.tests.ui.pageobject.workflows.workflows_page import (
-    WorkflowsPage,
-)
 from codemie_test_harness.tests.ui.test_data.workflow_node_state_settings_test_data import (
     build_node_workflow_yaml,
     build_simple_assistant_workflow_yaml,
@@ -40,6 +39,7 @@ from codemie_sdk.models.assistant import ToolKitDetails, ToolDetails
 from codemie_test_harness.tests.enums.tools import Toolkit, ProjectManagementTool
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.workflow_utils import WorkflowUtils
 from codemie_test_harness.tests.utils.yaml_utils import (
     AssistantModel,
     StateModel,
@@ -110,20 +110,67 @@ def cleanup_generated_workflow(workflow_utils):
 
 
 @pytest.fixture
-def workflow_to_favorite(page, workflow_with_virtual_assistant):
-    """Create a workflow through the API and undo its favorite state after the test.
+def favorites_user(platform_user):
+    """A fresh user of its own, so the favorites in its preferences are private to the test.
 
-    The favorite is stored in the user's preferences, not on the workflow, so deleting
-    the workflow does not clear it. Teardown opens 'My Workflows' and removes the
-    favorite through the UI when the test left it set; it runs before the ``workflow``
-    factory deletes the workflow.
+    Requesting this fixture makes ``login`` below sign in as this user instead of the
+    default one. The user is created by ``platform_user`` and deleted after the test.
     """
-    created_workflow = workflow_with_virtual_assistant(get_random_name())
+    return platform_user
+
+
+@pytest.fixture(autouse=True)
+def login(request, page):
+    """Override tests/ui/conftest.py login.
+
+    A test that requests ``favorites_user`` signs in as that user; every other test of
+    this package signs in as the default AUTH_USERNAME user, exactly as before.
+    """
+    if "favorites_user" in request.fixturenames:
+        user = request.getfixturevalue("favorites_user")
+        username, password, user_id = user.email, user.password, user.user_id
+    else:
+        username, password = os.getenv("AUTH_USERNAME"), os.getenv("AUTH_PASSWORD")
+        user_id = get_client().users.about_me().user_id
+    LoginPage(page).login_suppressing_popups(
+        username, password, user_id, os.getenv("FRONTEND_URL", "")
+    )
+
+
+@pytest.fixture
+def workflow_to_favorite(favorites_user, default_llm):
+    """A workflow created and owned by ``favorites_user``, in that user's personal project.
+
+    The workflow belongs to the user, so it is on the user's 'My Workflows' list.
+    Teardown deletes it through the user's client; the favorite lives in the user's
+    preferences and goes with the user.
+    """
+    workflow_utils = WorkflowUtils(favorites_user.client)
+    assistant = AssistantModel(
+        id=ASSISTANT_AND_STATE_NAME,
+        model=default_llm.base_name,
+        system_prompt="You are helpful assistant",
+    )
+    state = StateModel(
+        id=ASSISTANT_AND_STATE_NAME, assistant_id=ASSISTANT_AND_STATE_NAME
+    )
+    yaml_content = prepare_yaml_content(
+        WorkflowYamlModel(assistants=[assistant], states=[state]).model_dump(
+            exclude_none=True
+        )
+    )
+    created_workflow = workflow_utils.create_workflow(
+        workflow_name=get_random_name(),
+        workflow_type=WorkflowMode.SEQUENTIAL,
+        shared=False,
+        workflow_yaml=yaml_content,
+        project_name=favorites_user.email,
+    )
     yield created_workflow
     try:
-        WorkflowsPage(page).unfavorite_workflow_if_favorited(created_workflow.name)
-    except Exception:
-        pass
+        workflow_utils.delete_workflow(created_workflow)
+    except Exception as e:
+        logger.warning(f"Failed to delete workflow {created_workflow.id}: {e}")
 
 
 @pytest.fixture(scope="function")
