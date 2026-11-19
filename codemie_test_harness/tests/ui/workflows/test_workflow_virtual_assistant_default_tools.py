@@ -49,13 +49,12 @@ def test_workflow_virtual_assistant_keeps_deselected_search_kb_after_save(
     edit_page = EditWorkflowPage(page)
     edit_page.navigate_to(workflow.id)
     panel = edit_page.open_assistant_node_config_panel()
-    # VERIFY: the Virtual Assistant panel was not walked in recon; the Codebase Tools
-    # group is assumed to open the same way as in the assistant form.
-    panel.tools.open_toolkit(CODEBASE_TOOLS_GROUP)
+    panel.open_tools_group(CODEBASE_TOOLS_GROUP)
     panel.tools.should_have_tool_checked(SEARCH_KB_LABEL)
 
     panel.tools.deselect_tool(SEARCH_KB_LABEL)
     panel.tools.should_have_tool_unchecked(SEARCH_KB_LABEL)
+    panel.close_tools_dialog()
     panel.click_save()
     edit_page.click_save()
     edit_page.wait_for_save_redirect()
@@ -65,5 +64,5 @@ def test_workflow_virtual_assistant_keeps_deselected_search_kb_after_save(
 
     edit_page.navigate_to(workflow.id)
     reopened_panel = edit_page.open_assistant_node_config_panel()
-    reopened_panel.tools.open_toolkit(CODEBASE_TOOLS_GROUP)
+    reopened_panel.open_tools_group(CODEBASE_TOOLS_GROUP)
     reopened_panel.tools.should_have_tool_unchecked(SEARCH_KB_LABEL)
