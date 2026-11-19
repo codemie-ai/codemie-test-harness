@@ -19,6 +19,9 @@ import re
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.options_menu import (
+    OptionsMenu,
+)
 from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_page_base import (
     NEW_TAB_NAME,
     HostedPageBase,
@@ -32,6 +35,15 @@ class HostedApplicationDetailsPage(HostedPageBase):
     def open_button(self) -> Locator:
         """Open button; disabled until a version is live."""
         return self.page.get_by_role("button", name="Open", exact=True)
+
+    def more_options_button(self, app_name: str) -> Locator:
+        """More options button of the page header."""
+        return self.page.get_by_role("button", name=f"More options {app_name}")
+
+    @property
+    def options_menu(self) -> OptionsMenu:
+        """The More options menu."""
+        return OptionsMenu(self.page)
 
     @property
     def new_tab_controls(self) -> Locator:
@@ -93,6 +105,20 @@ class HostedApplicationDetailsPage(HostedPageBase):
         """Open is available, and no control opens the application in a new tab."""
         expect(self.open_button).to_be_enabled()
         expect(self.new_tab_controls).to_have_count(0)
+        return self
+
+    @step
+    def open_more_options_menu(self, app_name: str):
+        """Open the More options menu of the page header."""
+        self.more_options_button(app_name).click()
+        self.options_menu.should_be_open()
+        return self.options_menu
+
+    @step
+    def should_have_open_disabled(self):
+        """Open is shown but cannot be pressed: the application has no live version."""
+        expect(self.open_button).to_be_visible()
+        expect(self.open_button).to_be_disabled()
         return self
 
     @step

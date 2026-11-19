@@ -19,6 +19,9 @@ import re
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.options_menu import (
+    OptionsMenu,
+)
 from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_page_base import (
     NEW_TAB_NAME,
     HostedPageBase,
@@ -72,6 +75,14 @@ class HostedApplicationViewerPage(HostedPageBase):
         """Open the viewer of an application at its address."""
         self.page.goto(f"/apps/{app_id}/view")
         return self
+
+    @step
+    def open_actions_menu(self):
+        """Open the Application actions menu."""
+        self.application_actions_button.click()
+        menu = OptionsMenu(self.page)
+        menu.should_be_open()
+        return menu
 
     @step
     def should_be_on_view_route(self, app_id: str):
