@@ -27,7 +27,15 @@ import uuid
 
 import pytest
 import yaml
-from hamcrest import assert_that, contains_string, equal_to, has_key, is_not, not_none
+from hamcrest import (
+    assert_that,
+    contains_inanyorder,
+    contains_string,
+    equal_to,
+    has_key,
+    is_not,
+    not_none,
+)
 from requests import HTTPError
 
 from codemie_sdk.models.assistant import (
@@ -50,6 +58,10 @@ from codemie_sdk.models.skill import SkillCompanionFilePayload, SkillVisibility
 from codemie_sdk.models.workflow import WorkflowMode
 
 from codemie_test_harness.tests.enums.tools import AgentWorkspaceTool
+from codemie_test_harness.tests.test_data.default_datasource_tools_test_data import (
+    GET_REPOSITORY_FILE_TREE,
+    SEARCH_KB,
+)
 from codemie_test_harness.tests.test_data.export_test_data import (
     CREDENTIAL_MASK,
     ENV_REF_PREFIX,
@@ -574,6 +586,36 @@ def test_export_round_trip_leaves_assistant_unchanged(client, assistant_utils):
     after = client.export.export("assistant", assistant.id)
 
     assert_that(after["spec"], equal_to(before["spec"]))
+
+
+@pytest.mark.export
+@pytest.mark.api
+def test_export_round_trip_keeps_disabled_context_tools(
+    client, assistant_factory, assistant_utils
+):
+    # @case deselect-default-datasource-tools_TC_005
+    disabled = [SEARCH_KB, GET_REPOSITORY_FILE_TREE]
+    assistant = assistant_factory.create(disabled_context_tools=disabled)
+
+    before = client.export.export("assistant", assistant.id)
+    assert_that(before["spec"], has_key("disabled_context_tools"))
+    assert_that(
+        before["spec"]["disabled_context_tools"], contains_inanyorder(*disabled)
+    )
+
+    update_fields = {
+        k: v
+        for k, v in before["spec"].items()
+        if k in AssistantUpdateRequest.model_fields
+    }
+    client.assistants.update(assistant.id, AssistantUpdateRequest(**update_fields))
+    after = client.export.export("assistant", assistant.id)
+
+    assert_that(after["spec"], equal_to(before["spec"]))
+    assert_that(
+        assistant_utils.get_assistant_by_id(assistant.id).disabled_context_tools,
+        contains_inanyorder(*disabled),
+    )
 
 
 @pytest.mark.export

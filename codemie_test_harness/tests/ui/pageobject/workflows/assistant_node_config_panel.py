@@ -17,6 +17,9 @@ import re
 from playwright.sync_api import Page, Locator, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.assistants.tools_section import (
+    ToolsSection,
+)
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 
 
@@ -25,6 +28,7 @@ class AssistantNodeConfigPanel(BasePage):
 
     def __init__(self, page: Page):
         super().__init__(page)
+        self.tools = ToolsSection(page)
 
     # ==============================================
     # PROPERTIES - UI ELEMENTS
