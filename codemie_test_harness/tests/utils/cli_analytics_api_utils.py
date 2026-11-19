@@ -196,13 +196,17 @@ def delete_projects_strict(project_utils, project_names) -> None:
 
     A failure does not stop the others. Unlike the shared best-effort cleanup it is raised, so
     a leaked project on the shared stand is an error of the run. The creator of a project made
-    through the public API cannot be unassigned, but does not block the deletion.
+    through the public API cannot be unassigned, but does not block the deletion. A 404 means
+    the project is not on the stand (a setup that failed before creating it), so nothing leaked.
     """
     remaining = {}
     for name in project_names:
         try:
             project_utils.remove_all_project_members(name)
             project_utils.delete_project(name)
+        except requests.HTTPError as e:
+            if e.response is None or e.response.status_code != 404:
+                remaining[name] = e
         except Exception as e:
             remaining[name] = e
     if remaining:
