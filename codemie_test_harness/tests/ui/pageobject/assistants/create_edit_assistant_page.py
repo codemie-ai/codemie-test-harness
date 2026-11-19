@@ -517,10 +517,14 @@ class CreateEditAssistantPage(BasePage):
 
     @property
     def effort_select(self) -> Locator:
-        """Effort select trigger. Rendered only when the selected model has effort levels.
+        """Effort select - PrimeReact dropdown root. Rendered only when the selected model has effort levels.
+        The aria-label 'Effort' sits on the chevron trigger inside the root, while the selected
+        level is rendered in a sibling label, so the root is located by its trigger.
         Note: Requires 'Extra configuration' accordion to be expanded first.
         """
-        return self.page.get_by_role("button", name="Effort", exact=True)
+        return self.page.locator("div.p-dropdown").filter(
+            has=self.page.locator('[aria-label="Effort"]')
+        )
 
     @property
     def effort_options(self) -> Locator:
