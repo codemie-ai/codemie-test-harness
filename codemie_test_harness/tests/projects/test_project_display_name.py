@@ -50,6 +50,7 @@ from codemie_test_harness.tests.test_data.projects_test_data import (
 @pytest.mark.smoke
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_create_project_with_display_name_returns_value(project_utils, project):
     """TC-001: Create project with display_name — response contains the submitted value."""
     data = get_project_create_data_with_display_name()
@@ -68,6 +69,7 @@ def test_create_project_with_display_name_returns_value(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_create_project_display_name_persists_to_detail(project_utils, project):
     """TC-002: Create project with display_name, then get_project_detail — value persists."""
     data = get_project_create_data_with_display_name()
@@ -88,6 +90,7 @@ def test_create_project_display_name_persists_to_detail(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_create_project_display_name_exactly_150_chars(project_utils, project):
     """TC-003: Create project with display_name of exactly 150 chars (boundary) — succeeds."""
     data = get_project_create_data()
@@ -106,6 +109,7 @@ def test_create_project_display_name_exactly_150_chars(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_create_project_display_name_unicode(project_utils, project):
     """TC-004: Create project with unicode display_name (Cyrillic + emoji + CJK) — persists."""
     data = get_project_create_data()
@@ -124,6 +128,7 @@ def test_create_project_display_name_unicode(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_create_project_display_name_too_long_rejected(project_utils):
     """TC-005: Create project with display_name of 151 chars — rejected by SDK (ValidationError).
 
@@ -148,6 +153,7 @@ def test_create_project_display_name_too_long_rejected(project_utils):
 @pytest.mark.smoke
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_project_display_name_returns_new_value(project_utils, project):
     """TC-006: Update display_name on an existing project — response contains the new value."""
     created = project()
@@ -168,6 +174,7 @@ def test_update_project_display_name_returns_new_value(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_project_display_name_to_empty_clears_field(project_utils, project):
     """TC-007: Update display_name to empty string — field becomes falsy in the response."""
     data = get_project_create_data_with_display_name()
@@ -192,6 +199,7 @@ def test_update_project_display_name_to_empty_clears_field(project_utils, projec
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_project_display_name_exactly_150_chars(project_utils, project):
     """TC-008: Update display_name to exactly 150 chars (boundary) — succeeds."""
     created = project()
@@ -210,6 +218,7 @@ def test_update_project_display_name_exactly_150_chars(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_project_display_name_too_long_rejected(project_utils, project):
     """TC-009: Update display_name to 151 chars — rejected by SDK (ValidationError).
 
@@ -233,6 +242,7 @@ def test_update_project_display_name_too_long_rejected(project_utils, project):
 @pytest.mark.smoke
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_projects_items_expose_display_name_attribute(project_utils):
     """TC-010: list_projects — each ProjectListItem exposes a display_name attribute."""
     response = project_utils.list_projects(per_page=10)
@@ -254,6 +264,7 @@ def test_list_projects_items_expose_display_name_attribute(project_utils):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_get_project_detail_exposes_display_name_field(project_utils, project):
     """TC-011: get_project_detail — ProjectDetailResponse contains display_name field."""
     data = get_project_create_data_with_display_name()
@@ -274,6 +285,7 @@ def test_get_project_detail_exposes_display_name_field(project_utils, project):
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_create_project_response_contains_display_name_field(project_utils, project):
     """TC-012: Create-project response (ProjectCreateResponse) contains display_name field."""
     data = get_project_create_data_with_display_name()
@@ -296,6 +308,7 @@ def test_create_project_response_contains_display_name_field(project_utils, proj
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_update_project_response_contains_display_name_field(project_utils, project):
     """TC-013: Update-project response (ProjectUpdateResponse) contains display_name field."""
     data = get_project_create_data_with_display_name()
@@ -324,6 +337,7 @@ def test_update_project_response_contains_display_name_field(project_utils, proj
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_create_project_without_display_name_returns_none(project_utils, project):
     """TC-014: Create project without display_name — display_name is None in create response."""
     response = project()
@@ -337,6 +351,7 @@ def test_create_project_without_display_name_returns_none(project_utils, project
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_get_project_detail_without_display_name_returns_none(project_utils, project):
     """TC-015: get_project_detail for a project created without display_name — field is None."""
     created = project()
@@ -354,6 +369,7 @@ def test_get_project_detail_without_display_name_returns_none(project_utils, pro
 
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_list_projects_without_display_name_pagination_unaffected(
     project_utils, project
 ):
@@ -373,6 +389,7 @@ def test_list_projects_without_display_name_pagination_unaffected(
 @pytest.mark.smoke
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_create_project_omitting_display_name_succeeds(project_utils, project):
     """TC-017: Create project omitting display_name entirely — creation succeeds (field is optional)."""
     response = project()

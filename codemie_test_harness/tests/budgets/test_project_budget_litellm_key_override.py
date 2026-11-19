@@ -15,7 +15,7 @@
 import logging
 
 import pytest
-from hamcrest import assert_that, greater_than, none, not_none, equal_to
+from hamcrest import assert_that, greater_than, not_none, equal_to
 
 from codemie_sdk.models.integration import CredentialTypes, CredentialValues
 
@@ -40,6 +40,21 @@ def user2_litellm_project_integration(
         CredentialTypes.LITE_LLM,
         [CredentialValues(key="api_key", value=user2_litellm_key)],
         project_name=project_name,
+    )
+    yield integration
+    if integration:
+        user2_integration_utils.delete_integration(integration)
+
+
+@pytest.fixture(scope="function")
+def user2_litellm_personal_project_integration(
+    user2_litellm_key, user2_integration_utils, keycloak_user_2
+):
+    email, _ = keycloak_user_2
+    integration = user2_integration_utils.create_user_integration(
+        CredentialTypes.LITE_LLM,
+        [CredentialValues(key="api_key", value=user2_litellm_key)],
+        project_name=email,
     )
     yield integration
     if integration:
@@ -76,7 +91,7 @@ def test_litellm_key_overrides_project_platform_budget(
         float(lite_llm_budget_utils.get_key_info_by_alias(platform_alias)["spend"]),
         equal_to(0),
     )
-    assert_that(lite_llm_budget_utils.get_customer_info(user2_email), none())
+    assert_that(lite_llm_budget_utils.get_customer_spend(user2_email), equal_to(0))
 
 
 @pytest.mark.budget
@@ -114,10 +129,10 @@ def test_litellm_key_overrides_project_cli_budget(
         equal_to(0),
     )
     assert_that(
-        lite_llm_budget_utils.get_customer_info(
+        lite_llm_budget_utils.get_customer_spend(
             f"{user2_email}_{DEFAULT_CLI_BUDGET_ID}"
         ),
-        none(),
+        equal_to(0),
     )
 
 
@@ -155,10 +170,10 @@ def test_litellm_key_overrides_project_premium_budget(
         equal_to(0),
     )
     assert_that(
-        lite_llm_budget_utils.get_customer_info(
+        lite_llm_budget_utils.get_customer_spend(
             f"{user2_email}_{DEFAULT_PREMIUM_BUDGET_ID}"
         ),
-        none(),
+        equal_to(0),
     )
 
 
@@ -193,8 +208,78 @@ def test_litellm_key_overrides_project_premium_budget_via_chat(
         equal_to(0),
     )
     assert_that(
-        lite_llm_budget_utils.get_customer_info(
+        lite_llm_budget_utils.get_customer_spend(
             f"{user2_email}_{DEFAULT_PREMIUM_BUDGET_ID}"
         ),
-        none(),
+        equal_to(0),
+    )
+
+
+@pytest.mark.budget
+@pytest.mark.api
+@pytest.mark.enterprise
+def test_non_global_litellm_key_is_not_used_on_shared_assistant(
+    user2_litellm_key,
+    user2_litellm_project_integration,
+    user1_assistant,
+    user2_assistant_utils,
+    lite_llm_budget_utils,
+    lifecycle_project_with_platform_budget,
+):
+    project_name, _, _, platform_alias = lifecycle_project_with_platform_budget
+
+    assistant = user1_assistant(project_name=project_name, shared=True)
+    logger.info(
+        "Sending a request to a shared assistant of project '%s' with a non-global "
+        "personal LiteLLM key in the same project — the project platform key must pay",
+        project_name,
+    )
+    user2_assistant_utils.ask_assistant(assistant, budget_chat_prompt())
+
+    key_info = lite_llm_budget_utils.wait_for_key_alias_spending(platform_alias)
+    assert_that(key_info, not_none())
+    assert_that(
+        float(key_info["spend"]),
+        greater_than(0),
+        "A shared assistant must be charged to the project, not to the user's own key",
+    )
+    assert_that(
+        float(lite_llm_budget_utils.get_key_info(user2_litellm_key)["spend"]),
+        equal_to(0),
+        "The non-global personal key must not be used on a shared assistant",
+    )
+
+
+@pytest.mark.budget
+@pytest.mark.api
+@pytest.mark.enterprise
+def test_non_global_litellm_key_of_another_project_is_not_used(
+    user2_litellm_key,
+    user2_litellm_personal_project_integration,
+    user2_assistant,
+    user2_assistant_utils,
+    lite_llm_budget_utils,
+    lifecycle_project_with_platform_budget,
+):
+    project_name, _, _, platform_alias = lifecycle_project_with_platform_budget
+
+    assistant = user2_assistant(project_name=project_name)
+    logger.info(
+        "Sending a request in project '%s' with a non-global personal LiteLLM key "
+        "that belongs to another project — the project platform key must pay",
+        project_name,
+    )
+    user2_assistant_utils.ask_assistant(assistant, budget_chat_prompt())
+
+    key_info = lite_llm_budget_utils.wait_for_key_alias_spending(platform_alias)
+    assert_that(key_info, not_none())
+    assert_that(
+        float(key_info["spend"]),
+        greater_than(0),
+        "A key of another project must be ignored and the project charged",
+    )
+    assert_that(
+        float(lite_llm_budget_utils.get_key_info(user2_litellm_key)["spend"]),
+        equal_to(0),
+        "A non-global key must only be used inside its own project",
     )

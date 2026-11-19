@@ -43,12 +43,16 @@ from codemie_test_harness.tests.ui.pageobject.integrations.integrations_page imp
 from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestDataFactory,
 )
+from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    SAVED_TOAST,
+)
 
 
 @pytest.mark.sanity
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_gitlab_mr_filter_defaults_to_all_actions_checked(page: Page):
     """A freshly created Webhook integration shows every MR action checked.
 
@@ -157,9 +161,7 @@ def test_gitlab_mr_filter_selection_persists_after_save_and_reload(
 
     create_integration_page.create_integration()
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
-    )
+    integrations_page.should_see_saved_message(SAVED_TOAST)
 
     edit_integration_page = EditIntegrationPage(page)
     edit_integration_page.navigate_to_edit_integration(
@@ -190,6 +192,7 @@ def test_gitlab_mr_filter_selection_persists_after_save_and_reload(
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_gitlab_mr_filter_blocks_unchecking_last_action(page: Page):
     """Unchecking the last remaining MR action is rejected with an inline error."""
     integrations_page = IntegrationsPage(page)

@@ -46,6 +46,14 @@ from codemie_test_harness.tests.ui.pageobject.components.tool_output_preview imp
 from codemie_test_harness.tests.ui.pageobject.chats.configuration_panel import (
     ConfigurationPanel,
 )
+from codemie_test_harness.tests.ui.pageobject.chats.workspace_browser_popup import (
+    WorkspaceBrowserPopup,
+)
+from codemie_test_harness.tests.ui.test_data.mcp_discovery_failure_test_data import (
+    MCP_SERVER_UNAVAILABLE_BADGE,
+    MCP_SERVER_UNAVAILABLE_HEADING,
+    MCP_SERVER_UNAVAILABLE_SUBTITLE,
+)
 
 
 # noinspection PyArgumentList
@@ -371,6 +379,11 @@ class ChatPage(BasePage):
         return self.page.locator('button[data-tooltip-content="Clear Chat"]')
 
     @property
+    def browse_files_button(self) -> Locator:
+        """The Browse files button of the chat header; rendered once the chat has a message."""
+        return self.page.locator('button[aria-label="Browse files"]')
+
+    @property
     def add_attachment_button(self) -> Locator:
         """Add attachment button with paperclip icon."""
         return self.page.locator(
@@ -381,6 +394,14 @@ class ChatPage(BasePage):
     def file_input(self) -> Locator:
         """Native hidden file input backing the attach-file control."""
         return self.page.locator('input[type="file"]')
+
+    @property
+    def composer_file_input(self) -> Locator:
+        """File input of the chat composer (scoped to the prompt box; a chat that already
+        has messages renders further file inputs elsewhere on the page)."""
+        return self.page.get_by_test_id("chat-prompt").get_by_label(
+            "Select files to upload"
+        )
 
     @property
     def attachment_remove_buttons(self) -> Locator:
@@ -548,6 +569,24 @@ class ChatPage(BasePage):
             timeout=15000,
         ):
             self.page.locator('input[type="file"]').set_input_files(file_path)
+        return self
+
+    @step
+    def attach_file_to_composer(self, file_path: str):
+        """
+        Attach a file through the composer's own file input.
+
+        Unlike attach_file, this stays unambiguous in a chat that already has messages,
+        where the page holds several file inputs.
+
+        Args:
+            file_path: Absolute path to the file to attach
+        """
+        with self.page.expect_response(
+            lambda r: "files/bulk" in r.url and r.request.method == "POST",
+            timeout=15000,
+        ):
+            self.composer_file_input.set_input_files(file_path)
         return self
 
     @step
@@ -1640,6 +1679,34 @@ class ChatPage(BasePage):
         return self
 
     @step
+    def send_message_and_wait_for_reply(
+        self, message: str, reply_number: int, timeout: int = 120000
+    ):
+        """
+        Send a message and wait until the assistant has finished its reply to it.
+
+        Args:
+            message: The message text to send
+            reply_number: Ordinal of the reply being waited for (1 for the first
+                message of the chat, 2 for the second, ...). Each finished reply
+                carries a "Processed in" line, so the Nth one marks the Nth reply done.
+            timeout: Timeout in milliseconds
+        """
+        self.send_message(message)
+        expect(self.processed_in_field.nth(reply_number - 1)).to_be_visible(
+            timeout=timeout
+        )
+        self.wait_for_idle_state(timeout=timeout)
+        return self
+
+    @step
+    def open_workspace_browser(self) -> WorkspaceBrowserPopup:
+        """Open the agent workspace popup with the chat header "Browse files" button."""
+        expect(self.browse_files_button).to_be_visible(timeout=30000)
+        self.browse_files_button.click()
+        return WorkspaceBrowserPopup(self.page).should_be_visible()
+
+    @step
     def scroll_to_bottom_of_chat(self):
         """Scroll to the bottom of the chat messages."""
         self.chat_history_container.evaluate(
@@ -2430,4 +2497,119 @@ class ChatPage(BasePage):
         self.page.route(
             f"**/v1/conversations/{conversation_id}", handle_get_conversation
         )
+        return self
+
+    # ==================== MCP AUTH GATE (discovery/sign-in failure prompts) ====================
+    # Rendered by ChatAiMcpAuthPrompt.tsx below an assistant turn when its MCP server(s)
+    # fail auth discovery or still require sign-in. Each row is AssistantAuthGateRow.tsx,
+    # whose status badge is a StatusBadge: <div role="status" aria-label="<text>">
+    # (StatusBadge.tsx) — the same role="status" pattern already used above by
+    # interrupted_thought_text / in_progress_thought_status.
+
+    _MCP_UNAVAILABLE_BADGE_SELECTOR = (
+        f'[role="status"][aria-label="{MCP_SERVER_UNAVAILABLE_BADGE}"]'
+    )
+
+    @property
+    def mcp_auth_prompt(self) -> Locator:
+        """The MCP auth-gate prompt container rendered below an assistant turn
+        (data-testid="chat-ai-auth-prompt", ChatAiMcpAuthPrompt.tsx)."""
+        return self.chat_history_container.get_by_test_id("chat-ai-auth-prompt")
+
+    @property
+    def mcp_auth_gate_status_badges(self) -> Locator:
+        """Every 'Server unavailable' status badge inside the current auth prompt."""
+        return self.mcp_auth_prompt.locator(self._MCP_UNAVAILABLE_BADGE_SELECTOR)
+
+    def mcp_auth_gate_row(self, server_name: str, error_context: str) -> Locator:
+        """The AssistantAuthGateRow container of one server: the innermost div around
+        the server's name that holds a 'Server unavailable' badge and the error text.
+
+        AssistantAuthGateRow.tsx renders a header (name + badge) and the error-context
+        InfoWarning as siblings inside the row's outer div, so the header alone never
+        holds the error text. Starting from the name and walking up, the first ancestor
+        that has both the badge and the error text is therefore the row itself. Any
+        list wrapper around several rows also matches but is an ancestor of the row,
+        and ``.last`` (document order lists ancestors first) skips past it. A wrapper
+        can only win when this row lacks the error text; ``should_have_mcp_auth_gate_row``
+        guards that by requiring exactly one badge inside the match.
+        """
+        return (
+            self.mcp_auth_prompt.get_by_text(server_name, exact=True)
+            .locator(
+                "xpath=ancestor::div[.//*[@role='status' and "
+                f"@aria-label='{MCP_SERVER_UNAVAILABLE_BADGE}']]"
+            )
+            .filter(has_text=error_context)
+            .last
+        )
+
+    @step
+    def send_message_and_wait_for_mcp_auth_prompt(
+        self, message: str, timeout: int = 30000
+    ):
+        """Send a chat message and wait for the MCP auth-gate prompt to render."""
+        self.send_message(message)
+        expect(self.mcp_auth_prompt).to_be_visible(timeout=timeout)
+        return self
+
+    @step
+    def should_have_mcp_discovery_failure_prompt_visible(self):
+        """Verify the discovery-failure prompt heading and subtitle are shown
+        (ChatAiMcpAuthPrompt.getPromptHeading/getPromptSubtitle)."""
+        expect(self.mcp_auth_prompt).to_be_visible()
+        expect(
+            self.mcp_auth_prompt.get_by_text(MCP_SERVER_UNAVAILABLE_HEADING)
+        ).to_be_visible()
+        expect(
+            self.mcp_auth_prompt.get_by_text(MCP_SERVER_UNAVAILABLE_SUBTITLE)
+        ).to_be_visible()
+        return self
+
+    @step
+    def should_not_have_mcp_discovery_failure_prompt(self):
+        """Verify the discovery-failure UI is absent: no 'MCP server unavailable'
+        heading and no 'Server unavailable' badge anywhere in the auth prompt."""
+        expect(
+            self.mcp_auth_prompt.get_by_text(MCP_SERVER_UNAVAILABLE_HEADING)
+        ).to_have_count(0)
+        expect(self.mcp_auth_gate_status_badges).to_have_count(0)
+        return self
+
+    @step
+    def should_have_mcp_auth_gate_row(self, server_name: str, error_context: str):
+        """Verify a discovery_failed row's name, error text and 'Server unavailable' badge
+        all sit in the same row.
+
+        The match is the innermost container holding the name, the badge and the error
+        text (``mcp_auth_gate_row``); exactly one badge inside it proves it is a single
+        row and not a wrapper around several rows that merely share the same error text.
+        """
+        row = self.mcp_auth_gate_row(server_name, error_context)
+        expect(row).to_be_visible()
+        expect(row.get_by_text(error_context)).to_be_visible()
+        expect(row.locator(self._MCP_UNAVAILABLE_BADGE_SELECTOR)).to_have_count(1)
+        return self
+
+    @step
+    def should_have_mcp_auth_gate_status_badge_count(self, count: int):
+        """Verify the number of 'Server unavailable' status badges rendered."""
+        expect(self.mcp_auth_gate_status_badges).to_have_count(count)
+        return self
+
+    @step
+    def should_have_mcp_sign_in_prompt_visible(self, heading: str):
+        """Verify the pre-existing sign-in auth gate (non-discovery_failed) is shown
+        with the expected heading — AC-9 regression anchor.
+
+        Grounded to the heading only (change-analysis.json AC-9's observable is
+        getPromptHeading's return value). A sign-in control's presence is not
+        asserted here: the live run found no element matching the expected
+        Authenticate/Re-authenticate/Open-sign-in-in-a-new-tab control for this row's
+        actual rendered state, and no observable in change-analysis.json or
+        AssistantAuthGateRow.tsx's own shipped tests grounds which control (if any)
+        renders for it — see cases.json automation.uncovered_scope for this case.
+        """
+        expect(self.mcp_auth_prompt).to_be_visible()
+        expect(self.mcp_auth_prompt.get_by_text(heading, exact=True)).to_be_visible()
         return self

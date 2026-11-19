@@ -223,10 +223,10 @@ def test_entity_type_user_budget_assignment_filter_returns_only_matching_events(
 @pytest.mark.activity
 @pytest.mark.api
 def test_actor_id_and_entity_id_filters_return_only_matching_events(
-    activity_utils, user_utils, disposable_user
+    activity_utils, user_utils, admin_user
 ):
     """TC-007: actor_id= and entity_id= filters return only matching events."""
-    _, user_id, _ = disposable_user
+    user_id = admin_user.user_id
 
     # Trigger a maintainer-actor event: deactivate the disposable user
     user_utils.deactivate_user(user_id)
@@ -278,12 +278,12 @@ def test_actor_id_and_entity_id_filters_return_only_matching_events(
 @pytest.mark.activity
 @pytest.mark.api
 def test_date_range_filter_and_sort_direction_control_results(
-    activity_utils, disposable_user
+    activity_utils, admin_user
 ):
     """TC-008: from/to date range filter and sort_dir asc/desc work correctly."""
-    _, user_id, _ = disposable_user
+    user_id = admin_user.user_id
 
-    # Record timestamps bracketing the user.created event that disposable_user produced
+    # Record timestamps bracketing the user.created event that admin_user produced
     from datetime import timedelta
 
     now = datetime.now(timezone.utc)

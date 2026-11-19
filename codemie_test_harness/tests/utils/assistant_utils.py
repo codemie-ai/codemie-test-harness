@@ -79,6 +79,8 @@ class AssistantUtils(BaseUtils):
         enabled_builtin_subagents=None,
         tool_permissions: ToolPermissionsConfig | None = None,
         prompt_variables=None,
+        effort=None,
+        disabled_context_tools=None,
     ):
         # Generate a random name if assistant_name is not provided
         assistant_name = assistant_name if assistant_name else get_random_name()
@@ -101,6 +103,7 @@ class AssistantUtils(BaseUtils):
             mcp_servers=mcp_servers,
             top_p=top_p,
             temperature=temperature,
+            effort=effort,
             assistant_ids=list(assistant_ids) if assistant_ids else [],
             categories=list(categories) if categories else [],
             conversation_starters=list(conversation_starters)
@@ -109,6 +112,9 @@ class AssistantUtils(BaseUtils):
             enabled_builtin_subagents=enabled_builtin_subagents,
             tool_permissions=tool_permissions,
             prompt_variables=list(prompt_variables) if prompt_variables else [],
+            disabled_context_tools=list(disabled_context_tools)
+            if disabled_context_tools
+            else None,
         )
 
         response = self.client.assistants.create(request)
@@ -135,6 +141,8 @@ class AssistantUtils(BaseUtils):
         enabled_builtin_subagents=None,
         tool_permissions: ToolPermissionsConfig | None = None,
         prompt_variables=None,
+        effort=None,
+        disabled_context_tools=None,
     ):
         # Generate a random name if assistant_name is not provided
         assistant_name = assistant_name if assistant_name else get_random_name()
@@ -164,6 +172,8 @@ class AssistantUtils(BaseUtils):
             enabled_builtin_subagents=enabled_builtin_subagents,
             tool_permissions=tool_permissions,
             prompt_variables=prompt_variables,
+            effort=effort,
+            disabled_context_tools=disabled_context_tools,
         )
 
         return wait_for_entity(
@@ -184,6 +194,8 @@ class AssistantUtils(BaseUtils):
         output_schema=None,
         extract_failed_tools=False,
         return_stream_metadata=False,
+        attributes=None,
+        save_history=None,
     ):
         user_prompt = f"{user_prompt}; REQUEST_UUID: {uuid.uuid4()};"
         chat_request = AssistantChatRequest(
@@ -196,6 +208,8 @@ class AssistantUtils(BaseUtils):
             history=history,
             output_schema=output_schema,
             metadata={"langfuse_traces_enabled": LANGFUSE_TRACES_ENABLED},
+            attributes=attributes,
+            save_history=save_history,
         )
 
         response = self.client.assistants.chat(
@@ -503,6 +517,101 @@ class AssistantUtils(BaseUtils):
             assistant_id=assistant_id, request=update_request
         )
 
+    def move_assistant_to_project(self, assistant_id: str, project_name: str):
+        """Move an assistant to another project, keeping every other field as stored.
+
+        The update is a PUT, so the request carries every field of
+        ``AssistantUpdateRequest`` that the stored assistant also has (toolkits,
+        context, MCP servers, sub-assistants, categories, sampling parameters, ...),
+        read from the installed SDK models rather than a hand-kept list; only
+        ``project`` changes. ``id`` and ``created_by`` are not part of an update, and
+        ``skip_integration_validation`` is a request flag with no stored value.
+
+        Returns the assistant as stored after the update, so a caller can confirm
+        the move took effect.
+        """
+        current = self.get_assistant_by_id(assistant_id)
+        fields = {
+            name: getattr(current, name)
+            for name in AssistantUpdateRequest.model_fields
+            if name in type(current).model_fields and name not in ("id", "created_by")
+        }
+        fields["project"] = project_name
+        # The stored description may be empty and the request requires a string.
+        fields["description"] = current.description or ""
+        # Stored categories may be objects; the request takes their ids.
+        fields["categories"] = [
+            category if isinstance(category, str) else category.id
+            for category in (current.categories or [])
+        ]
+        if fields.get("prompt_variables") is None:
+            fields["prompt_variables"] = []
+        self.update_assistant(assistant_id, AssistantUpdateRequest(**fields))
+        return self.get_assistant_by_id(assistant_id)
+
+    def update_assistant_effort(self, assistant_id: str, effort: Optional[str]):
+        """Set (or clear, with ``None``) the effort of an existing assistant.
+
+        Sends the stored required fields unchanged; ``effort=None`` is passed
+        explicitly so the SDK sends a JSON null and the stored effort is cleared.
+        """
+        assistant = self.get_assistant_by_id(assistant_id)
+        return self.update_assistant(
+            assistant_id,
+            AssistantUpdateRequest(
+                name=assistant.name,
+                description=assistant.description,
+                system_prompt=assistant.system_prompt,
+                project=assistant.project,
+                llm_model_type=assistant.llm_model_type,
+                effort=effort,
+            ),
+        )
+
+    def update_assistant_disabled_context_tools(
+        self, assistant_id: str, disabled_context_tools: list[str]
+    ):
+        """Replace the deselected default tools of an existing assistant.
+
+        Sends the stored required fields unchanged. An empty list is sent as is
+        (the SDK drops only ``None``), so it clears the stored list.
+        """
+        assistant = self.get_assistant_by_id(assistant_id)
+        return self.update_assistant(
+            assistant_id,
+            AssistantUpdateRequest(
+                name=assistant.name,
+                description=assistant.description,
+                system_prompt=assistant.system_prompt,
+                project=assistant.project,
+                llm_model_type=assistant.llm_model_type,
+                disabled_context_tools=disabled_context_tools,
+            ),
+        )
+
+    def list_assistant_versions(self, assistant_id: str):
+        return self.client.assistants.list_versions(assistant_id)
+
+    def get_assistant_version(self, assistant_id: str, version_number: int):
+        return self.client.assistants.get_version(assistant_id, version_number)
+
+    def compare_assistant_versions(self, assistant_id: str, v1: int, v2: int):
+        return self.client.assistants.compare_versions(assistant_id, v1, v2)
+
+    def rollback_to_version(
+        self, assistant_id: str, version_number: int, change_notes: Optional[str] = None
+    ) -> dict:
+        """Roll the assistant back to ``version_number``.
+
+        Returns the raw backend response, unparsed: ``message`` plus
+        ``disabledMcpServers`` (camelCase at the top level; each entry's own
+        ``name``/``mcp_config_id``/``reason``/``address`` stays snake_case) for any
+        link the restore disabled because its catalog entry is unavailable.
+        """
+        return self.client.assistants.rollback_to_version(
+            assistant_id, version_number, change_notes=change_notes
+        )
+
     def delete_assistant(self, assistant):
         response = self.client.assistants.delete(assistant.id)
         for conversation in self.client.conversations.list_by_assistant_id(
@@ -536,6 +645,20 @@ class AssistantUtils(BaseUtils):
 
     def send_evaluate_assistant_request(self, assistant_id: str, evaluation_request):
         return self.client.assistants.evaluate(assistant_id, evaluation_request)
+
+    def generate_assistant_details(self, text: str):
+        """Ask the platform to generate assistant details; nothing is created."""
+        return self.client.assistants.generate(text=text)
+
+    def generate_assistant_prompt(self, text: str):
+        """Ask the platform to generate a system prompt; nothing is created."""
+        return self.client.assistants.generate_prompt(text=text)
+
+    def refine_assistant(self, system_prompt: str, refine_prompt: str):
+        """Ask the platform for recommendations on an assistant draft."""
+        return self.client.assistants.refine(
+            system_prompt=system_prompt, refine_prompt=refine_prompt
+        )
 
     def publish_assistant_to_marketplace(
         self, assistant_id: str, categories=None, ignore_recommendations=False

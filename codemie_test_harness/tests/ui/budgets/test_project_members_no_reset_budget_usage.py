@@ -52,7 +52,8 @@ ACTING_ROLES = [
 def acting_role_credentials(request, project_admin_setup):
     """(email, password) of the role the browser logs in as."""
     if request.param == "maintainer":
-        return request.getfixturevalue("maintainer_credentials")
+        maintainer = request.getfixturevalue("maintainer_user")
+        return maintainer.email, maintainer.password
     _, _, email, password = project_admin_setup
     return email, password
 

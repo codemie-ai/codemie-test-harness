@@ -606,3 +606,45 @@ class ProjectManagementPage(BasePage):
         expect(self._no_data_cell).to_have_count(0, timeout=15000)
         expect(self.project_rows.first).to_be_visible(timeout=15000)
         return self
+
+    # ── Arrival from the Cost centers list ────────────────────────────────────
+    # The project-count badge of a cost center row links here with `?cost_center_ids=<id>`;
+    # the filter is applied from the URL on load, with no manual selection.
+
+    @step
+    def should_be_open(self):
+        """Verify the Projects management page is shown."""
+        expect(self.page_heading).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_have_cost_center_in_url(self, cost_center_id):
+        """Verify the page URL carries `cost_center_ids=<id>`."""
+        expect(self.page).to_have_url(
+            re.compile(
+                rf"{re.escape(self.PATH)}\?(.*&)?cost_center_ids={re.escape(str(cost_center_id))}(&|$)"
+            ),
+            timeout=15000,
+        )
+        return self
+
+    @step
+    def should_not_have_cost_center_in_url(self):
+        """Verify the page URL carries no `cost_center_ids` parameter."""
+        expect(self.page).not_to_have_url(re.compile(r"cost_center_ids"), timeout=15000)
+        return self
+
+    @step
+    def should_show_empty_project_list_without_error(self):
+        """Verify the table shows its 'No data available' state and the page shows no alert."""
+        expect(self._no_data_cell).to_be_visible(timeout=15000)
+        expect(self.page.get_by_role("alert")).to_have_count(0)
+        return self
+
+    @step
+    def should_list_cost_center_projects(self, project_names: list[str]):
+        """Verify the table holds exactly the projects of a cost center, or, for a cost
+        center without projects, shows its empty state and no alert."""
+        if project_names:
+            return self.should_list_only_projects(project_names)
+        return self.should_show_empty_project_list_without_error()

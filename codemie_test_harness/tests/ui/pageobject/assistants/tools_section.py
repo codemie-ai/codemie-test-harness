@@ -177,6 +177,18 @@ class ToolsSection(BasePage):
         )
 
     @step
+    def tool_state_checkbox(self, tool: str) -> Locator:
+        """Checkbox of a tool row in an open toolkit group, found by the tool label.
+
+        Args:
+            tool: The tool label (e.g. "Search Knowledge Base")
+
+        Returns:
+            Locator: The checkbox whose accessible name holds the tool label
+        """
+        return self.page.get_by_role("checkbox", name=tool)
+
+    @step
     def tool_row(self, tool_name: str) -> Locator:
         """
         Get tool row container by tool name.
@@ -329,6 +341,38 @@ class ToolsSection(BasePage):
         """
         return self.toolkit_checkbox_by_label(toolkit_name, "Select all")
 
+    @step
+    def open_toolkit(self, toolkit_name: str):
+        """Open a toolkit group of the Available Tools section so its tool rows show.
+
+        Unlike ``select_toolkit`` this fails when the group is missing.
+
+        Args:
+            toolkit_name: The toolkit group name (e.g. "Codebase Tools")
+
+        Returns:
+            self: Returns the page object for method chaining
+        """
+        toolkit_row = self.toolkit("Available Tools", toolkit_name)
+        expect(toolkit_row).to_be_visible()
+        toolkit_row.click()
+        return self
+
+    @step
+    def deselect_tool(self, tool: str):
+        """Uncheck a tool row in an open toolkit group by clicking its label.
+
+        Args:
+            tool: The tool label (e.g. "Search Knowledge Base")
+
+        Returns:
+            self: Returns the page object for method chaining
+        """
+        label = self.tool_label_spans_under_toolkit(tool)
+        expect(label).to_be_visible()
+        label.click()
+        return self
+
     # =============================================================================
     # VERIFICATION METHODS
     # =============================================================================
@@ -362,4 +406,32 @@ class ToolsSection(BasePage):
             self: Returns the page object for method chaining
         """
         expect(self.tools_integrations_section).to_be_visible()
+        return self
+
+    @step
+    def should_have_tool_checked(self, tool: str):
+        """Verify a tool row in an open toolkit group is listed and checked.
+
+        Args:
+            tool: The tool label (e.g. "Search Knowledge Base")
+
+        Returns:
+            self: Returns the page object for method chaining
+        """
+        expect(self.tool_state_checkbox(tool)).to_be_visible()
+        expect(self.tool_state_checkbox(tool)).to_be_checked()
+        return self
+
+    @step
+    def should_have_tool_unchecked(self, tool: str):
+        """Verify a tool row in an open toolkit group is listed and unchecked.
+
+        Args:
+            tool: The tool label (e.g. "Search Knowledge Base")
+
+        Returns:
+            self: Returns the page object for method chaining
+        """
+        expect(self.tool_state_checkbox(tool)).to_be_visible()
+        expect(self.tool_state_checkbox(tool)).not_to_be_checked()
         return self

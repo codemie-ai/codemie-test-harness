@@ -38,6 +38,7 @@ from codemie_test_harness.tests.utils.credentials_manager import CredentialsMana
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_test_connection_success(page: Page):
     """
     Test integration connection with valid credentials (success case).
@@ -91,6 +92,7 @@ def test_test_connection_success(page: Page):
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_test_connection_failure_with_error_message(page: Page):
     """
     Test integration connection with invalid credentials (failure case).

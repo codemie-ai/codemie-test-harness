@@ -47,3 +47,6 @@ DEFAULT_RESET_WINDOW = "30d"
 SHORT_RESET_WINDOW = "7d"
 
 SPENDING_PLATFORM_ONLY = {"platform": {"max_budget": 20.0, "soft_budget": 10.0}}
+
+# One platform budget whose equal member shares split evenly between one and two members.
+MEMBERSHIP_SHARE_PLATFORM = {"platform": {"max_budget": 30.0, "soft_budget": 15.0}}

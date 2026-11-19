@@ -183,7 +183,7 @@ def test_system_rejects_invalid_distribution_values(
 def test_unauthorized_actors_cannot_update_spend_bucket_distribution(
     project_budget_group,
     cross_project_admin_client,
-    keycloak_regular_user,
+    platform_user,
 ):
     """TC-05: Cross-project admin and regular user receive 403 on PUT."""
     td = spend_bucket_distribution_test_data()
@@ -192,7 +192,7 @@ def test_unauthorized_actors_cannot_update_spend_bucket_distribution(
     # Regular user — no project admin role at all
     from codemie_test_harness.tests.utils.client_factory import get_client
 
-    email, password = keycloak_regular_user
+    email, password = platform_user.email, platform_user.password
     regular_client = get_client(username=email, password=password)
     regular_utils = AdminProjectBudgetGroupUtils(regular_client)
     with pytest.raises(HTTPError) as exc_info:

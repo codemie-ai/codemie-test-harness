@@ -216,6 +216,7 @@ class SkillsUtils(BaseUtils):
         visibility: Optional[SkillVisibility] = None,
         categories: Optional[List[str]] = None,
         enabled_builtin_subagents: Optional[List[str]] = None,
+        mcp_servers: Optional[List[MCPServerDetails]] = None,
     ):
         """Update an existing skill.
 
@@ -226,6 +227,7 @@ class SkillsUtils(BaseUtils):
             content: New markdown content
             visibility: New visibility setting
             categories: New category IDs
+            mcp_servers: New mcp_servers list (None leaves the stored list untouched)
 
         Returns:
             Updated skill object
@@ -237,6 +239,7 @@ class SkillsUtils(BaseUtils):
             visibility=visibility,
             categories=categories,
             enabled_builtin_subagents=enabled_builtin_subagents,
+            mcp_servers=mcp_servers,
         )
 
         response = self.client.skills.update(skill_id, request)
@@ -424,4 +427,14 @@ class SkillsUtils(BaseUtils):
     def generate_instructions(self, description: str, skill_name: str | None = None):
         return self.client.skills.generate_instructions(
             description=description, skill_name=skill_name
+        )
+
+    def generate_skill(self, text: str):
+        """Ask the platform to generate skill details; nothing is created."""
+        return self.client.skills.generate(text=text)
+
+    def refine_skill(self, instructions: str, refine_prompt: str):
+        """Ask the platform for recommendations on a skill draft."""
+        return self.client.skills.refine(
+            instructions=instructions, refine_prompt=refine_prompt
         )

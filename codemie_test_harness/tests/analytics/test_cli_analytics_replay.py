@@ -56,6 +56,7 @@ def replayed_sessions(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_replayed_events_do_not_add_to_totals(
     analytics_utils, cli_analytics_project, replayed_sessions
@@ -70,6 +71,7 @@ def test_replayed_events_do_not_add_to_totals(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_replayed_events_do_not_add_to_session_tokens(
     analytics_utils, cli_analytics_project, replayed_sessions

@@ -27,7 +27,11 @@ from typing import Callable, List, Optional
 
 import requests
 from codemie_sdk import CodeMieClient
-from codemie_sdk.models.assistant import Assistant, AssistantUpdateRequest
+from codemie_sdk.models.assistant import (
+    Assistant,
+    AssistantUpdateRequest,
+    SubAssistantPublishSettings,
+)
 from codemie_sdk.models.marketplace_management import (
     MarketplaceAssistantsResponse,
     MarketplaceForcePublishResponse,
@@ -266,6 +270,7 @@ class MarketplaceManagementUtils(BaseUtils):
         ignore_recommendations: bool = True,
         force_publish: bool = False,
         override_notice: Optional[str] = None,
+        sub_assistants_settings: Optional[List[SubAssistantPublishSettings]] = None,
     ) -> dict:
         return self.client.assistants.publish(
             assistant_id,
@@ -273,6 +278,7 @@ class MarketplaceManagementUtils(BaseUtils):
             ignore_recommendations=ignore_recommendations,
             force_publish=force_publish,
             override_notice=override_notice,
+            sub_assistants_settings=sub_assistants_settings,
         )
 
     # ---- dispatch by endpoint name -----------------------------------------
@@ -365,6 +371,7 @@ class MarketplaceSubmitter:
             categories=submission.categories,
             conversation_starters=submission.conversation_starters,
             project_name=self.project,
+            mcp_servers=submission.mcp_servers,
         )
         return SubmittedAssistant(
             id=created.id,

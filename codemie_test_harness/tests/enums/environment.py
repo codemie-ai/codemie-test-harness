@@ -34,6 +34,7 @@ class Environment(Enum):
     PRODUCTION = "prod"
     PREVIEW = "preview"
     OSS_PREVIEW = "oss_preview"
+    OSS_STANDALONE = "oss_standalone"
     LOCALHOST = "localhost"
     AZURE = "azure"
     GCP = "gcp"
@@ -58,6 +59,17 @@ class Environment(Enum):
     def is_localhost(self) -> bool:
         """Check if this is the localhost environment."""
         return self == Environment.LOCALHOST
+
+    @property
+    def is_oss_standalone(self) -> bool:
+        """Check if this is the OSS standalone environment (local auth, no Keycloak)."""
+        return self == Environment.OSS_STANDALONE
+
+    @property
+    def uses_local_auth(self) -> bool:
+        """Check if this environment creates/deletes users through the admin API
+        instead of an external identity provider (localhost and OSS standalone)."""
+        return self in (Environment.LOCALHOST, Environment.OSS_STANDALONE)
 
     @property
     def is_sandbox(self) -> bool:

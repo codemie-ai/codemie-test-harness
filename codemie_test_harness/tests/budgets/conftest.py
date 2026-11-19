@@ -14,27 +14,33 @@
 
 import logging
 import secrets
+from contextlib import ExitStack
 from datetime import datetime, timedelta
 from time import sleep
 
 import pytest
-from hamcrest import assert_that, is_
+from hamcrest import assert_that, is_, is_not, none
 from requests.exceptions import HTTPError
 
 from codemie_sdk.models.integration import CredentialTypes, CredentialValues
 from codemie_sdk.models.workflow import WorkflowMode
 
 from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
+    COMPLETE_CATEGORIES,
     build_marketplace_submission,
 )
 from codemie_test_harness.tests.test_data.budget_member_override_test_data import (
     MEMBER_OVERRIDE_MAX,
     MEMBER_OVERRIDE_SOFT,
 )
+from codemie_test_harness.tests.test_data.budget_delete_test_data import (
+    LITELLM_PRESENT,
+)
 from codemie_test_harness.tests.test_data.budget_test_data import (
     ALL_BUDGET_CATEGORIES,
     budget_chat_prompt,
     BUDGET_CACHE_DELAY,
+    BUDGET_WORKFLOW_STATE,
     CLI_BUDGET_CATEGORIES,
     CLI_CLIENT_HEADER,
     DEFAULT_CLI_BUDGET_ID,
@@ -53,16 +59,24 @@ from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
 from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
-from codemie_test_harness.tests.utils.base_utils import get_random_name
+from codemie_test_harness.tests.utils.base_utils import get_random_name, poll_until
 from codemie_test_harness.tests.utils.budget_utils import BudgetUtils
 from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.constants import FILES_PATH
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
+from codemie_test_harness.tests.utils.datasource_utils import DataSourceUtils
 from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
 from codemie_test_harness.tests.utils.proxy_utils import ProxyUtils
 from codemie_test_harness.tests.utils.skill_utils import SkillsUtils
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    new_logged_in_user,
+    new_user,
+    user_email,
+)
 from codemie_test_harness.tests.utils.user_utils import UserUtils
+from codemie_test_harness.tests.utils.webhook_utils import WebhookUtils
 from codemie_test_harness.tests.utils.workflow_utils import WorkflowUtils
 from codemie_test_harness.tests.utils.yaml_utils import (
     AssistantModel,
@@ -74,19 +88,25 @@ from codemie_test_harness.tests.utils.yaml_utils import (
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="function")
-def keycloak_user(keycloak_utils, lite_llm_budget_utils):
-    uid = secrets.token_hex(4)
-    email = f"autotest_budget_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=email)
-    yield email, password
-    keycloak_utils.delete_user(email)
+def _budget_user(keycloak_utils, lite_llm_budget_utils):
+    """Platform admin for budget tests, never logged in here; yields (email, password).
+
+    After the user is deleted, the LiteLLM customers the budgets created for it are removed.
+    """
+    email = user_email("budget")
+    with new_user(keycloak_utils, email, admin=True, strict=True) as password:
+        yield email, password
     for customer_id in (
         email,
         f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
         f"{email}_{DEFAULT_CLI_BUDGET_ID}",
     ):
         lite_llm_budget_utils.delete_customer(customer_id)
+
+
+@pytest.fixture(scope="function")
+def keycloak_user(keycloak_utils, lite_llm_budget_utils):
+    yield from _budget_user(keycloak_utils, lite_llm_budget_utils)
 
 
 @pytest.fixture(scope="function")
@@ -118,45 +138,39 @@ def budget_creator(keycloak_utils, user_utils):
     tests only, on this environment). On a local-auth stand (``LocalUserUtils``, no
     such resync), the admin API update is sufficient and is used directly.
     """
-    created_emails = []
+    with ExitStack() as created_users:
 
-    def _create(name: str):
-        uid = secrets.token_hex(4)
-        email = f"autotest_budgetcreator_{uid}@email.com"
-        password = keycloak_utils.create_platform_user(email=email)
-        created_emails.append(email)
+        def _create(name: str):
+            email = user_email("budgetcreator")
+            password = created_users.enter_context(
+                new_user(keycloak_utils, email, admin=False)
+            )
 
-        if EnvironmentResolver.is_localhost():
+            if EnvironmentResolver.uses_local_auth():
+                user_client = get_client(username=email, password=password)
+                user_id = user_client.users.about_me().user_id
+                user_utils.update_admin_user(user_id, is_maintainer=True)
+                UserUtils(user_client).wait_until_user_management_effective()
+                detail = user_utils.update_admin_user(user_id, name=name)
+                return user_client, (detail.name or detail.username)
+
+            # IDP-backed stand: set the Keycloak claim source before any authenticated call.
+            keycloak_utils.set_profile_name(email, first_name=name, last_name="")
             user_client = get_client(username=email, password=password)
             user_id = user_client.users.about_me().user_id
             user_utils.update_admin_user(user_id, is_maintainer=True)
             UserUtils(user_client).wait_until_user_management_effective()
-            detail = user_utils.update_admin_user(user_id, name=name)
+            detail = user_utils.get_admin_user(user_id)
+
+            if detail.name != name:
+                raise AssertionError(
+                    f"Expected the Keycloak-synced display name to equal {name!r} "
+                    f"(firstName set, lastName empty); got {detail.name!r} instead — "
+                    "this realm's full-name claim did not resolve to just the firstName."
+                )
             return user_client, (detail.name or detail.username)
 
-        # IDP-backed stand: set the Keycloak claim source before any authenticated call.
-        keycloak_utils.set_profile_name(email, first_name=name, last_name="")
-        user_client = get_client(username=email, password=password)
-        user_id = user_client.users.about_me().user_id
-        user_utils.update_admin_user(user_id, is_maintainer=True)
-        UserUtils(user_client).wait_until_user_management_effective()
-        detail = user_utils.get_admin_user(user_id)
-
-        if detail.name != name:
-            raise AssertionError(
-                f"Expected the Keycloak-synced display name to equal {name!r} "
-                f"(firstName set, lastName empty); got {detail.name!r} instead — "
-                "this realm's full-name claim did not resolve to just the firstName."
-            )
-        return user_client, (detail.name or detail.username)
-
-    yield _create
-
-    for email in created_emails:
-        try:
-            keycloak_utils.delete_user(email)
-        except Exception as e:
-            logger.warning(f"Failed to delete user {email}: {e}")
+        yield _create
 
 
 @pytest.fixture(scope="function")
@@ -453,30 +467,28 @@ def project_setup(user_client, admin_project_utils, lite_llm_budget_utils):
 
 @pytest.fixture(scope="function")
 def keycloak_user_1(keycloak_utils, lite_llm_budget_utils):
-    uid = secrets.token_hex(4)
-    email = f"autotest_budget_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=email)
-    yield email, password
-    keycloak_utils.delete_user(email)
-    for customer_id in (
-        email,
-        f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
-        f"{email}_{DEFAULT_CLI_BUDGET_ID}",
-    ):
-        lite_llm_budget_utils.delete_customer(customer_id)
+    yield from _budget_user(keycloak_utils, lite_llm_budget_utils)
 
 
 @pytest.fixture(scope="function")
 def keycloak_user_2(keycloak_utils, lite_llm_budget_utils):
+    yield from _budget_user(keycloak_utils, lite_llm_budget_utils)
+
+
+@pytest.fixture(scope="function")
+def mixed_case_keycloak_user(keycloak_utils, lite_llm_budget_utils):
+    """Same shape as keycloak_user_2, but the email contains uppercase letters."""
     uid = secrets.token_hex(4)
-    email = f"autotest_budget_{uid}@email.com"
+    email = f"AutoTest.Budget.{uid}@Email.com"
     password = keycloak_utils.create_test_user(email=email, project_name=email)
     yield email, password
     keycloak_utils.delete_user(email)
+    # LiteLLM customers are keyed by the lowercased username, not by the mixed-case email.
+    username = email.lower()
     for customer_id in (
-        email,
-        f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
-        f"{email}_{DEFAULT_CLI_BUDGET_ID}",
+        username,
+        f"{username}_{DEFAULT_PREMIUM_BUDGET_ID}",
+        f"{username}_{DEFAULT_CLI_BUDGET_ID}",
     ):
         lite_llm_budget_utils.delete_customer(customer_id)
 
@@ -490,6 +502,12 @@ def user1_client(keycloak_user_1):
 @pytest.fixture(scope="function")
 def user2_client(keycloak_user_2):
     email, password = keycloak_user_2
+    return get_client(username=email, password=password)
+
+
+@pytest.fixture(scope="function")
+def mixed_case_client(mixed_case_keycloak_user):
+    email, password = mixed_case_keycloak_user
     return get_client(username=email, password=password)
 
 
@@ -511,6 +529,11 @@ def user2_assistant_utils(user2_client):
 @pytest.fixture(scope="function")
 def user2_proxy_utils(user2_client):
     return ProxyUtils(user2_client)
+
+
+@pytest.fixture(scope="function")
+def mixed_case_proxy_utils(mixed_case_client):
+    return ProxyUtils(mixed_case_client)
 
 
 @pytest.fixture(scope="function")
@@ -730,8 +753,168 @@ def user_workflow(default_llm, user_workflow_utils):
         user_workflow_utils.delete_workflow(created_workflow)
 
 
+def _single_state_workflow_yaml(model: str, assistant=None) -> str:
+    """One state that runs a saved assistant when given, otherwise an inline one.
+
+    With a saved assistant the result summary step is switched off, so the node is the
+    workflow's only LLM call and its charge can be told apart from the workflow's own.
+    """
+    assistant_model = AssistantModel(
+        id=BUDGET_WORKFLOW_STATE,
+        model=model,
+        assistant_id=assistant.id if assistant else None,
+        system_prompt=(
+            None if assistant else "You are a helpful assistant. Say hello when asked."
+        ),
+    )
+    state_model = StateModel(
+        id=BUDGET_WORKFLOW_STATE,
+        assistant_id=BUDGET_WORKFLOW_STATE,
+        task="Say hello",
+    )
+    return prepare_yaml_content(
+        WorkflowYamlModel(
+            assistants=[assistant_model],
+            states=[state_model],
+            enable_summarization_node=False if assistant else None,
+        ).model_dump(exclude_none=True)
+    )
+
+
+@pytest.fixture(scope="function")
+def user1_workflow_utils(user1_client):
+    return WorkflowUtils(user1_client)
+
+
+@pytest.fixture(scope="function")
+def user2_workflow_utils(user2_client):
+    return WorkflowUtils(user2_client)
+
+
+@pytest.fixture(scope="function")
+def user1_workflow(default_llm, user1_workflow_utils):
+    """Factory ``(project_name, assistant=None) -> workflow`` of user 1, shared with the project."""
+    created = []
+
+    def _create(project_name: str, assistant=None):
+        workflow = user1_workflow_utils.create_workflow(
+            workflow_type=WorkflowMode.SEQUENTIAL,
+            workflow_yaml=_single_state_workflow_yaml(default_llm.base_name, assistant),
+            project_name=project_name,
+            shared=True,
+        )
+        created.append(workflow)
+        return workflow
+
+    yield _create
+
+    for workflow in created:
+        try:
+            user1_workflow_utils.delete_workflow(workflow)
+        except HTTPError as e:
+            logger.warning(f"Failed to delete workflow {workflow.id}: {e}")
+
+
+@pytest.fixture(scope="function")
+def user1_published_workflow(user1_workflow, user1_workflow_utils):
+    """Factory ``(project_name, assistant=None) -> workflow`` of user 1, published to the marketplace."""
+    published = []
+
+    def _create(project_name: str, assistant=None):
+        workflow = user1_workflow(project_name, assistant)
+        user1_workflow_utils.publish_workflow_to_marketplace(
+            workflow.id, [COMPLETE_CATEGORIES]
+        )
+        published.append(workflow)
+        return workflow
+
+    yield _create
+
+    for workflow in published:
+        try:
+            user1_workflow_utils.unpublish_workflow_from_marketplace(workflow.id)
+        except HTTPError as e:
+            logger.warning(f"Failed to unpublish workflow {workflow.id}: {e}")
+
+
+@pytest.fixture(scope="function")
+def user2_trigger(user2_integration_utils, user2_client, budget_scheduler_integration):
+    """Triggers of user 2 by name: ``(project_name, assistant)`` creates the integration in
+    the assistant's project and starts a run of the assistant (the scheduler starts it by
+    itself)."""
+    webhooks = []
+    webhook_utils = WebhookUtils(user2_client)
+
+    def _webhook(project_name: str, assistant):
+        webhook_id = get_random_name()
+        webhooks.append(
+            user2_integration_utils.create_integration(
+                CredentialTypes.WEBHOOK,
+                [
+                    CredentialValues(
+                        key="url", value=CredentialsManager.AUTO_GENERATED
+                    ),
+                    CredentialValues(key="webhook_id", value=webhook_id),
+                    CredentialValues(key="is_enabled", value=True),
+                    CredentialValues(key="resource_type", value="assistant"),
+                    CredentialValues(key="resource_id", value=assistant.id),
+                ],
+                project_name=project_name,
+            )
+        )
+        webhook_utils.trigger_webhook(webhook_id, data=budget_chat_prompt())
+
+    def _scheduler(project_name: str, assistant):
+        budget_scheduler_integration(
+            "assistant",
+            assistant.id,
+            prompt=budget_chat_prompt(),
+            project_name=project_name,
+            owner_utils=user2_integration_utils,
+        )
+
+    yield {"webhook": _webhook, "scheduler": _scheduler}
+
+    for integration in webhooks:
+        try:
+            user2_integration_utils.delete_integration(integration)
+        except HTTPError:
+            pass
+
+
+@pytest.fixture(scope="function")
+def user2_datasource_utils(user2_client):
+    return DataSourceUtils(user2_client)
+
+
+@pytest.fixture(scope="function")
+def user2_file_datasource(user2_datasource_utils, default_embedding_llm):
+    """Factory ``(project_name) -> datasource``: user 2 indexes a small file in the project."""
+    created = []
+
+    def _create(project_name: str):
+        # Large enough for the embedding cost to show in the spend, which a tiny file rounds to zero.
+        file_name = "test_extended.docx"
+        datasource = user2_datasource_utils.create_file_datasource(
+            name=get_random_name(),
+            description=f"[Autotest] {file_name} indexed for a budget attribution check",
+            files=[str(FILES_PATH / file_name)],
+            embeddings_model=default_embedding_llm.base_name,
+            project_name=project_name,
+        )
+        created.append(datasource)
+        return datasource
+
+    yield _create
+
+    for datasource in created:
+        user2_datasource_utils.safe_delete_datasource(datasource)
+
+
 @pytest.fixture(scope="function")
 def budget_scheduler_integration(integration_utils):
+    """Factory for scheduler integrations, owned by the admin unless ``owner_utils`` (the
+    ``IntegrationUtils`` of the user who owns the schedule) is given, in ``project_name``."""
     created_integrations = []
 
     def _create(
@@ -739,7 +922,10 @@ def budget_scheduler_integration(integration_utils):
         resource_id: str,
         prompt: str = None,
         schedule: str = None,
+        project_name: str = None,
+        owner_utils: IntegrationUtils = None,
     ):
+        owner_utils = owner_utils or integration_utils
         if schedule is None:
             next_minute = (datetime.now() + timedelta(minutes=2)).minute
             schedule = f"{next_minute} * * * *"
@@ -752,17 +938,20 @@ def budget_scheduler_integration(integration_utils):
             CredentialValues(key="resource_id", value=resource_id),
             CredentialValues(key="prompt", value=prompt),
         ]
-        integration = integration_utils.create_integration(
-            CredentialTypes.SCHEDULER, credential_values, integration_alias=alias
+        integration = owner_utils.create_integration(
+            CredentialTypes.SCHEDULER,
+            credential_values,
+            project_name=project_name,
+            integration_alias=alias,
         )
-        created_integrations.append(integration)
+        created_integrations.append((owner_utils, integration))
         return integration
 
     yield _create
 
-    for integration in created_integrations:
+    for owner_utils, integration in created_integrations:
         try:
-            integration_utils.delete_integration(integration)
+            owner_utils.delete_integration(integration)
         except HTTPError:
             pass
 
@@ -831,39 +1020,29 @@ def project_budget_group(admin_project_utils, lite_llm_budget_utils):
 
 
 @pytest.fixture(scope="function")
-def project_admin_client(
+def budget_project_admin_user(
     keycloak_utils,
     admin_project_utils,
     project_budget_group,
     lite_llm_budget_utils,
 ):
-    """Create a user with project-admin role for the project_budget_group project."""
+    """Platform admin who is also project admin of the project_budget_group project.
+
+    Not the root project_admin_user (a platform user without a platform role).
+    """
     project_name, _ = project_budget_group
-    uid = secrets.token_hex(4)
-    email = f"autotest_pa_{uid}@email.com"
-    password = keycloak_utils.create_test_user(email=email, project_name=project_name)
-    try:
-        user_c = get_client(username=email, password=password)
-        user_id = user_c.users.about_me().user_id
+    email = user_email("pa")
+    with new_logged_in_user(
+        keycloak_utils, email, admin=True, project_name=project_name
+    ) as user:
         admin_project_utils.assign_user_to_project(
-            project_name, user_id, is_project_admin=True
+            project_name, user.user_id, is_project_admin=True
         )
-    except Exception:
+        yield user
         try:
-            keycloak_utils.delete_user(email)
+            admin_project_utils.remove_user_from_project(project_name, user.user_id)
         except Exception:
             pass
-        raise
-    yield user_c
-    if user_id is not None:
-        try:
-            admin_project_utils.remove_user_from_project(project_name, user_id)
-        except Exception:
-            pass
-    try:
-        keycloak_utils.delete_user(email)
-    except Exception:
-        pass
     for customer_id in (
         email,
         f"{email}_{DEFAULT_CLI_BUDGET_ID}",
@@ -876,9 +1055,9 @@ def project_admin_client(
 
 
 @pytest.fixture(scope="function")
-def project_admin_budget_group_utils(project_admin_client):
+def project_admin_budget_group_utils(budget_project_admin_user):
     """Return AdminProjectBudgetGroupUtils authenticated as the project admin."""
-    return AdminProjectBudgetGroupUtils(project_admin_client)
+    return AdminProjectBudgetGroupUtils(budget_project_admin_user.client)
 
 
 # ---------------------------------------------------------------------------
@@ -935,53 +1114,39 @@ def cross_project_admin_client(
         name=other_project, description="Cross-project for PA distribution tests"
     )
     try:
-        password = keycloak_utils.create_platform_user(email=email)
-        user_c = get_client(username=email, password=password)
-        user_id = user_c.users.about_me().user_id
-        admin_project_utils.assign_user_to_project(
-            other_project, user_id, is_project_admin=True
-        )
-    except Exception:
-        try:
-            keycloak_utils.delete_user(email)
-        except Exception:
-            pass
+        with new_logged_in_user(keycloak_utils, email, admin=False) as user:
+            admin_project_utils.assign_user_to_project(
+                other_project, user.user_id, is_project_admin=True
+            )
+            yield user.client
+            try:
+                admin_project_utils.remove_user_from_project(
+                    other_project, user.user_id
+                )
+            except Exception:
+                pass
+        for customer_id in (
+            email,
+            f"{email}_{DEFAULT_CLI_BUDGET_ID}",
+            f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
+        ):
+            try:
+                lite_llm_budget_utils.delete_customer(customer_id)
+            except Exception:
+                pass
+    finally:
         try:
             admin_project_utils.delete_project(other_project)
         except Exception:
             pass
-        raise
-    yield user_c
-    if user_id is not None:
-        try:
-            admin_project_utils.remove_user_from_project(other_project, user_id)
-        except Exception:
-            pass
-    try:
-        keycloak_utils.delete_user(email)
-    except Exception:
-        pass
-    for customer_id in (
-        email,
-        f"{email}_{DEFAULT_CLI_BUDGET_ID}",
-        f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
-    ):
-        try:
-            lite_llm_budget_utils.delete_customer(customer_id)
-        except Exception:
-            pass
-    try:
-        admin_project_utils.delete_project(other_project)
-    except Exception:
-        pass
 
 
 @pytest.fixture(scope="function")
 def member_override_project(
     project_budget_group,
-    project_admin_client,
+    budget_project_admin_user,
     project_admin_budget_group_utils,
-    keycloak_regular_user,
+    platform_user,
     admin_project_utils,
 ):
     """Project with a budget group, a project admin and a developer-only member.
@@ -994,7 +1159,7 @@ def member_override_project(
         ``budget_id`` is the platform category budget of the project's budget group.
     """
     project_name, group_id = project_budget_group
-    email, password = keycloak_regular_user
+    email, password = platform_user.email, platform_user.password
     member_client = get_client(username=email, password=password)
     member_id = member_client.users.about_me().user_id
     admin_project_utils.enable_member_budget_tracking(project_name)
@@ -1003,7 +1168,13 @@ def member_override_project(
     )
     group = project_admin_budget_group_utils.get_group(group_id)
     budget_id = AdminProjectBudgetUtils.budget_ids_by_category(group)["platform"]
-    yield project_name, budget_id, project_admin_client, member_id, member_client
+    yield (
+        project_name,
+        budget_id,
+        budget_project_admin_user.client,
+        member_id,
+        member_client,
+    )
     try:
         admin_project_utils.remove_user_from_project(project_name, member_id)
     except Exception:
@@ -1057,9 +1228,9 @@ def regular_member_client(member_override_project):
 
 
 @pytest.fixture(scope="function")
-def plain_admin_client(promoted_admin_user):
+def plain_admin_client(admin_user):
     """Client of a platform Admin who is neither maintainer nor project admin."""
-    return promoted_admin_user[2]
+    return admin_user.client
 
 
 @pytest.fixture(
@@ -1113,6 +1284,17 @@ def user2_skills_utils(user2_client):
 
 
 @pytest.fixture(scope="function")
+def mixed_case_user_id(mixed_case_client):
+    """Id of the mixed-case user; the first request is the login that creates the personal project."""
+    return mixed_case_client.users.about_me().user_id
+
+
+@pytest.fixture(scope="function")
+def mixed_case_skills_utils(mixed_case_client):
+    return SkillsUtils(mixed_case_client)
+
+
+@pytest.fixture(scope="function")
 def budget_project_factory(
     user1_project_utils,
     admin_project_utils,
@@ -1160,6 +1342,36 @@ def budget_project_factory(
 
 
 @pytest.fixture(scope="function")
+def user1_orchestrator(default_llm, user1_assistant_utils):
+    """Factory ``(project_name, sub_assistant, subject) -> assistant`` of user 1, shared with the
+    project, that always hands requests about the subject over to the sub-assistant."""
+    created = []
+
+    def _create(project_name: str, sub_assistant, subject: str):
+        orchestrator = user1_assistant_utils.create_assistant(
+            llm_model_type=default_llm.base_name,
+            project_name=project_name,
+            shared=True,
+            system_prompt=(
+                "You are a coordinator assistant that delegates tasks to a specialized "
+                f"sub-assistant. ALWAYS use the sub-assistant {sub_assistant.name} for "
+                f"every {subject} request and never answer {subject} requests yourself."
+            ),
+            assistant_ids=[sub_assistant.id],
+        )
+        created.append(orchestrator)
+        return orchestrator
+
+    yield _create
+
+    for orchestrator in created:
+        try:
+            user1_assistant_utils.delete_assistant(orchestrator)
+        except HTTPError as e:
+            logger.warning(f"Failed to delete assistant {orchestrator.id}: {e}")
+
+
+@pytest.fixture(scope="function")
 def user1_published_assistant(
     user1_assistant, user1_assistant_utils, marketplace_core_gates
 ):
@@ -1192,3 +1404,58 @@ def user1_published_assistant(
             logger.warning(
                 f"Failed to unpublish assistant {published_assistant.id}: {e}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Deleting a manually created budget
+# ---------------------------------------------------------------------------
+
+LITELLM_BUDGET_TIMEOUT = 30
+
+
+@pytest.fixture(scope="function")
+def maintainer_budget_utils(maintainer_client):
+    """AdminBudgetUtils acting as the maintainer, the only role that deletes budgets."""
+    return AdminBudgetUtils(maintainer_client)
+
+
+@pytest.fixture(scope="function")
+def maintainer_activity_utils(maintainer_client):
+    """ActivityUtils acting as the maintainer (the activity events API is maintainer-only)."""
+    return ActivityUtils(maintainer_client)
+
+
+@pytest.fixture(scope="function")
+def budget_in_litellm_state(request, manual_budget, lite_llm_budget_utils):
+    """Indirect-parametrized: ``manual_budget`` once it is in the requested LiteLLM state.
+
+    ``request.param`` is ``LITELLM_PRESENT`` (waits until LiteLLM returns the budget) or
+    ``LITELLM_ALREADY_ABSENT`` (removes it from LiteLLM first, as if it was lost there).
+    """
+    budget_id = manual_budget["budget_id"]
+    expect_present = request.param == LITELLM_PRESENT
+    if not expect_present:
+        lite_llm_budget_utils.delete_budget(budget_id)
+    in_litellm = poll_until(
+        lambda: lite_llm_budget_utils.get_budget_info(budget_id),
+        lambda info: (info is not None) == expect_present,
+        timeout=LITELLM_BUDGET_TIMEOUT,
+        interval=2.0,
+    )
+    assert_that(
+        in_litellm,
+        is_not(none()) if expect_present else none(),
+        f"Budget {budget_id} should be {request.param} in LiteLLM before it is deleted",
+    )
+    return manual_budget
+
+
+@pytest.fixture(scope="function")
+def assigned_users(request, assign_budget_user):
+    """Indirect-parametrized: the first ``request.param`` (1 or 2) platform users, each
+    assigned to ``manual_budget``. Returns the list of users."""
+    fixture_names = ("platform_user", "second_platform_user")[: request.param]
+    users = [request.getfixturevalue(name) for name in fixture_names]
+    for user in users:
+        assign_budget_user(user.user_id)
+    return users

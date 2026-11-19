@@ -25,18 +25,35 @@ from codemie_sdk.models.integration import CredentialTypes
 from codemie_test_harness.tests.ui.pageobject.integrations.create_integration_page import (
     CreateIntegrationPage,
 )
+from codemie_test_harness.tests.ui.pageobject.integrations.integration_form_page import (
+    IntegrationFormPage,
+)
+from codemie_test_harness.tests.ui.pageobject.integrations.integrations_list_page import (
+    IntegrationsListPage,
+)
 from codemie_test_harness.tests.ui.pageobject.integrations.integrations_page import (
     IntegrationsPage,
 )
 from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestDataFactory,
 )
+from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    SAVED_TOAST,
+    SCOPE_BADGE_PROJECT_ONLY,
+    SCOPE_BADGE_USER_ONLY,
+)
 from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
+
+# Hint on an option bound to the other scope (frontend settingsUIConfig / SettingsForm)
+SWITCHES_SCOPE_HINT_PREFIX = "Switches Scope to"
+SWITCHES_SCOPE_TO_PROJECT_HINT = f"{SWITCHES_SCOPE_HINT_PREFIX} Project"
+SWITCHES_SCOPE_TO_USER_HINT = f"{SWITCHES_SCOPE_HINT_PREFIX} User"
 
 
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_navigate_to_integrations_via_menu(page):
     """
     Test navigation to create integration page via menu.
@@ -54,13 +71,14 @@ def test_navigate_to_integrations_via_menu(page):
     # Assert
     integrations_page.should_be_on_integrations_page()
     integrations_page.should_see_create_integration_button()
-    integrations_page.should_see_integration_type_switcher()
+    integrations_page.should_see_integration_scope_filter()
     integrations_page.should_see_integrations_table()
 
 
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_navigate_to_create_integration_via_direct_url(page):
     """
     Test direct navigation to create integration page via URL.
@@ -88,6 +106,7 @@ def test_navigate_to_create_integration_via_direct_url(page):
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_navigate_to_create_integration_from_integrations_page(page):
     """
     Test navigation to create integration page from integrations page ui elements.
@@ -97,21 +116,30 @@ def test_navigate_to_create_integration_from_integrations_page(page):
     - Page Title matches integration type
     """
 
-    integrations_page = IntegrationsPage(page)
-
-    # Navigate to User Integration creation
-    integrations_page.navigate_to().navigate_to_user_integration_creation()
-
+    list_page = IntegrationsListPage(page)
     create_integration_page = CreateIntegrationPage(page)
+    form_page = IntegrationFormPage(page)
+
+    # Scope filter 'User' on the list: the 'New Integration' button opens the form with
+    # Scope 'User' already selected (the form is not told which Scope to take)
+    list_page.navigate_to()
+    list_page.select_scope("User")
+    list_page.click_new_integration()
+    form_page.wait_until_open()
 
     # Assert
-    create_integration_page.should_be_on_create_user_integration_page()
+    create_integration_page.should_be_on_new_integration_form()
+    form_page.should_have_scope_selected("User")
 
-    # Navigate to Project Integration creation
-    integrations_page.navigate_to().navigate_to_project_integration_creation()
+    # Scope filter 'Project' on the list: the same form opens with Scope 'Project'
+    list_page.navigate_to()
+    list_page.select_scope("Project")
+    list_page.click_new_integration()
+    form_page.wait_until_open()
 
     # Assert
-    create_integration_page.should_be_on_create_project_integration_page()
+    create_integration_page.should_be_on_new_integration_form()
+    form_page.should_have_scope_selected("Project")
 
 
 @pytest.mark.smoke
@@ -123,6 +151,7 @@ def test_navigate_to_create_integration_from_integrations_page(page):
     [CredentialTypes.GIT, CredentialTypes.JIRA, CredentialTypes.CONFLUENCE],
 )
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_create_integration_type_form_fields(page, credential_type):
     """
     Test that all required form fields are displayed for each credential type.
@@ -174,6 +203,7 @@ def test_create_integration_type_form_fields(page, credential_type):
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_create_git_integration_github_app_authentication(page):
     """
     Test GitHub App authentication option for Git integrations.
@@ -206,6 +236,7 @@ def test_create_git_integration_github_app_authentication(page):
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_create_git_integration_complete_workflow(page):
     """
     Test the complete Git integration creation workflow (happy path).
@@ -223,14 +254,15 @@ def test_create_git_integration_complete_workflow(page):
     create_integration_page.create_integration()
 
     # Assert
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
+    integrations_page.should_see_saved_message(
+        SAVED_TOAST
     ).should_see_specific_integration(integration_test_data.alias)
 
 
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_create_jira_integration_complete_workflow(page):
     """
     Test the complete Jira integration creation workflow (happy path).
@@ -252,14 +284,15 @@ def test_create_jira_integration_complete_workflow(page):
     create_integration_page.fill_jira_integration_form(integration_test_data)
     create_integration_page.create_integration()
 
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
+    integrations_page.should_see_saved_message(
+        SAVED_TOAST
     ).should_see_specific_integration(integration_test_data.alias)
 
 
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_create_confluence_integration_complete_workflow(page):
     """
     Test the complete Confluence integration creation workflow (happy path).
@@ -281,8 +314,8 @@ def test_create_confluence_integration_complete_workflow(page):
     create_integration_page.fill_confluence_integration_form(integration_test_data)
     create_integration_page.create_integration()
 
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
+    integrations_page.should_see_saved_message(
+        SAVED_TOAST
     ).should_see_specific_integration(integration_test_data.alias)
 
 
@@ -290,6 +323,7 @@ def test_create_confluence_integration_complete_workflow(page):
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_form_reset_and_cancel_functionality(page):
     """
     Test form reset and cancel functionality.
@@ -320,6 +354,7 @@ def test_form_reset_and_cancel_functionality(page):
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_alias_field_validation_message(page):
     """
     Test validation message when alias field is empty and form is submitted.
@@ -351,6 +386,7 @@ def test_alias_field_validation_message(page):
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_credential_type_dropdown_shows_all_available_options(page):
     """
     Test that credential type dropdown shows all available integration types.
@@ -366,6 +402,8 @@ def test_credential_type_dropdown_shows_all_available_options(page):
     ui_exceptions = ["DIAL", "MSTeams"]
     if EnvironmentResolver.is_localhost():
         ui_exceptions.append("LiteLLM")
+    if EnvironmentResolver.is_oss_standalone():
+        ui_exceptions.extend(["LiteLLM", "Google OAuth"])
 
     # Act
     create_integration_page.navigate_to_user_integration_creation()
@@ -385,3 +423,28 @@ def test_credential_type_dropdown_shows_all_available_options(page):
             continue
 
         create_integration_page.should_see_dropdown_option(credential_type)
+
+    # Assert - Scope badge on each scope-bound option; the "Switches Scope to ..." hint appears
+    # only when the form's Scope differs from the type's own scope (User form: DIAL has it,
+    # Google OAuth does not)
+    check_google_oauth = "Google OAuth" not in ui_exceptions
+    create_integration_page.should_see_dropdown_option_badge(
+        "DIAL", SCOPE_BADGE_PROJECT_ONLY
+    ).should_see_dropdown_option_hint("DIAL", SWITCHES_SCOPE_TO_PROJECT_HINT)
+    if check_google_oauth:
+        create_integration_page.should_see_dropdown_option_badge(
+            "Google OAuth", SCOPE_BADGE_USER_ONLY
+        ).should_not_see_dropdown_option_hint(
+            "Google OAuth", SWITCHES_SCOPE_HINT_PREFIX
+        )
+
+    # Project form: the hint moves to Google OAuth, DIAL no longer has it
+    create_integration_page.navigate_to_project_integration_creation()
+    create_integration_page.credential_type_dropdown_button.click()
+    create_integration_page.should_see_dropdown_option_badge(
+        "DIAL", SCOPE_BADGE_PROJECT_ONLY
+    ).should_not_see_dropdown_option_hint("DIAL", SWITCHES_SCOPE_HINT_PREFIX)
+    if check_google_oauth:
+        create_integration_page.should_see_dropdown_option_badge(
+            "Google OAuth", SCOPE_BADGE_USER_ONLY
+        ).should_see_dropdown_option_hint("Google OAuth", SWITCHES_SCOPE_TO_USER_HINT)

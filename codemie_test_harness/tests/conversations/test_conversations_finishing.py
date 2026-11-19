@@ -120,7 +120,7 @@ def test_user_finish_endpoint_finishes_owned_conversation(
 @pytest.mark.conversations
 @pytest.mark.api
 def test_admin_bulk_finish_is_idempotent_for_already_finished_conversation(
-    assistant, assistant_utils, conversation_utils, promoted_admin_user
+    assistant, assistant_utils, conversation_utils, admin_user
 ):
     """Bulk-finishing an already-finished conversation reports already_finished=true, no error."""
     assistant_obj = assistant()
@@ -129,7 +129,7 @@ def test_admin_bulk_finish_is_idempotent_for_already_finished_conversation(
     )
     finish_response = conversation_utils.finish_conversation(conversation_id)
 
-    _, _, admin_client = promoted_admin_user
+    admin_client = admin_user.client
     admin_conversation_utils = ConversationUtils(admin_client)
 
     bulk_response = admin_conversation_utils.finish_conversations_bulk(
@@ -177,7 +177,7 @@ def test_repeat_single_finish_call_returns_409(
 @pytest.mark.conversations
 @pytest.mark.api
 def test_admin_bulk_finish_reports_per_id_results_for_mixed_batch(
-    assistant, assistant_utils, conversation_utils, promoted_admin_user
+    assistant, assistant_utils, conversation_utils, admin_user
 ):
     """Bulk finish reports correct per-ID results/total for unfinished + already-finished + unknown IDs."""
     unfinished_assistant = assistant()
@@ -193,7 +193,7 @@ def test_admin_bulk_finish_reports_per_id_results_for_mixed_batch(
 
     unknown_id = get_random_name()
 
-    _, _, admin_client = promoted_admin_user
+    admin_client = admin_user.client
     admin_conversation_utils = ConversationUtils(admin_client)
 
     bulk_response = admin_conversation_utils.finish_conversations_bulk(
@@ -373,7 +373,7 @@ def test_finish_nonexistent_conversation_returns_404(conversation_utils):
 @pytest.mark.conversations
 @pytest.mark.api
 def test_non_owner_finish_rejected_and_read_access_checked_before_finished_guard(
-    assistant, assistant_utils, conversation_utils, non_admin_user
+    assistant, assistant_utils, conversation_utils, platform_user
 ):
     """Non-owner finish attempts get 403; unauthorized mutation of a finished
     conversation gets 401 (read-access checked before the finished guard),
@@ -386,7 +386,7 @@ def test_non_owner_finish_rejected_and_read_access_checked_before_finished_guard
         assistant_obj, assistant_utils, conversation_utils
     )
 
-    _, _, other_client = non_admin_user
+    other_client = platform_user.client
     other_conversation_utils = ConversationUtils(other_client)
 
     with pytest.raises(HTTPError) as exc_info:
@@ -424,9 +424,9 @@ def test_non_owner_finish_rejected_and_read_access_checked_before_finished_guard
 @pytest.mark.smoke
 @pytest.mark.conversations
 @pytest.mark.api
-def test_admin_endpoints_reject_non_admin_caller(conversation_utils, non_admin_user):
+def test_admin_endpoints_reject_non_admin_caller(conversation_utils, platform_user):
     """Non-admin callers are rejected by both admin-only conversation endpoints."""
-    _, _, other_client = non_admin_user
+    other_client = platform_user.client
     other_conversation_utils = ConversationUtils(other_client)
 
     bulk_status = other_conversation_utils.finish_conversations_bulk_status_code(
@@ -454,7 +454,7 @@ def test_admin_conversations_list_project_filter_scopes_to_one_project(
     assistant,
     assistant_utils,
     conversation_utils,
-    promoted_admin_user,
+    admin_user,
     admin_utils,
     project_utils,
     user_utils,
@@ -486,7 +486,7 @@ def test_admin_conversations_list_project_filter_scopes_to_one_project(
             scoped_assistant, assistant_utils, conversation_utils
         )
 
-        _, _, admin_client = promoted_admin_user
+        admin_client = admin_user.client
         admin_conversation_utils = ConversationUtils(admin_client)
 
         response = admin_conversation_utils.list_admin_conversations(

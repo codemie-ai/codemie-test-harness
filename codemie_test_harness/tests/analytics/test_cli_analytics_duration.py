@@ -32,6 +32,7 @@ def duration_sessions(seed_cli_sessions):
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_session_duration_is_time_from_start_to_end(
     analytics_utils, cli_analytics_project, duration_sessions
@@ -50,6 +51,7 @@ def test_session_duration_is_time_from_start_to_end(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_average_session_duration_is_mean_over_window_sessions(
     analytics_utils, cli_analytics_project, duration_sessions

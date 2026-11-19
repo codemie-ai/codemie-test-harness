@@ -43,7 +43,9 @@ from codemie_test_harness.tests.ui.pageobject.budgets.personal_spending_page imp
 )
 from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import (
     HIDDEN_COLUMN_ID,
+    HIDDEN_COLUMN_IDS,
     SPENT_CATEGORY,
+    LimitLabelRow,
 )
 from codemie_test_harness.tests.utils.budget_usage_utils import (
     BudgetUsageUtils,
@@ -88,7 +90,7 @@ def read_budget_usage(client) -> BudgetUsageResponse:
         shown_labels=[
             column.label
             for column in response.data.columns
-            if column.id != HIDDEN_COLUMN_ID
+            if column.id not in HIDDEN_COLUMN_IDS
         ],
         hidden_label=next(
             column.label
@@ -191,16 +193,21 @@ class OtherMemberSpend:
     project_total: float
 
 
-def switch_enforcement_off(admin_project_utils, budget):
-    """member_override_ui_setup switches enforcement on; this case is about enforcement off."""
+def switch_enforcement(admin_project_utils, budget, enabled: bool):
+    """Switch enforcement of member spend limits of the project and check the reply says so."""
     switched = admin_project_utils.set_enforce_member_spend_limits(
-        _project_name(budget), False
+        _project_name(budget), enabled
     )
     assert_that(
         switched.enforce_member_spend_limits,
-        equal_to(False),
-        "Precondition failed: enforcement was not switched off",
+        equal_to(enabled),
+        f"Precondition failed: enforcement was not switched {'on' if enabled else 'off'}",
     )
+
+
+def switch_enforcement_off(admin_project_utils, budget):
+    """member_override_ui_setup switches enforcement on; this case is about enforcement off."""
+    switch_enforcement(admin_project_utils, budget, False)
 
 
 def generate_spend_as_other_member(
@@ -288,3 +295,132 @@ def assert_spent_category_row_keeps_its_combined_total(api_rows: list[dict], bud
         greater_than(0),
         "The spent category row lost its combined total while the page was opened",
     )
+
+
+def find_cli_row(api_rows: list[dict], budget) -> dict:
+    """The spent (cli) category row of the project."""
+    return next(row for row in api_rows if row["project_name"] == _cli_label(budget))
+
+
+def read_listed_cli_row(client, budget) -> dict:
+    """The spent category row of the project, once the API lists it."""
+    row = BudgetUsageUtils(client).wait_for_row(_cli_label(budget))
+    assert_that(
+        row,
+        not_none(),
+        "Precondition failed: the cli category row is not listed by the API yet",
+    )
+    return row
+
+
+def assert_other_member_spend_moved_only_the_project_percentage(
+    row_before: dict, row_after: dict
+):
+    """Another member's spend raises the project percentage; the viewer's own spend and limit stay.
+
+    'Your spending' is current_spending and 'Available' is derived from it and budget_limit only,
+    so neither moves when the percentage does.
+    """
+    assert_that(
+        row_after["current_spending"],
+        equal_to(row_before["current_spending"]),
+        "The viewer's own spending must not move with another member's spend",
+    )
+    assert_that(
+        row_after["budget_limit"],
+        equal_to(row_before["budget_limit"]),
+        "The limit Available is derived from must not move with another member's spend",
+    )
+    assert_that(
+        row_after["total"],
+        greater_than(row_before["total"]),
+        "The project percentage must rise with another member's spend",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Usage block of the project rows: shared limit, label and tooltip
+# ---------------------------------------------------------------------------
+
+
+def project_row_names(budget) -> list[str]:
+    """Labels of the project's platform and cli rows, in the order the API lists them."""
+    return [_project_name(budget), _cli_label(budget)]
+
+
+def _project_rows(rows: list[dict], budget) -> list[dict]:
+    names = project_row_names(budget)
+    return [row for row in rows if row["project_name"] in names]
+
+
+def _is_set_up_as(rows: list[dict], budget, shared: bool, default: bool | None) -> bool:
+    project_rows = _project_rows(rows, budget)
+    return len(project_rows) == len(project_row_names(budget)) and all(
+        row["is_shared_limit"] is shared
+        and (default is None or row["is_default"] is default)
+        for row in project_rows
+    )
+
+
+def wait_for_project_rows_set_up_as(
+    client, budget, shared: bool, default: bool | None = None
+) -> list[dict]:
+    """The project's rows once both are listed with this is_shared_limit (and is_default)."""
+    rows = BudgetUsageUtils(client).wait_for_rows_where(
+        lambda listed: _is_set_up_as(listed, budget, shared, default)
+    )
+    return _project_rows(rows, budget)
+
+
+def assert_project_rows_are_set_up_as(
+    project_rows: list[dict], budget, shared: bool, default: bool | None = None
+):
+    assert_that(
+        row_names(project_rows),
+        equal_to(project_row_names(budget)),
+        "Precondition failed: the API does not list the platform and cli rows of the project",
+    )
+    assert_that(
+        [row["is_shared_limit"] for row in project_rows],
+        equal_to([shared] * len(project_rows)),
+        "Precondition failed: the rows do not carry the expected is_shared_limit",
+    )
+    if default is not None:
+        assert_that(
+            [row["is_default"] for row in project_rows],
+            equal_to([default] * len(project_rows)),
+            "Precondition failed: the rows do not carry the expected is_default",
+        )
+
+
+def wait_for_shared_project_rows(client, budget) -> list[dict]:
+    """The project's rows, listed with a shared limit (enforcement off)."""
+    wait_for_cli_row_to_be_listed(client, budget)
+    project_rows = wait_for_project_rows_set_up_as(client, budget, shared=True)
+    assert_project_rows_are_set_up_as(project_rows, budget, shared=True)
+    return project_rows
+
+
+def set_up_project_rows(
+    admin_project_utils, user_utils, client, budget, row_kind: LimitLabelRow
+) -> list[dict]:
+    """Set the project up as this kind of row and return its rows once the API reflects it."""
+    wait_for_cli_row_to_be_listed(client, budget)
+    switch_enforcement(
+        admin_project_utils, budget, row_kind.enforce_member_spend_limits
+    )
+    if row_kind.is_default_project:
+        make_project_the_default(user_utils, client, budget)
+    project_rows = wait_for_project_rows_set_up_as(
+        client,
+        budget,
+        shared=row_kind.is_shared_limit,
+        default=row_kind.is_default_project,
+    )
+    assert_project_rows_are_set_up_as(
+        project_rows,
+        budget,
+        shared=row_kind.is_shared_limit,
+        default=row_kind.is_default_project,
+    )
+    return project_rows
