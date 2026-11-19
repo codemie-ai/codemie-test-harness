@@ -47,6 +47,7 @@ from codemie_test_harness.tests.test_data.hosted_application_test_data import (
     LINK_REVOKED_EVENT,
     NON_CREATOR_MANAGERS,
     REFUSED_SHARE_INPUTS,
+    REVOCATION_WAIT_SECONDS,
     SESSION_ENDED_STATUS,
     SHARE_SUSPENDED_MESSAGE,
     SHARING_MANAGERS,
@@ -54,6 +55,7 @@ from codemie_test_harness.tests.test_data.hosted_application_test_data import (
     SHARING_ROUTES,
     SHARING_SUSPENSION_REASON,
 )
+from codemie_test_harness.tests.utils.base_utils import poll_until
 from codemie_test_harness.tests.utils.hosted_application_utils import (
     error_code,
     error_message,
@@ -77,6 +79,16 @@ def should_refuse(call, status: int, code, message: str, what: str) -> None:
     assert_that(error_status(refused.value), equal_to(status), f"{what}: the status")
     assert_that(error_code(refused.value), equal_to(code), f"{what}: the error code")
     assert_that(error_message(refused.value), equal_to(message), f"{what}: the message")
+
+
+def page_after_revocation(session: HostedContentSession):
+    """The session's page once a stale replica no longer serves it; the last answer if that never happens."""
+    return poll_until(
+        session.page,
+        lambda response: response.status_code == SESSION_ENDED_STATUS,
+        timeout=REVOCATION_WAIT_SECONDS,
+        interval=1.0,
+    )
 
 
 def should_refuse_every_sharing_route(service, app_id: str, user_id: str, refusal):
@@ -181,7 +193,7 @@ def test_manager_removes_a_person_whoever_added_them_and_access_ends_on_the_next
         is_not(has_item(person.user_id)),
         "the answer no longer lists the person",
     )
-    refused = session.page()
+    refused = page_after_revocation(session)
     assert_that(
         refused.status_code,
         equal_to(SESSION_ENDED_STATUS),
@@ -245,7 +257,7 @@ def test_manager_reuses_and_revokes_the_creators_share_link_and_the_log_names_th
 
     assert_that(revoked.link, is_(None), "the application has no live link any more")
     assert_that(
-        session.page().status_code,
+        page_after_revocation(session).status_code,
         equal_to(SESSION_ENDED_STATUS),
         "the visitor's next content request is refused",
     )

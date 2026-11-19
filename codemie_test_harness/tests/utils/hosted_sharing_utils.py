@@ -69,6 +69,7 @@ class HostedPeople:
         self._admin_utils = admin_utils
         self._user_utils = user_utils
         self._project_utils = project_utils
+        self._project_users: dict[str, list[HostedUser]] = {}
 
     def user(self, admin: bool = False) -> HostedUser:
         """A plain user, or with ``admin`` an account the auth server makes an administrator."""
@@ -112,24 +113,34 @@ class HostedPeople:
         """A new project with ``members`` as plain members and ``admins`` as its project admins."""
         name = get_random_name()
         self._admin_utils.create_project(name)
-        # Registered after the users, so it runs before any of them is deleted.
-        self._cleanup.callback(self._remove_project, name, members + tuple(admins))
+        self._project_users[name] = []
+        # The project goes before the users it was built with, whose own callbacks were registered
+        # earlier. A user who joins later is tracked in ``_project_users``, so the teardown removes
+        # the applications of every member before the project, which an application would block.
+        self._cleanup.callback(self._remove_project, name)
         for member in members:
             self._user_utils.assign_user_to_project(member.user_id, name)
+            self._track(name, member)
         for admin in admins:
             self.make_project_admin(admin, name)
         return name
+
+    def _track(self, project: str, user: HostedUser) -> None:
+        if user not in self._project_users[project]:
+            self._project_users[project].append(user)
 
     def make_project_admin(self, user: HostedUser, project: str) -> None:
         self._user_utils.assign_user_to_project(
             user.user_id, project, is_project_admin=True
         )
+        self._track(project, user)
 
     def add_member(self, user: HostedUser, project: str) -> None:
         self._user_utils.assign_user_to_project(user.user_id, project)
+        self._track(project, user)
 
-    def _remove_project(self, name: str, users: tuple) -> None:
-        for user in users:
+    def _remove_project(self, name: str) -> None:
+        for user in self._project_users.pop(name, []):
             _cleanup_applications(user)
         try:
             self._project_utils.delete_project_with_all_members(name)
