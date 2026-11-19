@@ -13,8 +13,7 @@
 # limitations under the License.
 
 """Create hosted applications and their versions through the SDK, wait for validation, and
-remove everything afterwards.
-"""
+remove everything afterwards."""
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -27,7 +26,7 @@ from codemie_sdk.models.hosted_application import (
     HostedApplicationVersion,
     HostedApplicationVersionStart,
 )
-from hamcrest import assert_that, equal_to, is_not, empty
+from hamcrest import assert_that, empty, equal_to, is_not
 from requests import HTTPError
 
 from codemie_test_harness.tests.test_data.hosted_application_test_data import (
@@ -69,17 +68,6 @@ def error_status(error: HTTPError) -> int:
     return error.response.status_code
 
 
-def error_field_messages(error: HTTPError) -> list[str]:
-    """The per-field messages of a refused request (``INVALID_REQUEST``)."""
-    try:
-        return [
-            field["message"]
-            for field in error.response.json()["error"]["details"]["fields"]
-        ]
-    except (AttributeError, KeyError, TypeError, ValueError):
-        return []
-
-
 def error_message(error: HTTPError) -> str:
     """The readable message of a failed hosted-application call."""
     try:
@@ -103,26 +91,18 @@ class HostedApplicationUtils(BaseUtils):
         shared: bool = False,
         name: Optional[str] = None,
         description: Optional[str] = None,
-        categories: Optional[list[str]] = None,
     ) -> HostedApplication:
         app = self.service.create_application(
             name or get_random_name(),
             description or "Application created by an automated test",
             project,
             shared=shared,
-            categories=categories,
         )
         self._app_ids.append(app.id)
         return app
 
     def get_app(self, app_id: str) -> HostedApplication:
         return self.service.get_application(app_id)
-
-    def patch_app(self, app_id: str, **changes: Any) -> HostedApplication:
-        """Change the metadata of an application, ``categories`` included."""
-        return self.service.update_application(
-            app_id, self.get_app(app_id).etag, **changes
-        )
 
     def start_upload(
         self, app_id: str, artifact: HostedArtifact, routing_mode: str = "static"
@@ -216,31 +196,12 @@ class HostedApplicationUtils(BaseUtils):
             self._category_id = categories[0].id
         return self._category_id
 
-    def publish(
-        self,
-        app_id: str,
-        categories: Optional[list[str]] = None,
-        idempotency_key: Optional[str] = None,
-    ) -> HostedApplication:
-        """Publish an application to the marketplace with 1-3 ``categories``.
-
-        Without ``categories`` it goes live with one category the platform already has.
-        """
-        if categories is None:
-            categories = [self.existing_category_id()]
+    def publish(self, app_id: str) -> HostedApplication:
+        """Publish an application to the marketplace; publishing needs a category, so it sends one."""
         return self.service.marketplace_publish(
             app_id,
             self.get_app(app_id).etag,
-            idempotency_key=idempotency_key,
-            categories=categories,
-        )
-
-    def publish_as_given(
-        self, app_id: str, categories: Optional[list[str]]
-    ) -> HostedApplication:
-        """Publish with exactly ``categories`` (none at all when ``None``), for the requests the platform must refuse."""
-        return self.service.marketplace_publish(
-            app_id, self.get_app(app_id).etag, categories=categories
+            categories=[self.existing_category_id()],
         )
 
     def unpublish(self, app_id: str) -> HostedApplication:
@@ -263,19 +224,13 @@ class HostedApplicationUtils(BaseUtils):
         with ThreadPoolExecutor(max_workers=BULK_WORKERS) as pool:
             return list(pool.map(lambda _: self.create_app(project), range(count)))
 
-    def all_app_ids(
-        self, scope: str = "mine", q: str = "", **filters: Any
-    ) -> list[str]:
-        """Ids of every application the user lists in a scope, over all pages.
-
-        ``filters`` go to the server as they are; a list such as ``category=[...]`` repeats the
-        parameter once per value.
-        """
+    def all_app_ids(self, scope: str = "mine", q: str = "") -> list[str]:
+        """Ids of every application the user lists in a scope, over all pages."""
         ids: list[str] = []
         cursor = None
         while True:
             page = self.service.list_applications(
-                scope=scope, q=q, limit=CATALOG_PAGE_SIZE, cursor=cursor, **filters
+                scope=scope, q=q, limit=CATALOG_PAGE_SIZE, cursor=cursor
             )
             ids.extend(item.id for item in page.items)
             cursor = page.next_cursor

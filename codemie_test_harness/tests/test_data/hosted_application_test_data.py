@@ -23,7 +23,7 @@ import io
 import stat
 import zipfile
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable
 
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 
@@ -434,56 +434,3 @@ FIXED_CONTENT_HEADERS = {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
 }
-
-
-INVALID_REQUEST_CODE = "INVALID_REQUEST"
-INVALID_CATEGORIES_CODE = "INVALID_CATEGORIES"
-INVALID_FILTER_CODE = "INVALID_FILTER"
-IDEMPOTENCY_CONFLICT_CODE = "IDEMPOTENCY_CONFLICT"
-UNPROCESSABLE = 422
-CONFLICT = 409
-PUBLISHED_NEEDS_CATEGORY = "A published application needs at least one category"
-CATEGORY_IN_USE = "Cannot delete category"
-MAX_HOSTED_CATEGORIES = 3
-
-
-@dataclass(frozen=True)
-class PublishRefusal:
-    """Categories the platform refuses to publish with: the list (``None`` sends none at all),
-    the error code and a part of the message.
-
-    A malformed list is refused before its ids are looked up, so they need not exist.
-    """
-
-    id: str
-    categories: Optional[list[str]]
-    code: str
-    message_part: str
-
-
-PUBLISH_REFUSALS = [
-    PublishRefusal(
-        "no-categories", None, INVALID_REQUEST_CODE, "At least one category is required"
-    ),
-    PublishRefusal(
-        "empty-list", [], INVALID_REQUEST_CODE, "At least one category is required"
-    ),
-    PublishRefusal(
-        "more-than-three",
-        ["first", "second", "third", "fourth"],
-        INVALID_REQUEST_CODE,
-        "Maximum 3 categories allowed",
-    ),
-    PublishRefusal(
-        "duplicate",
-        ["same", "same"],
-        INVALID_REQUEST_CODE,
-        "category IDs must be unique",
-    ),
-    PublishRefusal(
-        "unknown-id",
-        ["autotest-no-such-category"],
-        INVALID_CATEGORIES_CODE,
-        "Invalid category IDs",
-    ),
-]
