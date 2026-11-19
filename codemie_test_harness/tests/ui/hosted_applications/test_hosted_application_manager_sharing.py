@@ -104,15 +104,14 @@ def test_manager_who_is_not_the_creator_is_offered_share_and_sees_who_has_access
     applications = HostedApplicationsPage(page).open_collection(
         view.collection, world.app_name
     )
-    applications.open_card_menu(world.app_name)
-    applications.should_offer_menu_items(SHARE_MENU_ITEM)
-    applications.choose_menu_item(SHARE_MENU_ITEM)
+    applications.open_card_menu(world.app_name).should_list_item(
+        SHARE_MENU_ITEM
+    ).choose_item(SHARE_MENU_ITEM)
     HostedShareDialog(page, world.app_name).should_be_open().should_list(grantee.email)
 
     details = HostedApplicationDetailsPage(page).open(world.app_id)
     details.should_list_shared_with(grantee.email)
-    details.open_overflow_menu(world.app_name)
-    details.should_offer_menu_items(SHARE_MENU_ITEM)
+    details.open_more_options_menu(world.app_name).should_list_item(SHARE_MENU_ITEM)
 
     HostedApplicationViewerPage(page).open(world.app_id).should_offer_share()
 
@@ -133,19 +132,19 @@ def test_platform_admin_menus_offer_suspend_and_no_revoke_share_link(
     applications = HostedApplicationsPage(page).open_collection(
         view.collection, world.app_name
     )
-    applications.open_card_menu(world.app_name)
-    applications.should_offer_menu_items(SUSPEND_MENU_ITEM)
-    applications.should_not_offer_menu_item(REVOKE_LINK_MENU_ITEM)
+    applications.open_card_menu(world.app_name).should_list_item(
+        SUSPEND_MENU_ITEM
+    ).should_not_list_item(REVOKE_LINK_MENU_ITEM)
 
     details = HostedApplicationDetailsPage(page).open(world.app_id)
-    details.open_overflow_menu(world.app_name)
-    details.should_offer_menu_items(SUSPEND_MENU_ITEM)
-    details.should_not_offer_menu_item(REVOKE_LINK_MENU_ITEM)
+    details.open_more_options_menu(world.app_name).should_list_item(
+        SUSPEND_MENU_ITEM
+    ).should_not_list_item(REVOKE_LINK_MENU_ITEM)
 
     viewer = HostedApplicationViewerPage(page).open(world.app_id)
-    viewer.open_actions_menu()
-    viewer.should_offer_menu_items(SUSPEND_MENU_ITEM)
-    viewer.should_not_offer_menu_item(REVOKE_LINK_MENU_ITEM)
+    viewer.open_actions_menu().should_list_item(SUSPEND_MENU_ITEM).should_not_list_item(
+        REVOKE_LINK_MENU_ITEM
+    )
 
 
 @pytest.mark.requires_capability(CAPABILITY)
@@ -163,7 +162,7 @@ def test_manager_who_is_not_the_creator_manages_people_and_the_link_in_the_share
     latecomer = world.people.user()
     reviewer = world.people.user(admin=True)
     details = HostedApplicationDetailsPage(page).open(world.app_id)
-    details.open_overflow_menu(world.app_name).choose_menu_item(SHARE_MENU_ITEM)
+    details.open_more_options_menu(world.app_name).choose_item(SHARE_MENU_ITEM)
     dialog = HostedShareDialog(page, world.app_name).should_be_open()
 
     dialog.search(person.email).should_offer(person.name)
@@ -176,7 +175,7 @@ def test_manager_who_is_not_the_creator_manages_people_and_the_link_in_the_share
         "the platform holds the grant the dialog made",
     )
 
-    details.open_overflow_menu(world.app_name).choose_menu_item(SHARE_MENU_ITEM)
+    details.open_more_options_menu(world.app_name).choose_item(SHARE_MENU_ITEM)
     dialog.should_list(person.email)
     dialog.remove(person.name).should_not_list(person.email).should_confirm_removal()
     assert_that(
@@ -213,8 +212,7 @@ def test_non_manager_is_offered_no_share_and_sees_the_signed_in_members_hint(
     applications = HostedApplicationsPage(page).open_collection(
         view.collection, world.app_name
     )
-    applications.open_card_menu(world.app_name)
-    applications.should_not_offer_menu_item(SHARE_MENU_ITEM)
+    applications.open_card_menu(world.app_name).should_not_list_item(SHARE_MENU_ITEM)
 
     details = HostedApplicationDetailsPage(page).open(world.app_id)
     details.should_offer_no_actions(world.app_name)

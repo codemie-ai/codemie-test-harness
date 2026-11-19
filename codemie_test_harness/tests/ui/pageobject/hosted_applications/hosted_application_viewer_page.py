@@ -19,6 +19,9 @@ import re
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.options_menu import (
+    OptionsMenu,
+)
 from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_page_base import (
     NEW_TAB_NAME,
     HostedPageBase,
@@ -42,6 +45,11 @@ class HostedApplicationViewerPage(HostedPageBase):
     def application_actions_button(self) -> Locator:
         """Button that opens the overflow menu of the viewer."""
         return self.page.get_by_role("button", name="Application actions")
+
+    @property
+    def menu_items(self) -> Locator:
+        """Every entry of the open overflow menu."""
+        return self.page.get_by_role("menuitem")
 
     @property
     def share_button(self) -> Locator:
@@ -75,9 +83,11 @@ class HostedApplicationViewerPage(HostedPageBase):
 
     @step
     def open_actions_menu(self):
-        """Open the overflow menu of the viewer."""
+        """Open the Application actions menu."""
         self.application_actions_button.click()
-        return self
+        menu = OptionsMenu(self.page)
+        menu.should_be_open()
+        return menu
 
     @step
     def click_share(self):
