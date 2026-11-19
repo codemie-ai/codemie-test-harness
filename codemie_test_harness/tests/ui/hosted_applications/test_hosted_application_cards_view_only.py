@@ -62,6 +62,7 @@ def share_with_recipient(ui_owner_apps, platform_user):
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_view_only_user_clicking_the_card_opens_the_viewer(
     page, ui_live_app, share_with_recipient
 ):
@@ -81,6 +82,7 @@ def test_view_only_user_clicking_the_card_opens_the_viewer(
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_view_only_user_clicking_the_card_without_a_live_version_opens_its_details(
     page, ui_empty_app, share_with_recipient
 ):
@@ -96,6 +98,7 @@ def test_view_only_user_clicking_the_card_without_a_live_version_opens_its_detai
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_card_menu_details_item_opens_details_for_a_view_only_user(
     page, ui_live_app, share_with_recipient
 ):
@@ -114,6 +117,7 @@ def test_card_menu_details_item_opens_details_for_a_view_only_user(
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_view_only_card_without_a_live_version_is_marked_and_cannot_open(
     page, ui_empty_app, share_with_recipient
 ):

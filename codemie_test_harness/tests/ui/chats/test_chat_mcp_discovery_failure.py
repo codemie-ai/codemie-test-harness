@@ -42,6 +42,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name, wait_fo
 
 @pytest.mark.mcp
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chat_shows_mcp_discovery_failure_warning(page, chat_with_untrusted_mcp_server):
     """@case error-message-silently-ignores-mcp_TC_001
 
@@ -65,6 +66,7 @@ def test_chat_shows_mcp_discovery_failure_warning(page, chat_with_untrusted_mcp_
 
 @pytest.mark.mcp
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chat_shows_two_untrusted_mcp_servers_each_in_own_row(
     page, chat_with_two_untrusted_mcp_servers
 ):
@@ -98,6 +100,7 @@ def test_chat_shows_two_untrusted_mcp_servers_each_in_own_row(
 
 @pytest.mark.mcp
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chat_sign_in_required_gate_unaffected_by_discovery_fix(
     page, chat_with_sign_in_required_mcp_server
 ):
@@ -122,6 +125,7 @@ def test_chat_sign_in_required_gate_unaffected_by_discovery_fix(
 
 @pytest.mark.mcp
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_chat_shows_figma_repro_discovery_failure_warning(
     page, client, created_assistant_cleanup, open_chat_for_assistant
 ):

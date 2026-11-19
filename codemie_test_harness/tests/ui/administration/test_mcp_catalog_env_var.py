@@ -35,6 +35,7 @@ def mcp_page(page):
 
 @pytest.mark.mcp
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_remove_only_environment_variable_from_catalog_server_persists_after_update(
     mcp_page, catalog_server
 ):

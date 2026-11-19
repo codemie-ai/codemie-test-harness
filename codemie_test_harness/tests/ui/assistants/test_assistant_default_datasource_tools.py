@@ -60,6 +60,7 @@ def second_file_datasource(datasource_utils, default_embedding_llm):
 @pytest.mark.assistant
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_form_lists_search_kb_selected_after_attaching_kb_datasource(
     page, assistant, file_datasource
 ):
@@ -82,6 +83,7 @@ def test_assistant_form_lists_search_kb_selected_after_attaching_kb_datasource(
 @pytest.mark.assistant
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_deselected_search_kb_stays_deselected_after_save_and_new_kb_datasource(
     page,
     assistant_factory,

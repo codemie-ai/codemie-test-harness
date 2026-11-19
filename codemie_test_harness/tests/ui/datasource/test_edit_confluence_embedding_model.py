@@ -57,6 +57,7 @@ def alternative_embedding_llm(
 @pytest.mark.confluence
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_confluence_datasource_keeps_selected_embedding_model_after_save(
     page,
     client,
