@@ -16,8 +16,9 @@
 
 A Deprecated model stays listed, marked, but cannot be picked for new work; a
 Disabled model is not listed. The status is set through the API before the chat
-opens and restored in a fixture teardown, so the tests run outside parallel mode
-(``not_for_parallel_run``).
+opens and restored in a fixture teardown. The status is platform-wide, so the tests cannot
+overlap other status tests.
+They carry ``xdist_group(name="model_status")``, so they run one after another on one worker.
 """
 
 import pytest
@@ -26,7 +27,7 @@ from codemie_sdk.models.llm import ModelStatus
 
 
 # @case platform-model-management_TC_013
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.chat
 @pytest.mark.llm
 @pytest.mark.ui
@@ -49,7 +50,7 @@ def test_chat_model_picker_marks_a_deprecated_model_and_blocks_it(
 
 
 # @case platform-model-management_TC_013
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.chat
 @pytest.mark.llm
 @pytest.mark.ui

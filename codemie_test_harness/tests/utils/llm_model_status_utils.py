@@ -15,11 +15,12 @@
 """Model status utilities.
 
 Thin wrapper over the admin model status and global default calls, plus the
-helpers the status tests share: picking a model that is safe to change, waiting
-until the model catalog shows a new status, and putting everything back.
+helpers the status tests share: picking a dedicated test model, waiting until
+the model catalog shows a new status, and putting everything back.
 
 The status and the global default are platform-wide: every test that changes
-one must restore it in a fixture teardown and run outside parallel mode.
+one must restore it in a fixture teardown and carry
+``xdist_group(name="model_status")`` so that such tests never overlap.
 """
 
 from codemie_sdk import CodeMieClient
@@ -36,6 +37,10 @@ from codemie_test_harness.tests.utils.base_utils import BaseUtils, poll_until
 from codemie_test_harness.tests.utils.logger_util import setup_logger
 
 logger = setup_logger(__name__)
+
+# Models the stand keeps for status tests carry this suffix in their label. Only
+# they are ever disabled or deprecated, so other tests keep every regular model.
+AUTOTEST_MODEL_LABEL_SUFFIX = "(Autotest)"
 
 # Statuses are served from a per-instance cache with a short lifetime, so a read
 # that lands on another instance can lag behind the write that preceded it.
@@ -139,16 +144,17 @@ class LlmModelStatusUtils(BaseUtils):
 
     # ── Test model selection and restore ──────────────────────────────────────
 
-    def pick_enabled_models(
+    def pick_autotest_models(
         self, count: int, *clients: CodeMieClient
     ) -> list[AdminLLMModel]:
-        """Chat models that are safe to change the status of.
+        """Dedicated test models whose status may be changed.
 
-        A model qualifies when it is Enabled, not a router, not the global default,
-        listed in the catalog of the admin and of every client in `clients`, and its
-        label is not part of any other model's label (so a row, picker option or
-        badge can be found by label alone). Cheapest first, premium last, so a chat
-        in a test costs as little as possible and works on a plain model.
+        Only models labelled "(Autotest)" qualify, so no regular model is ever
+        disabled or deprecated. A model qualifies when it is Enabled, not a router,
+        not the global default, listed in the catalog of the admin and of every
+        client in `clients`, and its label is not part of any other model's label
+        (so a row, picker option or badge can be found by label alone). Cheapest
+        first, so a chat in a test costs as little as possible.
 
         May return fewer than `count` models when the stand has none left.
         """
@@ -171,7 +177,8 @@ class LlmModelStatusUtils(BaseUtils):
         candidates = [
             entry
             for entry in entries
-            if entry.model_type == "chat"
+            if entry.label.endswith(AUTOTEST_MODEL_LABEL_SUFFIX)
+            and entry.model_type == "chat"
             and entry.enabled
             and entry.status == ModelStatus.ENABLED
             and entry.router_type is None
@@ -180,7 +187,6 @@ class LlmModelStatusUtils(BaseUtils):
         ]
         candidates.sort(
             key=lambda e: (
-                bool(e.is_premium),
                 e.cost.output if e.cost else float("inf"),
                 e.base_name,
             )

@@ -1206,24 +1206,25 @@ def llm_model_status_utils(client):
 
 @pytest.fixture
 def status_test_model(llm_model_status_utils, regular_client):
-    """An Enabled chat model that is safe to change the status of.
+    """An Enabled "(Autotest)" chat model whose status the test may change.
 
-    The status is platform-wide, so the model is put back to Enabled on teardown and
-    tests using it must be marked ``not_for_parallel_run``.
+    Only the dedicated test models are ever changed, never a regular model. The status
+    is platform-wide, so the model is put back to Enabled on teardown and tests using
+    it must carry ``xdist_group(name="model_status")``.
     """
-    models = llm_model_status_utils.pick_enabled_models(1, regular_client)
+    models = llm_model_status_utils.pick_autotest_models(1, regular_client)
     if not models:
-        pytest.skip("No chat model on this stand is safe to change the status of")
+        pytest.skip('No Enabled "(Autotest)" chat model on this stand')
     yield models[0]
     llm_model_status_utils.restore_enabled([models[0].base_name])
 
 
 @pytest.fixture
 def status_test_models(llm_model_status_utils, regular_client):
-    """Two Enabled chat models that are safe to change the status of (see ``status_test_model``)."""
-    models = llm_model_status_utils.pick_enabled_models(2, regular_client)
+    """Two Enabled "(Autotest)" chat models whose status the test may change (see ``status_test_model``)."""
+    models = llm_model_status_utils.pick_autotest_models(2, regular_client)
     if len(models) < 2:
-        pytest.skip("Fewer than two chat models on this stand are safe to change")
+        pytest.skip('Fewer than two Enabled "(Autotest)" chat models on this stand')
     yield models
     llm_model_status_utils.restore_enabled([m.base_name for m in models])
 

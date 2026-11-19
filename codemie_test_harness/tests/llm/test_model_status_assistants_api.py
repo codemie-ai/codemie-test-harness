@@ -49,7 +49,7 @@ def isolated_project_name(project):
 
 
 # @case platform-model-management_TC_006
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.api
 def test_deprecated_model_is_rejected_for_new_assistant(
@@ -75,7 +75,7 @@ def test_deprecated_model_is_rejected_for_new_assistant(
 
 
 # @case platform-model-management_TC_007
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.api
 def test_assistant_keeps_working_after_its_model_is_deprecated(
@@ -121,7 +121,7 @@ def test_assistant_keeps_working_after_its_model_is_deprecated(
 
 
 # @case platform-model-management_TC_008
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.api
 def test_assistant_on_disabled_model_runs_on_the_project_default_model(
@@ -160,7 +160,7 @@ def test_assistant_on_disabled_model_runs_on_the_project_default_model(
 
 
 # @case platform-model-management_TC_008
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.api
 def test_assistant_on_disabled_model_runs_on_the_global_default_without_a_project_default(

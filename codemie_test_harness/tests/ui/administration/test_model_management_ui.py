@@ -16,7 +16,8 @@
 
 The browser runs as the configured account, which is an administrator. A status
 changed here is platform-wide: the tests that change one restore it in a fixture
-teardown through the API and run outside parallel mode (``not_for_parallel_run``).
+teardown through the API. Those tests cannot overlap each other, so they share one worker.
+They carry ``xdist_group(name="model_status")``, so they run one after another on one worker.
 """
 
 import pytest
@@ -62,7 +63,7 @@ def test_admin_reaches_model_management_and_sees_the_admin_model_list(
 
 
 # @case platform-model-management_TC_011
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.ui
 @pytest.mark.parametrize("status", CHANGED_STATUSES, ids=lambda s: s.value)
@@ -89,7 +90,7 @@ def test_admin_changes_a_model_status_in_the_row_select_and_applies_it(
 
 
 # @case platform-model-management_TC_012
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.ui
 @pytest.mark.parametrize("status", CHANGED_STATUSES, ids=lambda s: s.value)
@@ -138,7 +139,7 @@ def test_management_list_filters_narrow_the_list_and_update_the_summary(
 
 
 # @case platform-model-management_TC_019
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.ui
 @pytest.mark.parametrize("status", CHANGED_STATUSES, ids=lambda s: s.value)

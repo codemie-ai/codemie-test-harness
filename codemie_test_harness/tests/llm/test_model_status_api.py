@@ -16,8 +16,9 @@
 
 An administrator sets a model to Enabled, Disabled or Deprecated; the status is
 stored once for the whole platform and every catalog reads it. Tests that change
-a status or the global default restore them in a fixture teardown and run outside
-parallel mode (``not_for_parallel_run``).
+a status or the global default restore them in a fixture teardown. The status and the
+default are platform-wide, so those tests cannot overlap each other.
+They carry ``xdist_group(name="model_status")``, so they run one after another on one worker.
 """
 
 import pytest
@@ -49,7 +50,7 @@ from codemie_test_harness.tests.test_data.llm_model_status_test_data import (
 
 
 # @case platform-model-management_TC_001
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.api
 @pytest.mark.parametrize(
@@ -82,7 +83,7 @@ def test_admin_sets_model_status_and_it_persists(
 
 
 # @case platform-model-management_TC_002
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.api
 @pytest.mark.parametrize("status", ALL_STATUSES, ids=lambda s: s.value)
@@ -103,7 +104,7 @@ def test_regular_user_catalog_reflects_persisted_status(
 
 
 # @case platform-model-management_TC_003
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.api
 def test_bulk_status_update_reports_per_item_results(
@@ -181,7 +182,7 @@ def test_non_admin_is_refused_on_model_status_routes(regular_client, call):
 
 
 # @case platform-model-management_TC_016
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.api
 @pytest.mark.parametrize("status", NON_SELECTABLE_STATUSES, ids=lambda s: s.value)
@@ -212,7 +213,7 @@ def test_global_default_rejects_non_selectable_model(
 
 
 # @case platform-model-management_TC_016
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.api
 def test_global_default_rejects_unknown_model(

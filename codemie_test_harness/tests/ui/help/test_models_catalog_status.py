@@ -15,7 +15,8 @@
 """UI tests for the status of a model in the Available models catalog (/help/models).
 
 The status is set through the API before the page opens and restored in a fixture
-teardown, so the tests run outside parallel mode (``not_for_parallel_run``).
+teardown. The status is platform-wide, so the tests cannot overlap other status tests.
+They carry ``xdist_group(name="model_status")``, so they run one after another on one worker.
 """
 
 import pytest
@@ -28,7 +29,7 @@ from codemie_test_harness.tests.ui.pageobject.available_models_page import (
 
 
 # @case platform-model-management_TC_014
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.help
 @pytest.mark.llm
 @pytest.mark.ui
@@ -45,7 +46,7 @@ def test_help_models_catalog_shows_a_deprecated_badge(
 
 
 # @case platform-model-management_TC_015
-@pytest.mark.not_for_parallel_run
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.help
 @pytest.mark.llm
 @pytest.mark.ui
