@@ -30,6 +30,12 @@ from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.pageobject.assistants.assistant_mcp_server import (
     AssistantMCPIntegrationModal,
 )
+from codemie_test_harness.tests.ui.test_data.mcp_discovery_failure_test_data import (
+    MCP_SERVER_UNAVAILABLE_BADGE,
+)
+
+# The tool-discovery request Step 2 sends when it opens and again on Retry.
+MCP_TOOLS_URL_PATTERN = "**/v1/assistants/mcp_tools"
 
 
 class MCPServersSection(BasePage):
@@ -49,6 +55,7 @@ class MCPServersSection(BasePage):
         """Initialize the MCP Servers section page object."""
         super().__init__(page)
         self.mcp_modal = AssistantMCPIntegrationModal(page)
+        self._held_mcp_tools_routes = []
 
     # =============================================================================
     # LOCATORS - MCP Servers Accordion
@@ -952,4 +959,90 @@ class MCPServersSection(BasePage):
         """
         expect(self.global_mode_button).to_have_attribute("aria-pressed", "true")
         expect(self.global_config_textarea).to_be_disabled()
+        return self
+
+    # =============================================================================
+    # LOCATORS - Discovery-failure auth gate (Step 2)
+    # =============================================================================
+    # MCPToolsSelectionStep.tsx renders a discovery_failed row with the same
+    # AssistantAuthGateRow used by the chat auth prompt: a role="status" badge
+    # (StatusBadge.tsx) and a "Retry" button that stays reachable alongside the
+    # tool controls when the server is unavailable.
+
+    @property
+    def mcp_tools_retry_button(self) -> Locator:
+        """Retry button shown in Step 2 while a discovery_failed row is present."""
+        return self.mcp_tools_dialog.get_by_role("button", name="Retry")
+
+    @property
+    def mcp_auth_gate_status_badges(self) -> Locator:
+        """Every 'Server unavailable' status badge inside the Step 2 dialog."""
+        return self.mcp_tools_dialog.locator(
+            f'[role="status"][aria-label="{MCP_SERVER_UNAVAILABLE_BADGE}"]'
+        )
+
+    def mcp_auth_gate_row_name(self, server_name: str) -> Locator:
+        """The server-name text of a discovery_failed row inside Step 2."""
+        return self.mcp_tools_dialog.get_by_text(server_name, exact=True)
+
+    # =============================================================================
+    # ACTION METHODS - Discovery-failure auth gate (Step 2)
+    # =============================================================================
+
+    @step
+    def click_mcp_tools_retry(self):
+        """Click Retry in Step 2 while a discovery_failed row is present."""
+        self.mcp_tools_retry_button.click()
+        return self
+
+    @step
+    def hold_mcp_tools_requests(self):
+        """Hold every tool-discovery request until ``release_held_mcp_tools_requests``,
+        so Step 2 stays in its loading state and a "cleared before re-fetch" check does
+        not race the re-render."""
+        self.page.route(
+            MCP_TOOLS_URL_PATTERN,
+            lambda route: self._held_mcp_tools_routes.append(route),
+        )
+        return self
+
+    @step
+    def release_held_mcp_tools_requests(self):
+        """Let the held tool-discovery requests through and stop holding new ones."""
+        for held in self._held_mcp_tools_routes:
+            held.continue_()
+        self._held_mcp_tools_routes = []
+        self.page.unroute(MCP_TOOLS_URL_PATTERN)
+        return self
+
+    # =============================================================================
+    # VERIFICATION METHODS - Discovery-failure auth gate (Step 2)
+    # =============================================================================
+
+    @step
+    def should_have_mcp_tools_discovery_failed_row_visible(
+        self, server_name: str, timeout: int = 30000
+    ):
+        """Verify a discovery_failed row's name and 'Server unavailable' badge render
+        in Step 2, and tool controls (the 'Use all available tools' checkbox) and the
+        Retry button both stay reachable alongside it.
+
+        ``timeout`` covers the discovery probe itself (recon-report.md: "the MCP
+        picker fetch takes a few seconds"), not just the default expect() wait.
+        """
+        expect(self.mcp_auth_gate_status_badges.first).to_be_visible(timeout=timeout)
+        expect(self.mcp_auth_gate_row_name(server_name)).to_be_visible()
+        expect(self.mcp_tools_use_all_tools_checkbox).to_be_visible()
+        expect(self.mcp_tools_use_all_tools_checkbox).to_be_enabled()
+        expect(self.mcp_tools_retry_button).to_be_visible()
+        return self
+
+    @step
+    def should_have_mcp_auth_gate_rows_cleared(self):
+        """Verify the discovery_failed row(s) are no longer rendered — Retry clears
+        them before re-fetching when every row was discovery_failed. Pair with
+        ``hold_mcp_tools_requests``: the re-fetch normally brings the rows straight
+        back, so without a held request this only passes if the check lands in the
+        gap."""
+        expect(self.mcp_auth_gate_status_badges).to_have_count(0)
         return self
