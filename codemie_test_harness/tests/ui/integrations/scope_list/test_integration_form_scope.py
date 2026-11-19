@@ -47,6 +47,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 )
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_create_opens_one_form_with_scope_first_taken_from_the_list_scope(
     page, list_scope
 ):
@@ -68,6 +69,7 @@ def test_create_opens_one_form_with_scope_first_taken_from_the_list_scope(
 # @case unified-integrations-list_TC_013
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_form_opened_with_scope_in_the_address_preselects_it(page):
     form_page = IntegrationFormPage(page)
 
@@ -97,6 +99,7 @@ def test_picking_dial_switches_scope_to_project_and_google_oauth_switches_back(p
 # @case unified-integrations-list_TC_017
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_saved_user_integration_keeps_the_filters_and_is_highlighted(
     page, project_admin_integrations, scoped_integrations
 ):
@@ -123,6 +126,7 @@ def test_saved_user_integration_keeps_the_filters_and_is_highlighted(
 # @case unified-integrations-list_TC_017
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_saved_project_integration_hidden_by_filters_is_shown_by_the_toast_action(
     page, default_project_member, project_admin_integrations, scoped_integrations
 ):
