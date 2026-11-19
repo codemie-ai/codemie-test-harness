@@ -368,6 +368,11 @@ def ingest_cli_sessions(
             otlp_logs = seed.otlp_logs(user.email)
             if otlp_logs:
                 user.analytics_utils.ingest_cli_otlp_logs(otlp_logs, project=project)
+            otlp_traces = seed.otlp_traces(user.email)
+            if otlp_traces:
+                user.analytics_utils.ingest_cli_otlp_traces(
+                    otlp_traces, project=project
+                )
 
     yield _ingest
 
