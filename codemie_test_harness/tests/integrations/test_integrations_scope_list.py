@@ -356,7 +356,6 @@ def test_filters_narrow_a_scoped_result(
 # @case unified-integrations-list_TC_005
 @pytest.mark.integration
 @pytest.mark.api
-@pytest.mark.oss_standalone
 def test_project_admin_scope_all_omits_project_budget_litellm_integrations(
     admin_client,
     default_project_member,
