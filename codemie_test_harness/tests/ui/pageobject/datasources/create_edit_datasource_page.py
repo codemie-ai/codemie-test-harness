@@ -66,6 +66,9 @@ class CreateEditDatasourcePage(BasePage):
     # integration before concluding that none was selected.
     INTEGRATION_AUTOSELECT_WAIT_MS = 5000
 
+    # How long to wait for the one-time 'Guided Tour Available' dialog on the edit form.
+    GUIDED_TOUR_WAIT_MS = 3000
+
     def __init__(self, page):
         super().__init__(page)
         self.sidebar = DataSourceSidebar(page)
@@ -324,6 +327,20 @@ class CreateEditDatasourcePage(BasePage):
     @property
     def embeddings_model_dropdown(self):
         return self.page.locator("span#embeddingsModel button")
+
+    @property
+    def embeddings_model_combobox(self):
+        """Picker field labelled 'Model used for embeddings'; holds the selected model."""
+        return self.page.get_by_role("combobox", name="Embeddings Model Type")
+
+    @property
+    def guided_tour_dismiss_button(self):
+        """'Maybe Later' button of the 'Guided Tour Available' dialog.
+
+        The dialog can appear on the first visit to the edit form and blocks
+        every click on the form until it is dismissed.
+        """
+        return self.page.get_by_role("button", name="Maybe Later")
 
     # -------------------------------
     # Confluence DataSource Type Elements
@@ -907,6 +924,29 @@ class CreateEditDatasourcePage(BasePage):
     def select_embeddings_model(self, value: str):
         self.embeddings_model_dropdown.click()
         self.dropdown_values(value).click()
+        return self
+
+    @step
+    def dismiss_guided_tour_if_shown(self):
+        """Dismiss the 'Guided Tour Available' dialog when it shows up.
+
+        The dialog appears unpredictably, so wait a bounded time for it; when it
+        never shows up there is nothing to dismiss.
+        """
+        try:
+            self.guided_tour_dismiss_button.wait_for(
+                state="visible", timeout=self.GUIDED_TOUR_WAIT_MS
+            )
+        except PlaywrightTimeoutError:
+            return self
+        self.guided_tour_dismiss_button.click()
+        expect(self.guided_tour_dismiss_button).to_be_hidden()
+        return self
+
+    @step
+    def should_see_selected_embeddings_model(self, label: str):
+        """Assert the embeddings model picker shows the given model label."""
+        expect(self.embeddings_model_combobox).to_have_value(label)
         return self
 
     # -------------------------------

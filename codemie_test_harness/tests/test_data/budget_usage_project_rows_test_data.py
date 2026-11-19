@@ -23,6 +23,7 @@ BUDGET_USAGE_ROW_KEYS = {
     "time_until_reset",
     "budget_limit",
     "total",
+    "is_shared_limit",
     "is_default",
 }
 
@@ -41,6 +42,7 @@ BUDGET_USAGE_COLUMN_IDS = [
     "time_until_reset",
     "budget_limit",
     "total",
+    "is_shared_limit",
 ]
 
 # Column ids of GET /v1/analytics/user-project-spending: the key column, then one per budget category.

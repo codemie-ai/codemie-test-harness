@@ -23,10 +23,6 @@ class ModelTypes(str, Enum):
     # Azure
     GPT_41 = "gpt-4.1"
     GPT_41_MINI = "gpt-4.1-mini"
-    O3_MINI = "o3-mini"
-    O3_2025_04_16 = "o3-2025-04-16"
-    O4_MINI_2025_04_16 = "o4-mini-2025-04-16"
-    O1 = "o1"
     GPT_5_2025_08_07 = "gpt-5-2025-08-07"
     GPT_5_NANO_2025_08_07 = "gpt-5-nano-2025-08-07"
     GPT_5_MINI_2025_08_07 = "gpt-5-mini-2025-08-07"
@@ -45,7 +41,6 @@ class ModelTypes(str, Enum):
     CLAUDE_SONNET_4_5_VERTEX = "claude-4-5-sonnet-vertex"
     GEMINI_3_FLASH = "gemini-3-flash"
     GEMINI_3_5_FLASH = "gemini-3.5-flash"
-    GEMINI_3_6_FLASH = "gemini-3.6-flash"
     GEMINI_3_7_FLASH = "gemini-3.7-flash"
     GEMINI_3_8_FLASH = "gemini-3.8-flash"
     GEMINI_4_ARGON = "gemini-4-argon"

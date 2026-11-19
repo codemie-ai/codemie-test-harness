@@ -16,7 +16,7 @@ import logging
 from time import sleep
 
 import pytest
-from hamcrest import assert_that, close_to, greater_than, none, not_none
+from hamcrest import assert_that, close_to, equal_to, greater_than, none, not_none
 
 from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
     publish_ready_content,
@@ -186,16 +186,16 @@ def test_project_member_spending_follows_budget_and_membership_lifecycle(
             close_to(personal_spend_after_phase1, 0.0001),
         )
         assert_that(
-            lite_llm_budget_utils.get_customer_info(
+            lite_llm_budget_utils.get_customer_spend(
                 f"{user2_email}_{DEFAULT_CLI_BUDGET_ID}"
             ),
-            none(),
+            equal_to(0),
         )
         assert_that(
-            lite_llm_budget_utils.get_customer_info(
+            lite_llm_budget_utils.get_customer_spend(
                 f"{user2_email}_{DEFAULT_PREMIUM_BUDGET_ID}"
             ),
-            none(),
+            equal_to(0),
         )
 
         # Phase 3 — User 2 unassigned, assistant published to marketplace
@@ -282,6 +282,10 @@ def test_cli_spending_reverts_to_personal_after_project_unassignment(
     default_llm,
     admin_project_utils,
 ):
+    # User 2 is a platform admin, so after the removal the named project is not rejected
+    # with 403: the header is ignored and the request is charged to the default project,
+    # which is the personal budget here because no default is assigned. The 403 for a
+    # regular user is covered in test_default_project_attribution.py.
     user2_email, _ = keycloak_user_2
     project_name, user2_id = lifecycle_project
     cli_customer_id = f"{user2_email}_{DEFAULT_CLI_BUDGET_ID}"
@@ -378,6 +382,10 @@ def test_premium_spending_reverts_to_personal_after_project_unassignment(
     project_budget_groups,
     admin_project_utils,
 ):
+    # User 2 is a platform admin, so after the removal the named project is not rejected
+    # with 403: the header is ignored and the request is charged to the default project,
+    # which is the personal budget here because no default is assigned. The 403 for a
+    # regular user is covered in test_default_project_attribution.py.
     user2_email, _ = keycloak_user_2
     project_name, user2_id = lifecycle_project
     premium_customer_id = f"{user2_email}_{DEFAULT_PREMIUM_BUDGET_ID}"
