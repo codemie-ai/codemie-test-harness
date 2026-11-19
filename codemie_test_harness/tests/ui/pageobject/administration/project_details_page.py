@@ -70,6 +70,11 @@ class ProjectDetailsPage(BasePage):
         return self.page.get_by_role("dialog")
 
     @property
+    def create_integration_button(self):
+        """'Create Integration' button of the Integrations tab."""
+        return self.page.get_by_role("button", name="Create Integration")
+
+    @property
     def members_tab(self):
         """'Members' tab in the 'Project sections' tablist."""
         return self.page.get_by_role("tab", name="Members")
@@ -314,6 +319,29 @@ class ProjectDetailsPage(BasePage):
         expect(self.integrations_tab).to_be_visible(timeout=15000)
         self.integrations_tab.click()
         expect(self.integrations_tab).to_have_attribute("aria-selected", "true")
+        return self
+
+    @step
+    def click_create_integration(self):
+        """Click 'Create Integration' on the Integrations tab; opens the form at Project scope."""
+        self.create_integration_button.click()
+        return self
+
+    @step
+    def should_be_on_integrations_tab(self, project_name: str):
+        """The Integrations tab of the project is the open tab."""
+        expect(self.page).to_have_url(
+            re.compile(rf"/projects/{re.escape(project_name)}/integrations$")
+        )
+        expect(self.integrations_tab).to_have_attribute("aria-selected", "true")
+        return self
+
+    @step
+    def should_show_toast(self, text: str):
+        """A toast in the status region shows the text."""
+        expect(
+            self.page.get_by_role("status").filter(has_text=text).first
+        ).to_be_visible()
         return self
 
     @step

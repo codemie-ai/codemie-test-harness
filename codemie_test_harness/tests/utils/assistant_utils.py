@@ -79,6 +79,8 @@ class AssistantUtils(BaseUtils):
         enabled_builtin_subagents=None,
         tool_permissions: ToolPermissionsConfig | None = None,
         prompt_variables=None,
+        effort=None,
+        disabled_context_tools=None,
     ):
         # Generate a random name if assistant_name is not provided
         assistant_name = assistant_name if assistant_name else get_random_name()
@@ -101,6 +103,7 @@ class AssistantUtils(BaseUtils):
             mcp_servers=mcp_servers,
             top_p=top_p,
             temperature=temperature,
+            effort=effort,
             assistant_ids=list(assistant_ids) if assistant_ids else [],
             categories=list(categories) if categories else [],
             conversation_starters=list(conversation_starters)
@@ -109,6 +112,9 @@ class AssistantUtils(BaseUtils):
             enabled_builtin_subagents=enabled_builtin_subagents,
             tool_permissions=tool_permissions,
             prompt_variables=list(prompt_variables) if prompt_variables else [],
+            disabled_context_tools=list(disabled_context_tools)
+            if disabled_context_tools
+            else None,
         )
 
         response = self.client.assistants.create(request)
@@ -135,6 +141,8 @@ class AssistantUtils(BaseUtils):
         enabled_builtin_subagents=None,
         tool_permissions: ToolPermissionsConfig | None = None,
         prompt_variables=None,
+        effort=None,
+        disabled_context_tools=None,
     ):
         # Generate a random name if assistant_name is not provided
         assistant_name = assistant_name if assistant_name else get_random_name()
@@ -164,6 +172,8 @@ class AssistantUtils(BaseUtils):
             enabled_builtin_subagents=enabled_builtin_subagents,
             tool_permissions=tool_permissions,
             prompt_variables=prompt_variables,
+            effort=effort,
+            disabled_context_tools=disabled_context_tools,
         )
 
         return wait_for_entity(
@@ -184,6 +194,8 @@ class AssistantUtils(BaseUtils):
         output_schema=None,
         extract_failed_tools=False,
         return_stream_metadata=False,
+        attributes=None,
+        save_history=None,
     ):
         user_prompt = f"{user_prompt}; REQUEST_UUID: {uuid.uuid4()};"
         chat_request = AssistantChatRequest(
@@ -196,6 +208,8 @@ class AssistantUtils(BaseUtils):
             history=history,
             output_schema=output_schema,
             metadata={"langfuse_traces_enabled": LANGFUSE_TRACES_ENABLED},
+            attributes=attributes,
+            save_history=save_history,
         )
 
         response = self.client.assistants.chat(
@@ -502,6 +516,55 @@ class AssistantUtils(BaseUtils):
         return self.client.assistants.update(
             assistant_id=assistant_id, request=update_request
         )
+
+    def update_assistant_effort(self, assistant_id: str, effort: Optional[str]):
+        """Set (or clear, with ``None``) the effort of an existing assistant.
+
+        Sends the stored required fields unchanged; ``effort=None`` is passed
+        explicitly so the SDK sends a JSON null and the stored effort is cleared.
+        """
+        assistant = self.get_assistant_by_id(assistant_id)
+        return self.update_assistant(
+            assistant_id,
+            AssistantUpdateRequest(
+                name=assistant.name,
+                description=assistant.description,
+                system_prompt=assistant.system_prompt,
+                project=assistant.project,
+                llm_model_type=assistant.llm_model_type,
+                effort=effort,
+            ),
+        )
+
+    def update_assistant_disabled_context_tools(
+        self, assistant_id: str, disabled_context_tools: list[str]
+    ):
+        """Replace the deselected default tools of an existing assistant.
+
+        Sends the stored required fields unchanged. An empty list is sent as is
+        (the SDK drops only ``None``), so it clears the stored list.
+        """
+        assistant = self.get_assistant_by_id(assistant_id)
+        return self.update_assistant(
+            assistant_id,
+            AssistantUpdateRequest(
+                name=assistant.name,
+                description=assistant.description,
+                system_prompt=assistant.system_prompt,
+                project=assistant.project,
+                llm_model_type=assistant.llm_model_type,
+                disabled_context_tools=disabled_context_tools,
+            ),
+        )
+
+    def list_assistant_versions(self, assistant_id: str):
+        return self.client.assistants.list_versions(assistant_id)
+
+    def get_assistant_version(self, assistant_id: str, version_number: int):
+        return self.client.assistants.get_version(assistant_id, version_number)
+
+    def compare_assistant_versions(self, assistant_id: str, v1: int, v2: int):
+        return self.client.assistants.compare_versions(assistant_id, v1, v2)
 
     def rollback_to_version(
         self, assistant_id: str, version_number: int, change_notes: Optional[str] = None

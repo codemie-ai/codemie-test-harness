@@ -69,6 +69,7 @@ class AssistantModel(BaseModel):
     skill_ids: Optional[List[str]] = None
     tools: Optional[List[ToolModel]] = None
     mcp_servers: Optional[List[MCPServerDetails]] = None
+    disabled_context_tools: Optional[List[str]] = None
 
 
 class StateModel(BaseModel):

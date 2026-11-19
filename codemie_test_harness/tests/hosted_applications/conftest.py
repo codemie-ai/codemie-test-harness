@@ -26,12 +26,14 @@ import pytest
 from codemie_test_harness.tests.test_data.hosted_application_test_data import (
     html_artifact,
 )
+from codemie_test_harness.tests.utils.activity_utils import ActivityUtils
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.hosted_application_utils import (
     HostedApplicationUtils,
     HostedUser,
 )
+from codemie_test_harness.tests.utils.hosted_sharing_utils import SharingWorld
 from codemie_test_harness.tests.utils.user_lifecycle_utils import (
     new_logged_in_user,
     new_user,
@@ -136,3 +138,23 @@ def external_account_hosted(keycloak_utils):
     email = user_email("external")
     with new_user(keycloak_utils, email, admin=False, external=True) as password:
         yield get_client(username=email, password=password).hosted_applications
+
+
+@pytest.fixture
+def sharing_world(hosted_people):
+    """Factory: a live application of a plain user in a fresh shared project; see ``SharingWorld``.
+
+    ``shared`` and ``published`` shape the application; the people in each role are created on
+    first use and removed after the test.
+    """
+
+    def create(shared: bool = True, published: bool = False) -> SharingWorld:
+        return SharingWorld(hosted_people, shared=shared, published=published)
+
+    return create
+
+
+@pytest.fixture
+def hosted_activity(maintainer_client):
+    """Activity log of the platform, read by a maintainer created for the test."""
+    return ActivityUtils(maintainer_client)
