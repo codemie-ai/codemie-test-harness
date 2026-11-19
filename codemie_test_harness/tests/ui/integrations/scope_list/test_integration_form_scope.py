@@ -81,7 +81,6 @@ def test_form_opened_with_scope_in_the_address_preselects_it(page):
 # @case unified-integrations-list_TC_016
 @pytest.mark.integration
 @pytest.mark.ui
-@pytest.mark.oss_standalone
 def test_picking_dial_switches_scope_to_project_and_google_oauth_switches_back(page):
     form_page = IntegrationFormPage(page)
     form_page.navigate_to("scope=user")

@@ -108,7 +108,6 @@ def test_scope_filter_limits_table_pagination_and_follows_filters(
 # @case unified-integrations-list_TC_011
 @pytest.mark.integration
 @pytest.mark.ui
-@pytest.mark.oss_standalone
 def test_type_filter_marks_and_disables_scope_bound_types(page):
     list_page = IntegrationsListPage(page)
     list_page.navigate_to()

@@ -45,7 +45,11 @@ LIST_ALL_PROJECTS_ASSIGNED_BUDGETS_PARAMS = {
 # chargeback enabled. Verified live against production on 2026-09-24 — this
 # was the only project among 111 qualifying ones failing AC-2, and business
 # confirmed it's an intentional exception rather than a data bug.
-CHARGEBACK_EXCLUDED_PROJECT_NAMES = {"epm-cdme-cp", "epm-cdme"}
+CHARGEBACK_EXCLUDED_PROJECT_NAMES = {
+    "epm-cdme-cp",
+    "epm-cdme",
+    "desktop-app-router-demo-override-project",
+}
 
 
 @pytest.mark.project

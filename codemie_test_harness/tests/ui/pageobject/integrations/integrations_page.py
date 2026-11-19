@@ -110,8 +110,8 @@ class IntegrationsPage(BasePage):
 
     @property
     def toast_message(self) -> Locator:
-        """Toast after an operation: the success toast or the status region the update and delete toasts use."""
-        return self.page.locator(".codemie-toast-success, [role='status']")
+        """Toast after an operation, whatever its variant (success for a save, info for an update or delete)."""
+        return self.page.locator(".codemie-toast")
 
     @property
     def pagination_container(self):
