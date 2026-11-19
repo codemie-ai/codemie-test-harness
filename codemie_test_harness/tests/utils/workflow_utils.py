@@ -349,6 +349,7 @@ class WorkflowUtils(BaseUtils):
         user_input: str = "",
         conversation_id: Optional[str] = None,
         modify_prompt: bool = True,
+        attributes: Optional[dict] = None,
     ):
         """
         Create a workflow execution and return as soon as it appears, without
@@ -365,6 +366,7 @@ class WorkflowUtils(BaseUtils):
             conversation_id: Optional conversation ID for chat mode
             modify_prompt: When True (default), prepends a unique nonce to bust
                 prompt caching.
+            attributes: Optional run attributes (string keys and values) fixed for this execution.
 
         Returns:
             Tuple of (execution, executions_service) where ``execution`` is the
@@ -379,6 +381,7 @@ class WorkflowUtils(BaseUtils):
         executions_service.create(
             user_input=user_input,
             conversation_id=conversation_id,
+            attributes=attributes,
         )
 
         execution = wait_for_entity(
@@ -390,7 +393,11 @@ class WorkflowUtils(BaseUtils):
         return execution, executions_service
 
     def send_workflow_execution_request(
-        self, workflow_id, user_input: str = "", attributes: Optional[dict] = None
+        self,
+        workflow_id,
+        user_input: str = "",
+        attributes: Optional[dict] = None,
+        conversation_id: Optional[str] = None,
     ):
         """Send one workflow execution request and return the raw creation response.
 
@@ -398,7 +405,9 @@ class WorkflowUtils(BaseUtils):
         modifies the prompt, so a rejected request surfaces as the HTTPError it raises.
         """
         return self.client.workflows.executions(workflow_id).create(
-            user_input=user_input, attributes=attributes
+            user_input=user_input,
+            attributes=attributes,
+            conversation_id=conversation_id,
         )
 
     def run_workflow(

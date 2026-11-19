@@ -28,9 +28,6 @@ from codemie_test_harness.tests.test_data.run_attributes_test_data import (
     WORKFLOW_TASK,
 )
 from codemie_test_harness.tests.utils.base_utils import assert_error_details
-from codemie_test_harness.tests.utils.run_attributes_utils import (
-    assert_error_message,
-)
 
 
 @pytest.mark.parametrize("invalid", CHAT_INVALID_ATTRIBUTES)
@@ -52,7 +49,7 @@ def test_chat_with_invalid_attributes_is_rejected_and_nothing_runs(
             attributes=invalid.attributes,
         )
 
-    assert_error_message(rejected.value.response, 422, invalid.message)
+    assert_error_details(rejected.value.response, 422, invalid.message, field="message")
     with pytest.raises(HTTPError) as not_found:
         conversation_utils.get_conversation_by_id(conversation_id)
     assert_error_details(
@@ -77,7 +74,7 @@ def test_workflow_execution_with_invalid_attributes_is_rejected_and_nothing_runs
             workflow.id, user_input=RUN_PROMPT, attributes=invalid.attributes
         )
 
-    assert_error_message(rejected.value.response, 422, invalid.message)
+    assert_error_details(rejected.value.response, 422, invalid.message, field="message")
     assert_that(
         workflow_utils.get_executions(workflow),
         empty(),

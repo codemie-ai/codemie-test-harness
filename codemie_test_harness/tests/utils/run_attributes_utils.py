@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Helpers for the run attributes tests: the two kinds of run and the error message check."""
+"""Helpers for the run attributes tests: the two kinds of run that carry attributes."""
 
 import uuid
 
-from hamcrest import assert_that, contains_string, equal_to
+from codemie_sdk.models.analytics import TabularResponse
 
 from codemie_test_harness.tests.test_data.run_attributes_test_data import (
+    ANALYTICS_MAX_PAGES,
     ANALYTICS_PAGE_SIZE,
     ANALYTICS_PERIOD,
     ANALYTICS_ROW_INTERVAL,
@@ -26,22 +27,6 @@ from codemie_test_harness.tests.test_data.run_attributes_test_data import (
     RUN_PROMPT,
 )
 from codemie_test_harness.tests.utils.base_utils import poll_until
-
-
-def assert_error_message(response, status_code, message):
-    """The response has ``status_code`` and its error message contains ``message``.
-
-    The message of a body validation error is prefixed with the field and the validator
-    ("attributes: Value error, ..."), so it is matched as a part, not as the whole.
-    """
-    assert_that(
-        response.status_code, equal_to(status_code), "Status code is not expected."
-    )
-    assert_that(
-        response.json()["error"]["message"],
-        contains_string(message),
-        "Error message is not expected.",
-    )
 
 
 def usage_counts(rows: list[dict]) -> dict[str, tuple[int, int]]:
@@ -70,28 +55,55 @@ class RunSurface:
     def stored_attributes(self, run_id: str):
         raise NotImplementedError
 
-    def analytics_rows(self, attributes: str | dict | None = None) -> list[dict]:
+    def analytics_page(
+        self, attributes: str | dict | None = None, page: int = 0
+    ) -> TabularResponse:
         raise NotImplementedError
+
+    def analytics_rows(self, attributes: str | dict | None = None) -> list[dict]:
+        """All rows of the endpoint narrowed by ``attributes``, following the pages."""
+        rows: list[dict] = []
+        for page in range(ANALYTICS_MAX_PAGES):
+            response = self.analytics_page(attributes, page)
+            rows.extend(response.data.rows)
+            has_more = (
+                response.pagination.has_more
+                if response.pagination
+                else len(response.data.rows) == ANALYTICS_PAGE_SIZE
+            )
+            if not has_more:
+                break
+        return rows
 
     def run_ids(self, attributes: str | dict | None = None) -> set[str]:
         return {row[self.id_column] for row in self.analytics_rows(attributes)}
 
-    def wait_for_run_ids(self, expected: set[str], attributes=None) -> set[str]:
-        """Poll until the rows narrowed by ``attributes`` are exactly the ``expected`` runs.
+    def wait_for_run_ids_by_filter(
+        self, expected_by_filter: list[tuple[str | dict | None, set[str]]]
+    ) -> list[set[str]]:
+        """Poll until every filter lists exactly its expected runs, all checked in one poll.
 
-        Returns the last ids seen, so a mismatch is reported by the caller's assertion.
+        Returns the ids last seen per filter, in order, so a mismatch is reported by the
+        caller's assertions. One poll keeps the wait bounded by ``ANALYTICS_ROW_TIMEOUT``
+        however many filters there are.
         """
+        expected = [run_ids for _, run_ids in expected_by_filter]
         return poll_until(
-            lambda: self.run_ids(attributes),
-            lambda run_ids: run_ids == expected,
+            lambda: [self.run_ids(attributes) for attributes, _ in expected_by_filter],
+            lambda seen: seen == expected,
             timeout=ANALYTICS_ROW_TIMEOUT,
             interval=ANALYTICS_ROW_INTERVAL,
         )
 
-    def wait_for_row(self, run_id: str) -> dict | None:
-        """Poll until the analytics row of ``run_id`` appears; None when it never does."""
+    def wait_for_row(self, run_id: str, attributes=None) -> dict | None:
+        """Poll until the analytics row of ``run_id`` appears; None when it never does.
+
+        ``attributes`` narrows the search to runs that carry them, which keeps the row
+        within reach on a stand where other runs are going on; a run without attributes
+        is found by following the pages instead.
+        """
         rows = poll_until(
-            self.analytics_rows,
+            lambda: self.analytics_rows(attributes),
             lambda found: any(row[self.id_column] == run_id for row in found),
             timeout=ANALYTICS_ROW_TIMEOUT,
             interval=ANALYTICS_ROW_INTERVAL,
@@ -123,14 +135,14 @@ class ChatRunSurface(RunSurface):
     def stored_attributes(self, run_id: str):
         return self._conversation_utils.get_conversation_by_id(run_id).attributes
 
-    def analytics_rows(self, attributes=None) -> list[dict]:
-        response = self._analytics_utils.get_assistants_requests(
+    def analytics_page(self, attributes=None, page: int = 0) -> TabularResponse:
+        return self._analytics_utils.get_assistants_requests(
             assistant_id=self.assistant.id,
             time_period=ANALYTICS_PERIOD,
+            page=page,
             per_page=ANALYTICS_PAGE_SIZE,
             attributes=attributes,
         )
-        return response.data.rows
 
 
 class WorkflowRunSurface(RunSurface):
@@ -154,11 +166,12 @@ class WorkflowRunSurface(RunSurface):
             self.workflow.id, run_id
         ).attributes
 
-    def analytics_rows(self, attributes=None) -> list[dict]:
-        # Rows come newest activity first, so an execution that just ran is on the first page.
-        response = self._analytics_utils.get_workflows_executions(
+    def analytics_page(self, attributes=None, page: int = 0) -> TabularResponse:
+        # The endpoint lists the executions of the whole tenant, so a run is found by
+        # its attributes or by following the pages, not by its place in the first one.
+        return self._analytics_utils.get_workflows_executions(
             time_period=ANALYTICS_PERIOD,
+            page=page,
             per_page=ANALYTICS_PAGE_SIZE,
             attributes=attributes,
         )
-        return response.data.rows

@@ -30,6 +30,9 @@ ANALYTICS_ROW_TIMEOUT = 180
 ANALYTICS_ROW_INTERVAL = 5
 ANALYTICS_PERIOD = "last_hour"
 ANALYTICS_PAGE_SIZE = 100
+ANALYTICS_MAX_PAGES = 20
+# Runs of a test, the wait for the analytics rows included, may outlast the global timeout.
+MULTI_RUN_TIMEOUT = 900
 
 MAX_KEYS = 4
 MAX_VALUE_LENGTH = 128
@@ -102,6 +105,7 @@ CHAT_INVALID_ATTRIBUTES = [
     ),
     pytest.param(
         InvalidAttributes(
+            # Sent as the JSON escape \ud800: requests serializes a body with ensure_ascii.
             attributes={get_attribute_key(): "lone-surrogate-\ud800"},
             message="value must not contain unpaired surrogates",
         ),
@@ -122,12 +126,14 @@ WORKFLOW_INVALID_ATTRIBUTES = [
 
 # The run kinds a run surface is built for, by the analytics endpoint that lists their rows.
 RUN_SURFACES = [
-    pytest.param("chat", id="assistants-requests"),
-    pytest.param("workflow", id="workflows-executions"),
+    pytest.param("chat", id="assistants-requests", marks=pytest.mark.conversations),
+    pytest.param("workflow", id="workflows-executions", marks=pytest.mark.workflow),
 ]
-RUN_SURFACES_BY_KIND = [
-    pytest.param("chat", id="chat"),
-    pytest.param("workflow", id="workflow"),
+
+# The endpoints that take the attributes filter and answer a malformed one with 422.
+ATTRIBUTES_FILTER_ENDPOINTS = [
+    pytest.param("get_assistants_requests", id="assistants-requests"),
+    pytest.param("get_workflows_executions", id="workflows-executions"),
 ]
 
 ATTRIBUTES_USAGE_KEY_ERRORS = [

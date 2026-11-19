@@ -30,6 +30,7 @@ from codemie_sdk.models.analytics import (
     CliAnalyticsSessionsResponse,
     CliAnalyticsUsersResponse,
     PaginatedAnalyticsQueryParams,
+    RunAttributesQueryParams,
     SummariesResponse,
     TabularResponse,
     UsersListResponse,
@@ -119,7 +120,7 @@ class AnalyticsUtils(BaseUtils):
         Returns:
             TabularResponse with one row per assistant request
         """
-        params = PaginatedAnalyticsQueryParams(assistant_id=assistant_id, **kwargs)
+        params = RunAttributesQueryParams(assistant_id=assistant_id, **kwargs)
         return self.client.analytics.get_assistants_requests(params)
 
     def get_workflows_executions(self, **kwargs) -> TabularResponse:
@@ -131,7 +132,7 @@ class AnalyticsUtils(BaseUtils):
         Returns:
             TabularResponse with one row per workflow execution
         """
-        params = PaginatedAnalyticsQueryParams(**kwargs)
+        params = RunAttributesQueryParams(**kwargs)
         return self.client.analytics.get_workflows_executions(params)
 
     def get_attributes_usage(
@@ -146,7 +147,7 @@ class AnalyticsUtils(BaseUtils):
         Returns:
             TabularResponse with one row per attribute value
         """
-        params = PaginatedAnalyticsQueryParams(**kwargs)
+        params = RunAttributesQueryParams(**kwargs)
         return self.client.analytics.get_attributes_usage(attribute_key, params)
 
     def get_workflows(self, **kwargs) -> TabularResponse:

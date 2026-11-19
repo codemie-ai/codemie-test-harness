@@ -20,7 +20,6 @@ import pytest
 from hamcrest import assert_that, equal_to, greater_than, has_length
 from requests import HTTPError
 
-from codemie_test_harness.tests import PROJECT
 from codemie_test_harness.tests.test_data.run_attributes_test_data import (
     ACCESS_DENIED_ON_CONVERSATION,
     ATTRIBUTES_IMMUTABLE_MESSAGE,
@@ -31,9 +30,6 @@ from codemie_test_harness.tests.test_data.run_attributes_test_data import (
 )
 from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
 from codemie_test_harness.tests.utils.base_utils import assert_error_details
-from codemie_test_harness.tests.utils.run_attributes_utils import (
-    assert_error_message,
-)
 
 
 @pytest.mark.analytics
@@ -65,22 +61,40 @@ def test_assistant_chat_attributes_are_stored_on_the_conversation(
 @pytest.mark.analytics
 @pytest.mark.workflow
 @pytest.mark.api
-def test_workflow_execution_attributes_are_stored_and_kept_after_completion(
+def test_workflow_execution_attributes_are_stored_from_the_start_and_kept_after_completion(
     assistant_factory, workflow_with_assistant, workflow_utils
 ):
     # @case allow-callers-to-associate-custom_TC_002
     workflow = workflow_with_assistant(assistant_factory.create(), WORKFLOW_TASK)
     attributes = get_attributes(count=2)
 
-    # Returns the execution read back after it has finished.
-    completed_execution = workflow_utils.create_workflow_execution(
+    # Returns the execution as soon as it is listed, usually before it has finished.
+    started, executions_service = workflow_utils.create_workflow_execution_no_wait(
         workflow.id, user_input=RUN_PROMPT, attributes=attributes
+    )
+    execution_id = started.execution_id
+    workflow_utils.wait_for_completion(executions_service, execution_id)
+    completed = executions_service.get(execution_id)
+    listed = next(
+        row
+        for row in executions_service.list(per_page=20)
+        if row.execution_id == execution_id
     )
 
     assert_that(
-        completed_execution.attributes,
+        started.attributes,
+        equal_to(attributes),
+        "the execution must carry the attributes from the moment it is listed",
+    )
+    assert_that(
+        completed.attributes,
         equal_to(attributes),
         "the execution must keep the attributes it was started with after it finished",
+    )
+    assert_that(
+        listed.attributes,
+        equal_to(attributes),
+        "the executions list must show the attributes of a finished execution",
     )
 
 
@@ -109,7 +123,12 @@ def test_attributes_of_a_conversation_with_history_cannot_be_changed(
             attributes=get_attributes(),
         )
 
-    assert_error_message(exc_info.value.response, 422, ATTRIBUTES_IMMUTABLE_MESSAGE)
+    assert_error_details(
+        exc_info.value.response,
+        422,
+        ATTRIBUTES_IMMUTABLE_MESSAGE,
+        field="message",
+    )
     conversation = conversation_utils.get_conversation_by_id(conversation_id)
     assert_that(
         conversation.attributes,
@@ -122,21 +141,16 @@ def test_attributes_of_a_conversation_with_history_cannot_be_changed(
 @pytest.mark.conversations
 @pytest.mark.api
 def test_other_user_cannot_set_attributes_on_an_unreadable_conversation(
-    assistant_factory,
-    assistant_utils,
-    conversation_utils,
-    client,
-    user_utils,
-    non_admin_user,
+    assistant_utils, conversation_utils, shared_assistant_member
 ):
     """A user without access to a conversation cannot chat on it, and cannot change its attributes.
 
-    The second user's chat on the owner's conversation is refused with 403 by the existing
-    conversation access check, while the same user chats on a conversation of their own with
-    the same assistant. The owner's attributes and original turns stay as they were.
+    The second user may use the assistant (the fixture checks it), yet their chat on the
+    owner's conversation is refused with 403 by the existing conversation access check.
+    The owner's attributes and original turns stay as they were.
     """
     # @case allow-callers-to-associate-custom_TC_011
-    created_assistant = assistant_factory.create()
+    created_assistant, other_user = shared_assistant_member
     conversation_id = str(uuid.uuid4())
     owner_attributes = get_attributes()
     assistant_utils.ask_assistant(
@@ -146,18 +160,8 @@ def test_other_user_cannot_set_attributes_on_an_unreadable_conversation(
         attributes=owner_attributes,
     )
     history_before = conversation_utils.get_conversation_by_id(conversation_id).history
-    _, other_user_id, other_client = non_admin_user
-    # The other user may chat with the assistant, but has no access to the owner's conversation.
-    user_utils.assign_user_to_project(other_user_id, PROJECT)
-    client.assistants.share(created_assistant.id, [other_user_id])
-    other_assistant_utils = AssistantUtils(other_client)
+    other_assistant_utils = AssistantUtils(other_user.client)
 
-    other_assistant_utils.ask_assistant(
-        created_assistant,
-        RUN_PROMPT,
-        conversation_id=str(uuid.uuid4()),
-        attributes=get_attributes(),
-    )
     with pytest.raises(HTTPError) as rejected:
         other_assistant_utils.ask_assistant(
             created_assistant,

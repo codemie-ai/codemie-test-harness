@@ -23,30 +23,32 @@ from codemie_test_harness.tests.test_data.run_attributes_test_data import (
     ANALYTICS_PERIOD,
     ANALYTICS_ROW_INTERVAL,
     ANALYTICS_ROW_TIMEOUT,
+    ATTRIBUTES_FILTER_ENDPOINTS,
     ATTRIBUTES_USAGE_KEY_ERRORS,
     INVALID_FILTER_MESSAGE,
     MALFORMED_FILTER,
+    MULTI_RUN_TIMEOUT,
     RUN_SURFACES,
-    RUN_SURFACES_BY_KIND,
     get_attribute_key,
     get_attribute_value,
     get_attributes,
 )
-from codemie_test_harness.tests.utils.base_utils import poll_until
-from codemie_test_harness.tests.utils.run_attributes_utils import (
-    assert_error_message,
-    usage_counts,
+from codemie_test_harness.tests.utils.base_utils import (
+    assert_error_details,
+    poll_until,
 )
+from codemie_test_harness.tests.utils.run_attributes_utils import usage_counts
 
 
 @pytest.mark.analytics
+@pytest.mark.conversations
 @pytest.mark.api
 def test_analytics_request_row_exposes_the_attributes_of_the_chat(chat_surface):
     # @case allow-callers-to-associate-custom_TC_005
     attributes = get_attributes(count=2)
     conversation_id = chat_surface.start(attributes)
 
-    row = chat_surface.wait_for_row(conversation_id)
+    row = chat_surface.wait_for_row(conversation_id, attributes)
 
     assert_that(row, not_none(), "the request of the chat must reach the analytics")
     assert_that(
@@ -64,7 +66,7 @@ def test_analytics_execution_row_exposes_the_attributes_of_the_run(workflow_surf
     attributes = get_attributes(count=2)
     execution_id = workflow_surface.start(attributes)
 
-    row = workflow_surface.wait_for_row(execution_id)
+    row = workflow_surface.wait_for_row(execution_id, attributes)
 
     assert_that(
         row, not_none(), "the execution must reach the workflow executions analytics"
@@ -79,6 +81,7 @@ def test_analytics_execution_row_exposes_the_attributes_of_the_run(workflow_surf
 @pytest.mark.parametrize("run_surface", RUN_SURFACES, indirect=True)
 @pytest.mark.analytics
 @pytest.mark.api
+@pytest.mark.timeout(MULTI_RUN_TIMEOUT)
 def test_attributes_filter_returns_only_matching_runs(run_surface):
     """Three runs share one key: value A, value B, and value A with a second attribute.
 
@@ -92,11 +95,19 @@ def test_attributes_filter_returns_only_matching_runs(run_surface):
     run_b = run_surface.start({key: value_b})
     run_a_with_extra = run_surface.start({key: value_a, extra_key: extra_value})
 
-    matching_a = run_surface.wait_for_run_ids({run_a, run_a_with_extra}, {key: value_a})
-    matching_a_and_extra = run_surface.wait_for_run_ids(
-        {run_a_with_extra}, {key: value_a, extra_key: extra_value}
+    filter_a = {key: value_a}
+    filter_a_and_extra = {key: value_a, extra_key: extra_value}
+    filter_b = {key: value_b}
+
+    matching_a, matching_a_and_extra, matching_b = (
+        run_surface.wait_for_run_ids_by_filter(
+            [
+                (filter_a, {run_a, run_a_with_extra}),
+                (filter_a_and_extra, {run_a_with_extra}),
+                (filter_b, {run_b}),
+            ]
+        )
     )
-    matching_b = run_surface.wait_for_run_ids({run_b}, {key: value_b})
 
     assert_that(
         matching_a,
@@ -113,13 +124,26 @@ def test_attributes_filter_returns_only_matching_runs(run_surface):
         equal_to({run_b}),
         "the filter must tell two values of the same key apart",
     )
+
+
+@pytest.mark.parametrize("endpoint", ATTRIBUTES_FILTER_ENDPOINTS)
+@pytest.mark.analytics
+@pytest.mark.api
+def test_malformed_attributes_filter_is_rejected(analytics_utils, endpoint):
+    # @case allow-callers-to-associate-custom_TC_007
     with pytest.raises(HTTPError) as rejected:
-        run_surface.analytics_rows(MALFORMED_FILTER)
-    assert_error_message(rejected.value.response, 422, INVALID_FILTER_MESSAGE)
+        getattr(analytics_utils, endpoint)(attributes=MALFORMED_FILTER)
+
+    assert_error_details(
+        rejected.value.response, 422, INVALID_FILTER_MESSAGE, field="message"
+    )
 
 
 @pytest.mark.analytics
+@pytest.mark.conversations
+@pytest.mark.workflow
 @pytest.mark.api
+@pytest.mark.timeout(MULTI_RUN_TIMEOUT)
 def test_attributes_usage_groups_runs_by_the_values_of_one_key(
     chat_surface, workflow_surface, analytics_utils
 ):
@@ -169,10 +193,10 @@ def test_attributes_usage_rejects_a_missing_or_malformed_key(
     with pytest.raises(HTTPError) as rejected:
         analytics_utils.get_attributes_usage(attribute_key)
 
-    assert_error_message(rejected.value.response, 422, message)
+    assert_error_details(rejected.value.response, 422, message, field="message")
 
 
-@pytest.mark.parametrize("run_surface", RUN_SURFACES_BY_KIND, indirect=True)
+@pytest.mark.parametrize("run_surface", RUN_SURFACES, indirect=True)
 @pytest.mark.analytics
 @pytest.mark.api
 def test_run_without_attributes_has_null_attributes_on_the_record_and_in_analytics(

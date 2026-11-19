@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Fixtures for the run attributes tests: a chat and a workflow to start runs with."""
+"""Fixtures for the run attributes tests: a chat and a workflow to start runs with, a user to share with."""
 
 import pytest
 
+from codemie_test_harness.tests import PROJECT
 from codemie_test_harness.tests.test_data.run_attributes_test_data import (
     WORKFLOW_TASK,
 )
@@ -48,3 +49,24 @@ def workflow_surface(
 def run_surface(request):
     """The surface named by the indirect parameter: ``chat`` or ``workflow``."""
     return request.getfixturevalue(f"{request.param}_surface")
+
+
+@pytest.fixture
+def shared_assistant_member(assistant_factory, client, user_utils, platform_user):
+    """A project member who may use an assistant of the owner, and nothing else of the owner's.
+
+    Yields ``(assistant, member)``. The membership and the share are taken back on exit,
+    whether or not the user is deleted afterwards.
+    """
+    assistant = assistant_factory.create()
+    user_utils.assign_user_to_project(platform_user.user_id, PROJECT)
+    try:
+        client.assistants.share(assistant.id, [platform_user.user_id])
+        try:
+            # Fails the setup, not the test, when the share did not give access.
+            platform_user.client.assistants.get(assistant.id)
+            yield assistant, platform_user
+        finally:
+            client.assistants.revoke_share(assistant.id, [platform_user.user_id])
+    finally:
+        user_utils.remove_user_from_project(platform_user.user_id, PROJECT)
