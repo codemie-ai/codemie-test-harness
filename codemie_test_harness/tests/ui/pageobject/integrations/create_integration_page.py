@@ -26,6 +26,9 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.integrations.integrations_list_page import (
+    labelled,
+)
 from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestData,
 )
@@ -41,7 +44,7 @@ class CreateIntegrationPage(BasePage):
     # Header elements
     @property
     def page_title(self) -> Locator:
-        """Page title element showing 'New User Integration'."""
+        """Page title element showing 'New Integration'."""
         return self.page.locator("h1.text-lg")
 
     @property
@@ -1564,14 +1567,21 @@ class CreateIntegrationPage(BasePage):
     def should_be_on_create_user_integration_page(self):
         """Verify that the user is on the create user integration page."""
         expect(self.page).to_have_url("/integrations/user/new")
-        expect(self.page_title).to_have_text("New User Integration")
+        expect(self.page_title).to_have_text("New Integration")
         return self
 
     @step
     def should_be_on_create_project_integration_page(self):
         """Verify that the user is on the create project integration page."""
         expect(self.page).to_have_url("/integrations/project/new")
-        expect(self.page_title).to_have_text("New Project Integration")
+        expect(self.page_title).to_have_text("New Integration")
+        return self
+
+    @step
+    def should_be_on_new_integration_form(self):
+        """Verify that the user is on the New Integration form opened from the list's button."""
+        expect(self.page).to_have_url(re.compile(r"/integrations/new(\?|$)"))
+        expect(self.page_title).to_have_text("New Integration")
         return self
 
     @step
@@ -1703,8 +1713,36 @@ class CreateIntegrationPage(BasePage):
 
     @step
     def should_see_dropdown_option(self, selection):
-        option = self.page.get_by_role("option", name=selection, exact=True)
+        """The open Credential Type list offers the type, matched by its label text.
+
+        An option may carry a scope badge ('User only') and a hint ('Switches Scope to User')
+        next to the label, so its accessible name is longer than the label.
+        """
+        expect(self._credential_type_option(selection)).to_be_visible()
+
+    def _credential_type_option(self, label: str) -> Locator:
+        """Option of the open Credential Type list whose label is the given text."""
+        return labelled(self.page.get_by_role("option"), label)
+
+    @step
+    def should_see_dropdown_option_badge(self, label: str, badge: str):
+        """The option shows the scope badge next to its label."""
+        expect(self._credential_type_option(label)).to_contain_text(badge)
+        return self
+
+    @step
+    def should_see_dropdown_option_hint(self, label: str, hint: str):
+        """The option shows the hint next to its label."""
+        expect(self._credential_type_option(label)).to_contain_text(hint)
+        return self
+
+    @step
+    def should_not_see_dropdown_option_hint(self, label: str, hint: str):
+        """The option shows no such hint: it does not change the form's Scope."""
+        option = self._credential_type_option(label)
         expect(option).to_be_visible()
+        expect(option).not_to_contain_text(hint)
+        return self
 
     # ====================
     # TEST CONNECTION METHODS

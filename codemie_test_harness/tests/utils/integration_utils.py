@@ -235,6 +235,34 @@ class IntegrationUtils(BaseUtils):
     ):
         return self.client.integrations.list(setting_type, page, per_page, filters)
 
+    def list_combined(
+        self,
+        scope: Optional[str] = "all",
+        page: int = 0,
+        per_page: int = 10,
+        filters: Optional[Dict[str, Any] | str] = None,
+    ):
+        """One page of integrations across scopes, with the pagination of the whole result.
+
+        Thin wrapper around ``client.integrations.list_combined`` (GET /v1/settings).
+        ``scope=None`` sends no scope; ``filters`` may be a raw string to send a malformed value.
+        """
+        return self.client.integrations.list_combined(
+            scope=scope, page=page, per_page=per_page, filters=filters
+        )
+
+    def delete_integrations_by_alias(self, alias: str):
+        """Delete every integration of either scope this client lists under ``alias``.
+
+        Cleanup for rows a UI flow created: only the alias is known, not the scope or the id.
+        """
+        rows = self.list_combined(
+            scope="all", per_page=100, filters={"search": alias}
+        ).data
+        for row in rows:
+            if row.alias == alias:
+                self.delete_integration_if_exists(row)
+
     def transfer_settings(
         self,
         source_project_name: str,

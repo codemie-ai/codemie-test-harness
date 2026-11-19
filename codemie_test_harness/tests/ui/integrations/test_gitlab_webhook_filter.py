@@ -43,6 +43,9 @@ from codemie_test_harness.tests.ui.pageobject.integrations.integrations_page imp
 from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestDataFactory,
 )
+from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    SAVED_TOAST,
+)
 
 
 @pytest.mark.sanity
@@ -158,9 +161,7 @@ def test_gitlab_mr_filter_selection_persists_after_save_and_reload(
 
     create_integration_page.create_integration()
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
-    )
+    integrations_page.should_see_saved_message(SAVED_TOAST)
 
     edit_integration_page = EditIntegrationPage(page)
     edit_integration_page.navigate_to_edit_integration(
