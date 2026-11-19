@@ -42,6 +42,7 @@ def ui_login_user(platform_user):
 # @case unified-integrations-list_TC_009
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_member_sees_only_own_user_integrations_and_no_scope_filter(
     page,
     platform_user,
@@ -76,6 +77,7 @@ def test_member_sees_only_own_user_integrations_and_no_scope_filter(
 # @case unified-integrations-list_TC_015
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_member_sees_project_scope_and_dial_disabled_on_the_create_form(page):
     form_page = IntegrationFormPage(page)
 
