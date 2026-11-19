@@ -79,6 +79,7 @@ def test_delete_integration_with_confirmation(page: Page):
     # Wait for integration to be created
     integrations_page.wait_for_page_load()
     integrations_page.should_see_saved_message(SAVED_TOAST)
+    integrations_page.close_toasts()
     integrations_page.should_not_see_message()
 
     # Act - Delete the integration

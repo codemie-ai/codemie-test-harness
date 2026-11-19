@@ -660,9 +660,9 @@ class CreateIntegrationPage(BasePage):
         success text, distinguishing it from an error toast that shares the same
         CSS selector structure.
         """
-        toast_header = self.page.locator(".codemie-toast .codemie-toast-header")
+        toast_header = self.page.locator(".codemie-toast-success, .codemie-toast-info")
         expect(toast_header).to_be_visible(timeout=10000)
-        expect(toast_header).to_contain_text("successfully", ignore_case=True)
+        expect(toast_header).to_contain_text("Integration saved", ignore_case=True)
         return self
 
     @step
