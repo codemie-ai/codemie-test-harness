@@ -50,13 +50,17 @@ class ChatFolderSetup:
         if _key(folder_name) not in self._preexisting:
             self._owned_folders.add(_key(folder_name))
 
-    def register_folder(self, folder_name: str) -> str:
-        """Register an empty folder. Skips the test when the account already has it."""
+    def _skip_if_registered(self, folder_name: str):
+        """Skip the test when the account already had the folder before the test."""
         if _key(folder_name) in self._preexisting:
             pytest.skip(
                 f"Folder '{folder_name}' is already registered on the account; "
                 "the test does not touch folders it did not create"
             )
+
+    def register_folder(self, folder_name: str) -> str:
+        """Register an empty folder. Skips the test when the account already has it."""
+        self._skip_if_registered(folder_name)
         self._owned_folders.add(_key(folder_name))
         self._utils.create_folder(folder_name)
         return folder_name
@@ -77,8 +81,12 @@ class ChatFolderSetup:
 
         The backend sets the chat's import source from the agent's client header and
         registers the folder named in ``folder_name`` (the agent's folder by default).
+        Skips the test when the account already had that folder: a real agent folder
+        would be listed or offered next to the synced chats and fail the checks for
+        reasons unrelated to the product change.
         """
         folder_name = folder_name or agent.folder
+        self._skip_if_registered(folder_name)
         self._claim_folder(folder_name)
         chat_id = str(uuid.uuid4())
         self._owned_chats.append(chat_id)

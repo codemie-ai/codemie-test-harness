@@ -133,7 +133,7 @@ def test_synced_gemini_chats_appear_in_one_gemini_entry(page, folder_setup):
     folders.open_chat(first_chat_id)
     folders.open_folders_section()
 
-    folders.should_list_single_entry(GEMINI.label, GEMINI.group_key)
+    folders.should_list_single_entry(GEMINI.label, GEMINI.group_key, GEMINI.folder)
     folders.should_contain_chat(GEMINI.group_key, first_chat_id)
     folders.should_contain_chat(GEMINI.group_key, second_chat_id)
     folders.should_not_list_folder(custom_folder_key(GEMINI.folder))
@@ -151,7 +151,7 @@ def test_synced_agent_chat_appears_in_one_entry(page, folder_setup, agent):
     folders.open_chat(chat_id)
     folders.open_folders_section()
 
-    folders.should_list_single_entry(agent.label, agent.group_key)
+    folders.should_list_single_entry(agent.label, agent.group_key, agent.folder)
     folders.should_contain_chat(agent.group_key, chat_id)
     folders.should_not_list_folder(custom_folder_key(agent.folder))
 
@@ -167,7 +167,7 @@ def test_synced_claude_chat_appears_in_claude_cli_entry(page, folder_setup):
     folders.open_chat(chat_id)
     folders.open_folders_section()
 
-    folders.should_list_single_entry(CLAUDE.label, CLAUDE.group_key)
+    folders.should_list_single_entry(CLAUDE.label, CLAUDE.group_key, CLAUDE.folder)
     folders.should_contain_chat(CLAUDE.group_key, chat_id)
     folders.should_not_list_folder(custom_folder_key(CLAUDE.folder))
 
@@ -186,7 +186,9 @@ def test_synced_copilot_chat_appears_in_one_entry_for_any_folder_spelling(
     folders.open_chat(chat_id)
     folders.open_folders_section()
 
-    folders.should_list_single_entry(COPILOT_CLI.label, COPILOT_CLI.group_key)
+    folders.should_list_single_entry(
+        COPILOT_CLI.label, COPILOT_CLI.group_key, folder_name
+    )
     folders.should_contain_chat(COPILOT_CLI.group_key, chat_id)
     folders.should_not_list_folder(custom_folder_key(folder_name))
 
@@ -212,7 +214,7 @@ def test_imported_chat_has_no_folder_action_and_stays_in_agent_entry(
     folders.should_not_offer_move_to_folder_item()
     folders.close_chat_menu()
 
-    folders.should_list_single_entry(agent.label, agent.group_key)
+    folders.should_list_single_entry(agent.label, agent.group_key, agent.folder)
     folders.should_contain_chat(agent.group_key, chat_id)
     folders.should_not_list_folder(custom_folder_key(agent.folder))
     folders.should_not_contain_chat(custom_folder_key(custom_folder), chat_id)

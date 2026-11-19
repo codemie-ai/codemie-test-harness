@@ -29,10 +29,11 @@ is scrolled to it, and "no such entry" can only be asserted after scanning the w
 import re
 from urllib.parse import quote
 
+from hamcrest import assert_that, equal_to
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
-from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.chats.chats_sidebar import ChatsSidebar
 
 
 def custom_folder_key(folder_name: str) -> str:
@@ -57,8 +58,72 @@ _SCROLL_FOLDER_LIST_JS = """
 """
 
 
-class ChatFoldersSection(BasePage):
-    """The sidebar Folders accordion, its entries and the chat Move popup."""
+# True once the rows rendered in the folder list cover the visible part of its scroll box.
+# The list is virtualized: rows outside the window are replaced by an aria-hidden spacer before
+# and after the accordion, so a spacer on one side means the window does not start / end the
+# list there and the row on that side must reach the edge of the view (within a margin).
+_FOLDER_LIST_COVERS_VIEW_JS = """
+() => {
+  const entry = document.querySelector('a[role="treeitem"][data-folder]');
+  if (!entry) return false;
+  let box = entry.parentElement;
+  while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) {
+    box = box.parentElement;
+  }
+  const accordion = entry.closest('.p-accordion');
+  const wrapper = accordion && accordion.parentElement;
+  if (!box || !wrapper) return false;
+  const rows = accordion.querySelectorAll(':scope > .p-accordion-tab[data-index]');
+  if (!rows.length) return true;  // not virtualized: every folder is rendered
+  const view = box.getBoundingClientRect();
+  const first = rows[0].getBoundingClientRect();
+  const last = rows[rows.length - 1].getBoundingClientRect();
+  const margin = 24;
+  const topCovered = wrapper.firstElementChild === accordion || first.top <= view.top + margin;
+  const bottomCovered =
+    wrapper.lastElementChild === accordion || last.bottom >= view.bottom - margin;
+  return topCovered && bottomCovered;
+}
+"""
+
+# [key, visible name] of every rendered folder entry.
+_FOLDER_ENTRY_NAMES_JS = """
+entries => entries.map(entry => [
+  entry.getAttribute('data-folder'),
+  (entry.querySelector('p[id^="folder-name-"]')?.textContent ?? '').trim(),
+])
+"""
+
+
+# True when a matching entry sits inside the visible part of the folder list. Only rows in
+# view are guaranteed to stay rendered: a row that is merely in the overscan can be dropped
+# by the next virtualizer update, so "is in the DOM" is not a stable sign of "is revealed".
+_ENTRY_IN_VIEW_JS = """
+entries => entries.some(entry => {
+  let box = entry.parentElement;
+  while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) {
+    box = box.parentElement;
+  }
+  if (!box) return true;
+  const view = box.getBoundingClientRect();
+  const row = entry.getBoundingClientRect();
+  return row.bottom > view.top && row.top < view.bottom;
+})
+"""
+
+
+def _normalized_folder_name(name: str) -> str:
+    """A folder name as the frontend matches agent folders: trimmed, lower case, '-' as '_'."""
+    return name.strip().lower().replace("-", "_")
+
+
+class ChatFoldersSection(ChatsSidebar):
+    """The sidebar Folders accordion, its entries and the chat Move popup.
+
+    The accordion's own widget (header button, toggle, Create Folder button) is the one
+    ``ChatsSidebar`` already locates, so it is inherited; only what that class lacks is
+    added here: the folder entries, their virtualized list, the chat menu and Move popup.
+    """
 
     _opened_chat_id: str | None = None
 
@@ -66,18 +131,19 @@ class ChatFoldersSection(BasePage):
 
     @property
     def folders_header(self) -> Locator:
-        """Folders accordion header.
+        """Folders accordion header, the treeitem that carries ``aria-expanded``.
+
+        Derived from ``ChatsSidebar.folders_section_button`` (the header's inner row), so
+        a change to how the section is located is made in one place. The state lives on
+        the enclosing treeitem, which the inherited locator does not expose.
 
         It starts expanded, then the sidebar opens the section holding the current chat once
         the chat list has loaded (Recent Chats for a chat outside any folder), which
         collapses it.
         """
-        return self.page.get_by_role("treeitem", name="Folders Create Folder")
-
-    @property
-    def folders_header_label(self) -> Locator:
-        """The "Folders" label inside the accordion header, the click target that toggles it."""
-        return self.folders_header.get_by_text("Folders", exact=True)
+        return self.folders_section_button.locator(
+            "xpath=ancestor::*[@role='treeitem'][1]"
+        )
 
     # ==================== FOLDER ENTRIES ====================
 
@@ -171,11 +237,12 @@ class ChatFoldersSection(BasePage):
         return self.folder_entries.first.evaluate(_SCROLL_FOLDER_LIST_JS, position)
 
     def _wait_for_list_render(self):
-        """Let the virtualized list render the rows of the new scroll position."""
-        self.page.evaluate(
-            "() => new Promise(done => requestAnimationFrame("
-            "() => requestAnimationFrame(done)))"
-        )
+        """Wait until the rows of the current scroll position are in the DOM.
+
+        A count of zero gives ``expect`` nothing to retry, so every scanned page first has
+        to show positive proof of rendering: rows that reach both edges of the view.
+        """
+        self.page.wait_for_function(_FOLDER_LIST_COVERS_VIEW_JS)
 
     def _scan_folder_list(self):
         """Yield once per page of the folder list, top to bottom, with that page rendered.
@@ -193,9 +260,12 @@ class ChatFoldersSection(BasePage):
             self._wait_for_list_render()
 
     def _reveal_folder(self, key: str):
-        """Scroll the folder list until the entry is rendered (stays put once it is)."""
+        """Scroll the folder list until the entry is in view, where it stays rendered.
+
+        Wherever an earlier scan left the list, the search starts again from the top.
+        """
         for _ in self._scan_folder_list():
-            if self.folder_entry(key).count():
+            if self.folder_entry(key).evaluate_all(_ENTRY_IN_VIEW_JS):
                 return
 
     # ==================== NAVIGATION ====================
@@ -219,7 +289,7 @@ class ChatFoldersSection(BasePage):
         if self._opened_chat_id:
             expect(self.chat_item(self._opened_chat_id)).to_be_visible()
         if self.folders_header.get_attribute("aria-expanded") != "true":
-            self.folders_header_label.click()
+            self.toggle_folders_section()
         expect(self.folders_header).to_have_attribute("aria-expanded", "true")
         return self
 
@@ -299,12 +369,29 @@ class ChatFoldersSection(BasePage):
         return self
 
     @step
-    def should_list_single_entry(self, label: str, key: str):
-        """Verify exactly one entry is labelled ``label`` and it is the ``key`` group."""
-        entries = self.entries_labelled(label)
-        expect(entries).to_have_count(1)
-        expect(entries).to_have_attribute(
-            "data-folder", re.compile(rf"^{re.escape(key)}$", re.IGNORECASE)
+    def should_list_single_entry(
+        self, label: str, key: str, *registered_folder_names: str
+    ):
+        """Verify, across the whole folder list, exactly one entry stands for the agent.
+
+        An entry counts when its visible name is the agent's ``label`` or one of the
+        registered folder names (each compared case-insensitively, with '-' read as '_'),
+        so an empty duplicate named after the folder is found next to the real group.
+        The one entry must be the ``key`` group.
+        """
+        names = {_normalized_folder_name(n) for n in (label, *registered_folder_names)}
+        entries = {}
+        for _ in self._scan_folder_list():
+            entries.update(self.folder_entries.evaluate_all(_FOLDER_ENTRY_NAMES_JS))
+        matching = sorted(
+            entry_key
+            for entry_key, name in entries.items()
+            if _normalized_folder_name(name) in names
+        )
+        assert_that(
+            [m.lower() for m in matching],
+            equal_to([key.lower()]),
+            f"Folder entries named {sorted(names)} across the whole list",
         )
         return self
 
