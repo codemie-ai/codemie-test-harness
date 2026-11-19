@@ -32,7 +32,7 @@ import re
 from decimal import ROUND_HALF_UP, Decimal
 from urllib.parse import parse_qs, urlparse
 
-from hamcrest import assert_that, equal_to, not_none
+from hamcrest import assert_that, close_to, equal_to, not_none
 from playwright.sync_api import expect
 from reportportal_client import step
 
@@ -68,7 +68,11 @@ class PersonalSpendingPage(BasePage):
     # The usage block of a Total cell.
     LIMIT_LABEL_PATTERN = re.compile(r"^(Personal limit|Available to you|User limit)$")
     PERCENTAGE_PATTERN = re.compile(r"^(\d+(\.\d+)?%|-)$")
-    SPENDING_PATTERN = re.compile(r"^(Your spending|Spending):")
+    SPENDING_PATTERN = re.compile(r"^Your spending:")
+    BAR_WIDTH_PATTERN = re.compile(r"(?:^|;)\s*width:\s*([^%;\s]+)%")
+    BAR_WIDTH_TOLERANCE = 1e-6
+    # How long a tooltip that must not appear is given to show up after the hover.
+    TOOLTIP_ABSENCE_WINDOW_S = 1.0
     AVAILABLE_PATTERN = re.compile(r"^Available:")
     RESPONSE_TIMEOUT_MS = 30000
 
@@ -119,8 +123,9 @@ class PersonalSpendingPage(BasePage):
         return self.rows.nth(index).get_by_role("cell")
 
     def row_named(self, name: str):
-        """The body row whose label cell holds exactly this project name."""
-        return self.rows.filter(has=self.page.get_by_text(name, exact=True))
+        """The body row whose label cell holds this project name, with or without the DEFAULT badge."""
+        label = re.compile(rf"^{re.escape(name)}(\s*default)?$", re.IGNORECASE)
+        return self.rows.filter(has=self.page.get_by_text(label))
 
     def usage_cell(self, name: str):
         """The Total cell, holding the usage block, of the row with this project name."""
@@ -131,8 +136,8 @@ class PersonalSpendingPage(BasePage):
         return self.usage_cell(name).get_by_text(self.LIMIT_LABEL_PATTERN)
 
     def info_icon(self, name: str):
-        """Info icon beside the limit label; only a shared limit has one."""
-        return self.limit_label(name).get_by_role("img")
+        """Info icon on the limit label line; only a shared limit has one."""
+        return self.usage_label_line(name).locator("svg, img, [role='img']")
 
     def usage_percentages(self, name: str):
         """Every percentage text of the row's usage block; the progress bar adds none."""
@@ -337,20 +342,35 @@ class PersonalSpendingPage(BasePage):
         return self
 
     @staticmethod
-    def format_bar_width(total: float | None) -> str:
-        """Inline width of the bar fill: the total clamped to 0..100, as JS prints the number."""
-        return f"{min(max(total or 0, 0), 100):g}%"
+    def expected_bar_width(total: float | None) -> float:
+        """Width of the bar fill in percent: the total clamped to 0..100."""
+        return float(min(max(total or 0, 0), 100))
+
+    def _bar_width(self, name: str) -> float | None:
+        """Width in percent from the inline style of the bar fill, None until it carries one."""
+        style = self.usage_bar_fill(name).get_attribute("style") or ""
+        match = self.BAR_WIDTH_PATTERN.search(style)
+        return float(match.group(1)) if match else None
 
     @step
     def should_show_usage_bar(self, api_row: dict):
-        """Verify the progress bar of the row's usage block is filled to the API row's total."""
+        """Verify the progress bar of the row's usage block is filled to the API row's total.
+
+        The width is read from the style attribute and compared as a number: JS prints the full
+        value, so it is not matched as text.
+        """
         name = api_row["project_name"]
+        expected = self.expected_bar_width(api_row["total"])
         expect(self.usage_bar_fill(name), f"bar fill of {name}").to_have_count(1)
-        expect(self.usage_bar_fill(name)).to_have_attribute(
-            "style",
-            re.compile(
-                rf"(^|;)\s*width:\s*{re.escape(self.format_bar_width(api_row['total']))}\s*(;|$)"
-            ),
+        width = poll_until(
+            lambda: self._bar_width(name),
+            lambda value: value is not None
+            and abs(value - expected) <= self.BAR_WIDTH_TOLERANCE,
+        )
+        assert_that(
+            width,
+            close_to(expected, self.BAR_WIDTH_TOLERANCE),
+            f"bar fill width of {name}",
         )
         return self
 
@@ -436,10 +456,20 @@ class PersonalSpendingPage(BasePage):
 
     @step
     def should_not_show_shared_limit_tooltip(self, names: list[str]):
-        """Verify none of these rows has an info icon, and no shared-budget tooltip is shown."""
+        """Verify none of these rows has an info icon, and hovering their limit label shows no shared-budget tooltip."""
         for name in names:
             expect(self.info_icon(name), f"info icon of {name}").to_have_count(0)
-        expect(self.shared_limit_tooltip).to_have_count(0)
+            # The tooltip exists only while hovered, so hover the label before checking it is absent.
+            self.limit_label(name).hover()
+            shown = poll_until(
+                self.shared_limit_tooltip.count,
+                lambda count: count > 0,
+                timeout=self.TOOLTIP_ABSENCE_WINDOW_S,
+                interval=0.1,
+            )
+            assert_that(
+                shown, equal_to(0), f"shared-budget tooltips on hover of {name}"
+            )
         return self
 
     @step
