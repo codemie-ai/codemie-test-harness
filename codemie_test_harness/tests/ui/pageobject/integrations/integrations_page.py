@@ -104,9 +104,14 @@ class IntegrationsPage(BasePage):
         )
 
     @property
+    def success_toast(self) -> Locator:
+        """Success toast after a save."""
+        return self.page.locator(".codemie-toast-success")
+
+    @property
     def toast_message(self) -> Locator:
-        """Toast message after operation."""
-        return self.page.locator(".codemie-toast-info")
+        """Toast after an operation: the success toast or the status region the update and delete toasts use."""
+        return self.page.locator(".codemie-toast-success, [role='status']")
 
     @property
     def pagination_container(self):
@@ -400,9 +405,7 @@ class IntegrationsPage(BasePage):
 
         The list confirms a save with a success toast, no longer the info toast.
         """
-        expect(
-            self.page.locator(".codemie-toast-success").filter(has_text=message).first
-        ).to_be_visible()
+        expect(self.success_toast.filter(has_text=message).first).to_be_visible()
         return self
 
     @step
@@ -462,18 +465,17 @@ class IntegrationsPage(BasePage):
         Args:
             message (str, optional): Specific message to verify
         """
-        expect(self.toast_message).to_be_visible()
-        if message:
-            expect(self.toast_message).to_contain_text(message)
+        toast = self.toast_message.filter(has_text=message).first
+        expect(toast).to_be_visible()
         return self
 
     @step
     def should_not_see_message(self):
         """
-        Verify that a toast message is not displayed.
+        Verify that no success toast is displayed.
         """
         self.page.mouse.move(0, 0)
-        expect(self.toast_message).to_be_hidden()
+        expect(self.success_toast).to_have_count(0)
         return self
 
     def _integration_row_by_alias(self, alias: str):
