@@ -58,15 +58,16 @@ def test_details_and_viewer_menus_have_no_second_details_entry(page, ui_live_app
     details.should_be_on_details_route(app.id)
 
     details_menu = details.open_more_options_menu(app.name)
-    details_menu.should_not_list_item("Details")
+    details_menu.should_list_items_matching("details", [])
     details_menu.close()
     details.click_open()
 
     viewer = HostedApplicationViewerPage(page)
     viewer.should_be_on_view_route(app.id)
     viewer_menu = viewer.open_actions_menu()
-    viewer_menu.should_list_one_item_matching("Manage application|Application details")
-    viewer_menu.should_not_list_item("Details")
+    viewer_menu.should_list_items_matching(
+        "details|manage application", ["Manage application"]
+    )
 
 
 @pytest.mark.requires_capability(CAPABILITY)

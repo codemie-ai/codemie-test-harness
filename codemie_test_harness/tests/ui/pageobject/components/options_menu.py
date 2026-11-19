@@ -48,18 +48,23 @@ class OptionsMenu:
         return self
 
     @step
-    def should_not_list_item(self, name: str):
-        """Verify the open menu has no row with this name."""
+    def should_list_only_items(self, names: list[str]):
+        """Verify the menu has exactly these rows, in this order, and no others."""
         self.should_be_open()
-        expect(self.item(name)).to_have_count(0)
+        expect(self.menu.get_by_role("menuitem")).to_have_text(names)
         return self
 
     @step
-    def should_list_one_item_matching(self, pattern: str):
-        """Verify exactly one row has a name that fully matches the pattern."""
+    def should_list_items_matching(self, pattern: str, names: list[str]):
+        """Verify the rows whose name contains the pattern (any case) are exactly these, in order."""
         self.should_be_open()
-        rows = self.menu.get_by_role("menuitem", name=re.compile(f"^(?:{pattern})$"))
-        expect(rows).to_have_count(1)
+        rows = self.menu.get_by_role("menuitem").filter(
+            has_text=re.compile(pattern, re.IGNORECASE)
+        )
+        if names:
+            expect(rows).to_have_text(names)
+        else:
+            expect(rows).to_have_count(0)
         return self
 
     @step

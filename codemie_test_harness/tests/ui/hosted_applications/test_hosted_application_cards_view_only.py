@@ -105,7 +105,7 @@ def test_card_menu_details_item_opens_details_for_a_view_only_user(
     applications = HostedApplicationsPage(page).open_shared_with_me()
 
     menu = applications.open_card_menu(app.name)
-    menu.should_list_item("Details")
+    menu.should_list_only_items(["Open", "Details"])
     menu.choose_item("Details")
 
     HostedApplicationDetailsPage(page).should_be_on_details_route(app.id)
@@ -125,4 +125,5 @@ def test_view_only_card_without_a_live_version_is_marked_and_cannot_open(
     applications.should_name_card_without_open(app.name)
     applications.should_have_only_card_and_menu_buttons(app.name)
     menu = applications.open_card_menu(app.name)
+    menu.should_list_only_items(["Open", "Details"])
     menu.should_have_item_disabled_with_tooltip("Open", NO_ACTIVE_VERSION)
