@@ -17,7 +17,7 @@ remove everything afterwards."""
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from codemie_sdk import CodeMieClient
@@ -26,7 +26,7 @@ from codemie_sdk.models.hosted_application import (
     HostedApplicationVersion,
     HostedApplicationVersionStart,
 )
-from hamcrest import assert_that, empty, equal_to, is_not
+from hamcrest import assert_that, equal_to
 from requests import HTTPError
 
 from codemie_test_harness.tests.test_data.hosted_application_test_data import (
@@ -83,7 +83,6 @@ class HostedApplicationUtils(BaseUtils):
         super().__init__(client)
         self.service = client.hosted_applications
         self._app_ids: list[str] = []
-        self._category_id: Optional[str] = None
 
     def create_app(
         self,
@@ -188,21 +187,8 @@ class HostedApplicationUtils(BaseUtils):
         assert_that(live.active_version_id, equal_to(version.id), "the version is live")
         return version
 
-    def existing_category_id(self) -> str:
-        """The id of a category the platform already has; the tests never delete it."""
-        if self._category_id is None:
-            categories = self.client.categories.get_categories()
-            assert_that(categories, is_not(empty()), "the platform has a category")
-            self._category_id = categories[0].id
-        return self._category_id
-
     def publish(self, app_id: str) -> HostedApplication:
-        """Publish an application to the marketplace; publishing needs a category, so it sends one."""
-        return self.service.marketplace_publish(
-            app_id,
-            self.get_app(app_id).etag,
-            categories=[self.existing_category_id()],
-        )
+        return self.service.marketplace_publish(app_id, self.get_app(app_id).etag)
 
     def unpublish(self, app_id: str) -> HostedApplication:
         return self.service.marketplace_unpublish(app_id, self.get_app(app_id).etag)
@@ -273,10 +259,17 @@ class HostedUser:
     user_id: str
     client: CodeMieClient
     apps: HostedApplicationUtils
+    # Kept for a browser sign-in; empty when the user only calls the API.
+    password: str = field(default="", repr=False)
 
     @property
     def personal_project(self) -> str:
         return self.email
+
+    @property
+    def name(self) -> str:
+        """Display name, as the people search and the share lists show it."""
+        return self.client.users.about_me().name
 
     @property
     def service(self) -> Any:

@@ -48,6 +48,13 @@ class OptionsMenu:
         return self
 
     @step
+    def should_not_list_item(self, name: str):
+        """Verify the open menu has no row with this name."""
+        self.should_be_open()
+        expect(self.item(name)).to_have_count(0)
+        return self
+
+    @step
     def should_list_only_items(self, names: list[str]):
         """Verify the menu has exactly these rows, in this order, and no others."""
         self.should_be_open()

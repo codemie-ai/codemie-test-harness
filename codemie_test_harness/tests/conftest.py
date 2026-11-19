@@ -112,6 +112,7 @@ from codemie_test_harness.tests.utils.github_seed import (
 from codemie_test_harness.tests.utils.github_utils import GitHubUtils
 from codemie_test_harness.tests.utils.azure_devops_seed import SeedPullRequest
 from codemie_test_harness.tests.utils.azure_devops_utils import AzureDevOpsUtils
+from codemie_test_harness.tests.utils.hosted_sharing_utils import HostedPeople
 from codemie_test_harness.tests.utils.http_utils import RequestHandler
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
 from codemie_test_harness.tests.utils.scoped_integration_factory import (
@@ -821,6 +822,18 @@ def keycloak_utils(client):
     """Session-scoped user-lifecycle helper, chosen by domain: LocalUserUtils on
     localhost and OSS standalone (local IdP), KeycloakUtils elsewhere."""
     return get_user_lifecycle_utils(client)
+
+
+@pytest.fixture
+def hosted_people(keycloak_utils, admin_utils, user_utils, project_utils):
+    """Users and shared projects for a hosted-application test, API or UI, removed after it.
+
+    Each user keeps its password, so a browser can sign in as them; see ``HostedPeople``.
+    """
+    with contextlib.ExitStack() as cleanup:
+        yield HostedPeople(
+            cleanup, keycloak_utils, admin_utils, user_utils, project_utils
+        )
 
 
 # Role fixtures. Each yields a LoggedInUser (email, password, user_id, client) of a fresh

@@ -16,6 +16,7 @@
 and the keyboard route through them."""
 
 import re
+from urllib.parse import quote
 
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
@@ -107,6 +108,13 @@ class HostedApplicationsPage(HostedPageBase):
         """Open the My apps collection."""
         self.page.goto(APPS_ROUTE)
         expect(self.my_apps_heading).to_be_visible()
+        return self
+
+    @step
+    def open_collection(self, collection: str, name: str):
+        """Open a collection (project, shared, ...) searched by an application's name; its card shows."""
+        self.page.goto(f"{APPS_ROUTE}/{collection}?q={quote(name)}")
+        expect(self.card(name)).to_be_visible()
         return self
 
     @step
