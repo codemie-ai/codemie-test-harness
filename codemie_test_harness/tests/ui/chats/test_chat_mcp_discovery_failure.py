@@ -25,7 +25,6 @@ inline figma MCP server).
 """
 
 import pytest
-from codemie_sdk.models.conversation import ConversationCreateRequest
 
 from codemie_test_harness.tests.enums.model_types import ModelTypes
 from codemie_test_harness.tests.ui.pageobject.assistants.assistants_page import (
@@ -34,10 +33,9 @@ from codemie_test_harness.tests.ui.pageobject.assistants.assistants_page import 
 from codemie_test_harness.tests.ui.pageobject.assistants.create_edit_assistant_page import (
     CreateEditAssistantPage,
 )
-from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
 from codemie_test_harness.tests.ui.test_data.mcp_discovery_failure_test_data import (
     DISCOVERY_FAILED_ERROR_CONTEXT,
-    UNTRUSTED_HTTP_MCP_URL,
+    build_untrusted_mcp_json_config,
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name, wait_for_entity
 
@@ -59,35 +57,43 @@ def test_chat_shows_mcp_discovery_failure_warning(page, chat_with_untrusted_mcp_
     )
 
     chat_page.should_have_mcp_discovery_failure_prompt_visible()
-    chat_page.should_have_mcp_auth_gate_row(mcp_server_name, DISCOVERY_FAILED_ERROR_CONTEXT)
+    chat_page.should_have_mcp_auth_gate_row(
+        mcp_server_name, DISCOVERY_FAILED_ERROR_CONTEXT
+    )
     chat_page.should_have_mcp_auth_gate_status_badge_count(1)
 
 
 @pytest.mark.mcp
 @pytest.mark.ui
-def test_chat_shows_two_untrusted_mcp_servers_without_key_collision(
+def test_chat_shows_two_untrusted_mcp_servers_each_in_own_row(
     page, chat_with_two_untrusted_mcp_servers
 ):
     """@case error-message-silently-ignores-mcp_TC_002
 
     Two inline/manual HTTP MCP servers on the same assistant, each with no
-    auth_config and no saved mcp_config_id, both render a discovery_failed row
-    (each gets its own syntheticKey-based identity) with no React duplicate-key
-    console error.
+    auth_config and no saved mcp_config_id, both render their own discovery_failed
+    row (each gets its own syntheticKey-based identity): two badges, and each name
+    sits in a row of its own with the error text.
+
+    The row and badge-count checks are the guard against the duplicate-key bug. A
+    console check for React's duplicate-key warning is deliberately not used: the
+    stand serves a production bundle, which strips that warning, so such a check
+    would pass whether or not the bug exists.
     """
     chat_page, server_a_name, server_b_name = chat_with_two_untrusted_mcp_servers(page)
 
-    console_messages = chat_page.capture_console_messages_during(
-        lambda: chat_page.send_message_and_wait_for_mcp_auth_prompt(
-            f"Please use the '{server_a_name}' and '{server_b_name}' MCP servers' "
-            "tools to help me with this task."
-        )
+    chat_page.send_message_and_wait_for_mcp_auth_prompt(
+        f"Please use the '{server_a_name}' and '{server_b_name}' MCP servers' "
+        "tools to help me with this task."
     )
 
     chat_page.should_have_mcp_auth_gate_status_badge_count(2)
-    chat_page.should_have_mcp_auth_gate_row(server_a_name, DISCOVERY_FAILED_ERROR_CONTEXT)
-    chat_page.should_have_mcp_auth_gate_row(server_b_name, DISCOVERY_FAILED_ERROR_CONTEXT)
-    chat_page.should_have_no_duplicate_key_console_warning(console_messages)
+    chat_page.should_have_mcp_auth_gate_row(
+        server_a_name, DISCOVERY_FAILED_ERROR_CONTEXT
+    )
+    chat_page.should_have_mcp_auth_gate_row(
+        server_b_name, DISCOVERY_FAILED_ERROR_CONTEXT
+    )
 
 
 @pytest.mark.mcp
@@ -111,44 +117,13 @@ def test_chat_sign_in_required_gate_unaffected_by_discovery_fix(
     )
 
     chat_page.should_have_mcp_sign_in_prompt_visible("Authentication required")
-
-
-@pytest.fixture
-def created_assistant_cleanup(assistant_utils, client):
-    """Deletes (by name) an assistant created directly through the UI's own
-    "Create Assistant" flow, and its conversations, after the test — even if the
-    test fails.
-
-    No assistant()/assistant_factory fixture is used for this precondition: the
-    case is a literal reproduction of the ticket's own build steps (Create
-    Assistant -> Manual Setup, driven through the browser), so no Python object
-    with an id exists until after that UI-driven creation completes.
-    """
-    created_names = []
-
-    def _track(name: str):
-        created_names.append(name)
-        return name
-
-    yield _track
-
-    for name in created_names:
-        try:
-            created = wait_for_entity(
-                lambda: client.assistants.list(per_page=200),
-                entity_name=name,
-                timeout=5,
-                poll_interval=1,
-            )
-            assistant_utils.delete_assistant(created)
-        except Exception:
-            pass
+    chat_page.should_not_have_mcp_discovery_failure_prompt()
 
 
 @pytest.mark.mcp
 @pytest.mark.ui
 def test_chat_shows_figma_repro_discovery_failure_warning(
-    page, client, created_assistant_cleanup
+    page, client, created_assistant_cleanup, open_chat_for_assistant
 ):
     """@case error-message-silently-ignores-mcp_TC_004
 
@@ -168,12 +143,14 @@ def test_chat_shows_figma_repro_discovery_failure_warning(
     """
     assistant_name = f"QA figma repro {get_random_name()}"
     mcp_server_name = "figma"
-    created_assistant_cleanup(assistant_name)
+    created_assistant_cleanup.track_name(assistant_name)
 
     create_page = CreateEditAssistantPage(page)
     create_page.navigate_to()
     create_page.fill_name(assistant_name)
-    create_page.fill_description("QA fixture: literal figma MCP discovery-failure repro")
+    create_page.fill_description(
+        "QA fixture: literal figma MCP discovery-failure repro"
+    )
     create_page.fill_system_prompt("Act as a helpful assistant.")
 
     create_page.mcp_servers.should_have_mcp_servers_accordion_visible()
@@ -183,9 +160,7 @@ def test_chat_shows_figma_repro_discovery_failure_warning(
     create_page.mcp_servers.fill_mcp_config_description(
         "QA fixture: literal figma MCP discovery-failure repro"
     )
-    create_page.mcp_servers.fill_mcp_config_json(
-        f'{{"url": "{UNTRUSTED_HTTP_MCP_URL}", "type": "http"}}'
-    )
+    create_page.mcp_servers.fill_mcp_config_json(build_untrusted_mcp_json_config())
     create_page.mcp_servers.click_mcp_config_next()
     create_page.mcp_servers.select_use_all_tools_checkbox()
     create_page.mcp_servers.click_mcp_tools_add()
@@ -207,17 +182,14 @@ def test_chat_shows_figma_repro_discovery_failure_warning(
     created_assistant = wait_for_entity(
         lambda: client.assistants.list(per_page=200), entity_name=assistant_name
     )
-    conversation = client.conversations.create(
-        ConversationCreateRequest(initial_assistant_id=created_assistant.id, folder="")
-    )
-    chat_page = ChatPage(page)
-    page.set_viewport_size({"width": 1920, "height": 980})
-    chat_page.navigate_to(conversation.get("id"))
-    chat_page.chat_input.wait_for(state="visible", timeout=15000)
+    created_assistant_cleanup.track(created_assistant)
+    chat_page = open_chat_for_assistant(page, created_assistant.id)
 
     chat_page.send_message_and_wait_for_mcp_auth_prompt(
         "Please use the figma MCP server's tools to help me with this task."
     )
 
     chat_page.should_have_mcp_discovery_failure_prompt_visible()
-    chat_page.should_have_mcp_auth_gate_row(mcp_server_name, DISCOVERY_FAILED_ERROR_CONTEXT)
+    chat_page.should_have_mcp_auth_gate_row(
+        mcp_server_name, DISCOVERY_FAILED_ERROR_CONTEXT
+    )

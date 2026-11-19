@@ -26,6 +26,8 @@ instead (``MCPToolkitService._build_auth_configured_tool_challenge_payload``,
 codemie/src/codemie/service/mcp/toolkit_service.py:577-598).
 """
 
+import json
+
 from codemie_sdk.models.assistant import MCPServerConfig, MCPServerDetails
 from codemie_sdk.models.mcp_config import MCPConfigCreateRequest, MCPServerConfigData
 
@@ -36,6 +38,11 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 # preview stand, recon-report.md: Observables/TC_001/TC_008, and AC-8).
 UNTRUSTED_HTTP_MCP_URL = "https://mcp.figma.com/mcp"
 
+# One transport value for every setup path (API-built servers, the catalog config and the
+# JSON typed into the UI's manual MCP setup), so the same server is exercised however it
+# is configured. "streamable-http" is the value the SDK documents for HTTP MCP servers.
+MCP_HTTP_TRANSPORT_TYPE = "streamable-http"
+
 # Verbatim text MCPToolkitService._sanitize_discovery_error_context builds for this
 # host's failure_reason ("no_trusted_authorization_server" is a trust-rejection reason —
 # codemie/src/codemie/service/mcp/toolkit_service.py:730-741), and what the preview
@@ -45,10 +52,10 @@ DISCOVERY_FAILED_ERROR_CONTEXT = (
     "trust allowlist or configure auth_config manually for this server."
 )
 
+# Frontend wording of the discovery-failure prompt. The chat and assistant-form page
+# objects import these, so a wording change is made in one place.
 MCP_SERVER_UNAVAILABLE_HEADING = "MCP server unavailable"
-MCP_SERVER_UNAVAILABLE_SUBTITLE = (
-    "Authentication discovery failed for one or more MCP servers. See the details below."
-)
+MCP_SERVER_UNAVAILABLE_SUBTITLE = "Authentication discovery failed for one or more MCP servers. See the details below."
 MCP_SERVER_UNAVAILABLE_BADGE = "Server unavailable"
 
 # Minimal schema-valid OAuth2 auth_config (codemie_enterprise.mcp_auth.models.OAuth2AuthConfig:
@@ -76,8 +83,16 @@ def build_untrusted_inline_mcp_server(name: str = None) -> MCPServerDetails:
         name=server_name,
         description="QA fixture: untrusted-domain HTTP MCP server (discovery-failure gate)",
         enabled=True,
-        config=MCPServerConfig(url=UNTRUSTED_HTTP_MCP_URL, type="streamable-http"),
+        config=MCPServerConfig(
+            url=UNTRUSTED_HTTP_MCP_URL, type=MCP_HTTP_TRANSPORT_TYPE
+        ),
     )
+
+
+def build_untrusted_mcp_json_config() -> str:
+    """The JSON typed into the UI's manual MCP setup for the same untrusted server that
+    ``build_untrusted_inline_mcp_server`` builds through the API."""
+    return json.dumps({"url": UNTRUSTED_HTTP_MCP_URL, "type": MCP_HTTP_TRANSPORT_TYPE})
 
 
 def build_sign_in_required_mcp_config_request(
@@ -93,7 +108,7 @@ def build_sign_in_required_mcp_config_request(
         description="QA fixture: catalog MCP server requiring OAuth2 sign-in",
         config=MCPServerConfigData(
             url=UNTRUSTED_HTTP_MCP_URL,
-            type="streamable-http",
+            type=MCP_HTTP_TRANSPORT_TYPE,
             auth_config=dict(OAUTH2_AUTH_CONFIG),
         ),
     )

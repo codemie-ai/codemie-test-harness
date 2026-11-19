@@ -26,7 +26,7 @@ from codemie_test_harness.tests.ui.pageobject.assistants.assistants_page import 
     AssistantsPage,
 )
 from codemie_test_harness.tests.ui.test_data.mcp_discovery_failure_test_data import (
-    UNTRUSTED_HTTP_MCP_URL,
+    build_untrusted_mcp_json_config,
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 
@@ -42,7 +42,9 @@ def test_assistant_form_mcp_picker_stays_usable_on_discovery_failure(
     at a host the environment does not trust for auth discovery, must leave
     the assistant-form tool picker's controls and a Retry button reachable —
     and Retry must clear the stale auth rows before re-fetching, instead of
-    leaving the picker stuck or unusable.
+    leaving the picker stuck or unusable. The re-fetch is held to observe the cleared
+    state, then released: the same untrusted server fails discovery again, so the row
+    and its badge come back.
 
     Uses ``sonnet_46_llm`` (Bedrock Claude Sonnet 4.6), not the environment's
     flagged default model: the preview stand rejects assistant creation with
@@ -64,12 +66,20 @@ def test_assistant_form_mcp_picker_stays_usable_on_discovery_failure(
     edit_page.mcp_servers.fill_mcp_config_description(
         "QA fixture: untrusted-domain HTTP MCP server (discovery-failure gate)"
     )
-    edit_page.mcp_servers.fill_mcp_config_json(
-        f'{{"url": "{UNTRUSTED_HTTP_MCP_URL}", "type": "http"}}'
-    )
+    edit_page.mcp_servers.fill_mcp_config_json(build_untrusted_mcp_json_config())
     edit_page.mcp_servers.click_mcp_config_next()
 
-    edit_page.mcp_servers.should_have_mcp_tools_discovery_failed_row_visible(mcp_server_name)
+    edit_page.mcp_servers.should_have_mcp_tools_discovery_failed_row_visible(
+        mcp_server_name
+    )
 
+    # Hold the re-fetch so the loading state is stable: the stand answers the same
+    # discovery failure again, so without the hold the rows are back almost at once.
+    edit_page.mcp_servers.hold_mcp_tools_requests()
     edit_page.mcp_servers.click_mcp_tools_retry()
     edit_page.mcp_servers.should_have_mcp_auth_gate_rows_cleared()
+
+    edit_page.mcp_servers.release_held_mcp_tools_requests()
+    edit_page.mcp_servers.should_have_mcp_tools_discovery_failed_row_visible(
+        mcp_server_name
+    )

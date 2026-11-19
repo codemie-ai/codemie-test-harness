@@ -31,7 +31,11 @@ from codemie_test_harness.tests.ui.test_data.mcp_discovery_failure_test_data imp
     build_sign_in_required_mcp_config_request,
     build_untrusted_inline_mcp_server,
 )
+from codemie_test_harness.tests.utils.base_utils import wait_for_entity
 from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.logger_util import setup_logger
+
+logger = setup_logger(__name__)
 
 
 @pytest.fixture(scope="session")
@@ -279,81 +283,90 @@ def disable_hide_tool_outputs_on_assistant(page):
 
 
 @pytest.fixture(scope="function")
-def chat_with_untrusted_mcp_server(assistant_factory, sonnet_46_llm):
-    """Chat for an assistant with one inline/manual HTTP MCP server configured with no
-    auth_config, pointed at a host the environment does not trust for auth discovery.
+def open_chat_for_assistant():
+    """Factory that opens a fresh chat conversation with an assistant in the browser.
+
+    Creates the conversation through the API, sizes the viewport, navigates to it and
+    waits for the chat input. Returns the ``ChatPage``. The conversations are deleted on
+    teardown, a failure is logged rather than raised.
+    """
+    created_conversation_ids = []
+
+    def _open(page, assistant_id):
+        conversation = get_client().conversations.create(
+            ConversationCreateRequest(initial_assistant_id=assistant_id, folder="")
+        )
+        chat_id = conversation.get("id")
+        created_conversation_ids.append(chat_id)
+        chat_page = ChatPage(page)
+        page.set_viewport_size({"width": 1920, "height": 980})
+        chat_page.navigate_to(chat_id)
+        chat_page.chat_input.wait_for(state="visible", timeout=15000)
+        return chat_page
+
+    yield _open
+
+    for chat_id in created_conversation_ids:
+        try:
+            get_client().conversations.delete(chat_id)
+        except HTTPError as e:
+            logger.warning(f"Failed to delete conversation {chat_id}: {e}")
+
+
+@pytest.fixture(scope="function")
+def chat_with_mcp_servers(assistant_factory, sonnet_46_llm, open_chat_for_assistant):
+    """Factory that creates an assistant with the given MCP servers and opens its chat.
 
     Uses ``sonnet_46_llm`` (Bedrock Claude Sonnet 4.6), not the environment's flagged
     default model: the preview stand rejects assistant creation with the default model
     as deprecated (recon-report.md, "Unexpected gates").
 
-    Shared precondition for TC_001 (discovery-failure chat warning).
+    ``chat_with_mcp_servers(page, [server, ...])`` returns the ``ChatPage``.
     """
-    created_conversation = None
 
-    def _navigate_to(page):
-        nonlocal created_conversation
-        mcp_server = build_untrusted_inline_mcp_server()
+    def _open(page, mcp_servers):
         test_assistant = assistant_factory.create(
             llm_model_type=sonnet_46_llm.base_name,
-            mcp_servers=[mcp_server],
+            mcp_servers=mcp_servers,
         )
-        created_conversation = get_client().conversations.create(
-            ConversationCreateRequest(initial_assistant_id=test_assistant.id, folder="")
-        )
-        chat_id = created_conversation.get("id")
-        chat_page = ChatPage(page)
-        page.set_viewport_size({"width": 1920, "height": 980})
-        chat_page.navigate_to(chat_id)
-        chat_page.chat_input.wait_for(state="visible", timeout=15000)
-        return chat_page, mcp_server.name
+        return open_chat_for_assistant(page, test_assistant.id)
 
-    yield _navigate_to
-
-    if created_conversation:
-        try:
-            get_client().conversations.delete(created_conversation.get("id"))
-        except HTTPError:
-            pass
+    return _open
 
 
 @pytest.fixture(scope="function")
-def chat_with_two_untrusted_mcp_servers(assistant_factory, sonnet_46_llm):
+def chat_with_untrusted_mcp_server(chat_with_mcp_servers):
+    """Chat for an assistant with one inline/manual HTTP MCP server configured with no
+    auth_config, pointed at a host the environment does not trust for auth discovery.
+
+    Shared precondition for TC_001 (discovery-failure chat warning). The returned
+    callable gives ``(chat_page, mcp_server_name)``.
+    """
+
+    def _navigate_to(page):
+        mcp_server = build_untrusted_inline_mcp_server()
+        return chat_with_mcp_servers(page, [mcp_server]), mcp_server.name
+
+    return _navigate_to
+
+
+@pytest.fixture(scope="function")
+def chat_with_two_untrusted_mcp_servers(chat_with_mcp_servers):
     """Chat for an assistant with two inline/manual HTTP MCP servers, each with no
     auth_config and no saved mcp_config_id, both pointed at untrusted hosts.
 
-    Uses ``sonnet_46_llm`` — see ``chat_with_untrusted_mcp_server`` for why.
-
-    Precondition for TC_002 (two inline discovery_failed rows render without a React
-    duplicate-key collision, AC-5).
+    Precondition for TC_002 (two inline discovery_failed rows render, each with its own
+    syntheticKey-based identity, AC-5). The returned callable gives
+    ``(chat_page, server_a_name, server_b_name)``.
     """
-    created_conversation = None
 
     def _navigate_to(page):
-        nonlocal created_conversation
         mcp_server_a = build_untrusted_inline_mcp_server()
         mcp_server_b = build_untrusted_inline_mcp_server()
-        test_assistant = assistant_factory.create(
-            llm_model_type=sonnet_46_llm.base_name,
-            mcp_servers=[mcp_server_a, mcp_server_b],
-        )
-        created_conversation = get_client().conversations.create(
-            ConversationCreateRequest(initial_assistant_id=test_assistant.id, folder="")
-        )
-        chat_id = created_conversation.get("id")
-        chat_page = ChatPage(page)
-        page.set_viewport_size({"width": 1920, "height": 980})
-        chat_page.navigate_to(chat_id)
-        chat_page.chat_input.wait_for(state="visible", timeout=15000)
+        chat_page = chat_with_mcp_servers(page, [mcp_server_a, mcp_server_b])
         return chat_page, mcp_server_a.name, mcp_server_b.name
 
-    yield _navigate_to
-
-    if created_conversation:
-        try:
-            get_client().conversations.delete(created_conversation.get("id"))
-        except HTTPError:
-            pass
+    return _navigate_to
 
 
 @pytest.fixture(scope="function")
@@ -371,48 +384,82 @@ def sign_in_required_mcp_config(client):
     yield created
     try:
         client.mcp_configs.delete(created.id)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Failed to delete MCP config {created.name}: {e}")
 
 
 @pytest.fixture(scope="function")
 def chat_with_sign_in_required_mcp_server(
-    assistant_factory, sonnet_46_llm, sign_in_required_mcp_config
+    # Keep the config first: fixtures are set up in argument order and torn down in
+    # reverse, so the config outlives the assistant that references it.
+    sign_in_required_mcp_config,
+    chat_with_mcp_servers,
 ):
     """Chat for an assistant with a (saved, catalog) MCP server that requires sign-in
     (authentication_required), using the catalog config from
     ``sign_in_required_mcp_config``.
 
-    Uses ``sonnet_46_llm`` — see ``chat_with_untrusted_mcp_server`` for why.
-
     Precondition for TC_003: the pre-existing auth gate for a recoverable status must
     stay unaffected by the discovery_failed fix (AC-9 regression anchor).
     """
-    created_conversation = None
 
     def _navigate_to(page):
-        nonlocal created_conversation
         mcp_server = build_catalog_mcp_server(
             sign_in_required_mcp_config.id, sign_in_required_mcp_config.name
         )
-        test_assistant = assistant_factory.create(
-            llm_model_type=sonnet_46_llm.base_name,
-            mcp_servers=[mcp_server],
-        )
-        created_conversation = get_client().conversations.create(
-            ConversationCreateRequest(initial_assistant_id=test_assistant.id, folder="")
-        )
-        chat_id = created_conversation.get("id")
-        chat_page = ChatPage(page)
-        page.set_viewport_size({"width": 1920, "height": 980})
-        chat_page.navigate_to(chat_id)
-        chat_page.chat_input.wait_for(state="visible", timeout=15000)
-        return chat_page
+        return chat_with_mcp_servers(page, [mcp_server])
 
-    yield _navigate_to
+    return _navigate_to
 
-    if created_conversation:
+
+class _CreatedAssistantTracker:
+    """Remembers assistants a test creates through the UI so teardown can delete them."""
+
+    def __init__(self):
+        self.names = []
+        self.assistants = {}
+
+    def track_name(self, name):
+        """Register the name before the UI flow starts, so a test that fails midway
+        still gets its assistant looked up and removed."""
+        self.names.append(name)
+        return name
+
+    def track(self, assistant):
+        """Register the created assistant, so teardown deletes it by id rather than
+        searching the list by name."""
+        self.assistants[assistant.name] = assistant
+
+
+@pytest.fixture(scope="function")
+def created_assistant_cleanup(assistant_utils, client):
+    """Deletes assistants (and their conversations) created through the UI's own
+    "Create Assistant" flow, after the test — even if the test fails.
+
+    No assistant()/assistant_factory fixture fits this precondition: a test that builds
+    the assistant end to end through the browser has no Python object with an id until
+    the UI-driven creation completes. Call ``track_name`` first, then ``track`` once the
+    assistant exists. A name that was never tracked with ``track`` is looked up in the
+    list; when it is not found, or the delete fails, the failure is logged.
+    """
+    tracker = _CreatedAssistantTracker()
+
+    yield tracker
+
+    for name in tracker.names:
+        assistant = tracker.assistants.get(name)
+        if assistant is None:
+            try:
+                assistant = wait_for_entity(
+                    lambda: client.assistants.list(per_page=200),
+                    entity_name=name,
+                    timeout=10,
+                    poll_interval=2,
+                )
+            except Exception as e:
+                logger.warning(f"Assistant '{name}' not found for cleanup: {e}")
+                continue
         try:
-            get_client().conversations.delete(created_conversation.get("id"))
-        except HTTPError:
-            pass
+            assistant_utils.delete_assistant(assistant)
+        except Exception as e:
+            logger.error(f"Failed to delete assistant '{name}': {e}")

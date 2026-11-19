@@ -30,6 +30,12 @@ from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.pageobject.assistants.assistant_mcp_server import (
     AssistantMCPIntegrationModal,
 )
+from codemie_test_harness.tests.ui.test_data.mcp_discovery_failure_test_data import (
+    MCP_SERVER_UNAVAILABLE_BADGE,
+)
+
+# The tool-discovery request Step 2 sends when it opens and again on Retry.
+MCP_TOOLS_URL_PATTERN = "**/v1/assistants/mcp_tools"
 
 
 class MCPServersSection(BasePage):
@@ -49,6 +55,7 @@ class MCPServersSection(BasePage):
         """Initialize the MCP Servers section page object."""
         super().__init__(page)
         self.mcp_modal = AssistantMCPIntegrationModal(page)
+        self._held_mcp_tools_routes = []
 
     # =============================================================================
     # LOCATORS - MCP Servers Accordion
@@ -962,8 +969,6 @@ class MCPServersSection(BasePage):
     # (StatusBadge.tsx) and a "Retry" button that stays reachable alongside the
     # tool controls when the server is unavailable.
 
-    MCP_SERVER_UNAVAILABLE_BADGE = "Server unavailable"
-
     @property
     def mcp_tools_retry_button(self) -> Locator:
         """Retry button shown in Step 2 while a discovery_failed row is present."""
@@ -973,7 +978,7 @@ class MCPServersSection(BasePage):
     def mcp_auth_gate_status_badges(self) -> Locator:
         """Every 'Server unavailable' status badge inside the Step 2 dialog."""
         return self.mcp_tools_dialog.locator(
-            f'[role="status"][aria-label="{self.MCP_SERVER_UNAVAILABLE_BADGE}"]'
+            f'[role="status"][aria-label="{MCP_SERVER_UNAVAILABLE_BADGE}"]'
         )
 
     def mcp_auth_gate_row_name(self, server_name: str) -> Locator:
@@ -988,6 +993,26 @@ class MCPServersSection(BasePage):
     def click_mcp_tools_retry(self):
         """Click Retry in Step 2 while a discovery_failed row is present."""
         self.mcp_tools_retry_button.click()
+        return self
+
+    @step
+    def hold_mcp_tools_requests(self):
+        """Hold every tool-discovery request until ``release_held_mcp_tools_requests``,
+        so Step 2 stays in its loading state and a "cleared before re-fetch" check does
+        not race the re-render."""
+        self.page.route(
+            MCP_TOOLS_URL_PATTERN,
+            lambda route: self._held_mcp_tools_routes.append(route),
+        )
+        return self
+
+    @step
+    def release_held_mcp_tools_requests(self):
+        """Let the held tool-discovery requests through and stop holding new ones."""
+        for held in self._held_mcp_tools_routes:
+            held.continue_()
+        self._held_mcp_tools_routes = []
+        self.page.unroute(MCP_TOOLS_URL_PATTERN)
         return self
 
     # =============================================================================
@@ -1015,6 +1040,9 @@ class MCPServersSection(BasePage):
     @step
     def should_have_mcp_auth_gate_rows_cleared(self):
         """Verify the discovery_failed row(s) are no longer rendered — Retry clears
-        them before re-fetching when every row was discovery_failed."""
+        them before re-fetching when every row was discovery_failed. Pair with
+        ``hold_mcp_tools_requests``: the re-fetch normally brings the rows straight
+        back, so without a held request this only passes if the check lands in the
+        gap."""
         expect(self.mcp_auth_gate_status_badges).to_have_count(0)
         return self
