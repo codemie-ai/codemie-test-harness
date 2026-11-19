@@ -45,6 +45,11 @@ class LiteLLMBudgetUtils:
         resp.raise_for_status()
         return resp.json()
 
+    def get_customer_spend(self, customer_id: str) -> float:
+        """Spend of the customer; 0.0 both when it is absent and when it exists uncharged."""
+        customer = self.get_customer_info(customer_id)
+        return float(customer.get("spend") or 0) if customer else 0.0
+
     def create_key(self) -> str:
         resp = requests.post(
             f"{self._url}/key/generate",
@@ -342,8 +347,7 @@ class LiteLLMBudgetUtils:
             info = self.get_key_info_by_alias(alias)
             spends[label] = float(info.get("spend", 0)) if info else 0.0
         for label, customer_id in customers.items():
-            info = self.get_customer_info(customer_id)
-            spends[label] = float(info.get("spend", 0)) if info else 0.0
+            spends[label] = self.get_customer_spend(customer_id)
         return spends
 
     def wait_for_charged_sources(

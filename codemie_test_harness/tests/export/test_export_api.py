@@ -490,6 +490,10 @@ _BUILTIN_HEDGE_TOOL_NAME = "example_hedge_tool"
 
 @pytest.mark.export
 @pytest.mark.api
+@pytest.mark.xfail(
+    reason="Backend assistant export omits effort (product defect, see the run report)",
+    strict=True,
+)
 def test_export_assistant_spec_covers_every_update_field(client, assistant_utils):
     """@case public-export-rest-endpoint_TC_009"""
     from codemie_sdk.models.assistant import (

@@ -15,6 +15,7 @@
 import pytest
 
 from codemie_test_harness.tests import TEST_USER, PROJECT
+from codemie_test_harness.tests.enums.model_types import ModelTypes
 from codemie_test_harness.tests.ui.pageobject.assistants.assistants_page import (
     AssistantsPage,
 )
@@ -76,13 +77,14 @@ def test_edit_assistant_page_elements_visibility(page, assistant):
 @pytest.mark.assistant
 @pytest.mark.ui
 @pytest.mark.prod_regression
-def test_edit_assistant_form_field_interactions(page, assistant):
+def test_edit_assistant_form_field_interactions(page, assistant_factory):
     """
     Test interacting with all editable form fields.
     """
     EDITED = " EDITED"
     assistant_page = AssistantsPage(page)
-    assistant = assistant()
+    # Non-effort model: Temperature and Top P stay visible for editing
+    assistant = assistant_factory.create(llm_model_type=ModelTypes.GPT_41.value)
 
     assistant_page.navigate_to()
     assistant_page.search_assistants(assistant.name)
