@@ -151,10 +151,23 @@ class WorkflowsPage(BasePage):
         )
         return WorkflowCard(self.page, card_locator)
 
+    def workflow_card_with_exact_title(self, workflow_name: str):
+        """Locator of the one workflow card whose title is exactly the given name.
+
+        ``get_workflow_card_by_name`` matches the name as a substring of the whole card
+        text, so a name that is a prefix of another card's text matches several cards.
+        This one anchors the match to the title element, like the skills page does.
+        """
+        title = self.page.locator(".whitespace-nowrap.truncate.font-semibold").filter(
+            has_text=re.compile(rf"^\s*{re.escape(workflow_name)}\s*$")
+        )
+        return self.page.locator(".bg-surface-specific-card").filter(has=title)
+
     def workflow_favorite_star(self, workflow_name: str) -> FavoriteStar:
         """Favorite star of the named workflow card."""
-        card_locator = self.get_workflow_card_by_name(workflow_name).card
-        return FavoriteStar(self.page, card_locator)
+        return FavoriteStar(
+            self.page, self.workflow_card_with_exact_title(workflow_name)
+        )
 
     @step
     def open_my_workflows(self):
@@ -248,6 +261,18 @@ class WorkflowsPage(BasePage):
     def should_have_create_workflow_button_visible(self):
         """Verify that create workflow button is visible."""
         expect(self.create_workflow_button).to_be_visible()
+        return self
+
+    @step
+    def should_see_my_workflows_card(self, workflow_name: str):
+        """Wait for the 'My Workflows' view and the named card to be rendered.
+
+        Follows a reload: waits for the list (and with it the favorites preference) to
+        load, and checks that the reload stayed on the 'My Workflows' view.
+        """
+        self.wait_for_page_load()
+        expect(self.page).to_have_url(re.compile(r"/workflows/my"))
+        expect(self.workflow_card_with_exact_title(workflow_name)).to_be_visible()
         return self
 
     @step

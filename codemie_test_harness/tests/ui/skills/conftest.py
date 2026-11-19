@@ -16,13 +16,13 @@
 """Shared fixtures for skills UI tests."""
 
 import logging
-import os
 
 import pytest
 from codemie_sdk.models.skill import SkillVisibility
 
 from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
 from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.skill_utils import SkillsUtils
 
 logger = logging.getLogger(__name__)
@@ -49,24 +49,29 @@ def login(request, page):
         user = request.getfixturevalue("favorites_user")
         username, password, user_id = user.email, user.password, user.user_id
     else:
-        username, password = os.getenv("AUTH_USERNAME"), os.getenv("AUTH_PASSWORD")
+        username = CredentialsManager.get_parameter("AUTH_USERNAME")
+        password = CredentialsManager.get_parameter("AUTH_PASSWORD")
         user_id = get_client().users.about_me().user_id
     LoginPage(page).login_suppressing_popups(
-        username, password, user_id, os.getenv("FRONTEND_URL", "")
+        username,
+        password,
+        user_id,
+        CredentialsManager.get_parameter("FRONTEND_URL", ""),
     )
 
 
 @pytest.fixture
 def skill_to_favorite(favorites_user):
-    """A skill created and owned by ``favorites_user``, in that user's personal project.
+    """A private skill created and owned by ``favorites_user``, in that user's personal project.
 
-    The skill belongs to the user, so it is on the user's Skills list. Teardown deletes
-    it through the user's client; the favorite lives in the user's preferences and goes
-    with the user.
+    A private skill is visible only to its owner, so it belongs unambiguously to the
+    user's own Skills list (it shows under both the 'All' and the 'Private' visibility
+    filters) whatever scope the default view applies. Teardown deletes it through the
+    user's client; the favorite lives in the user's preferences and goes with the user.
     """
     skill_utils = SkillsUtils(favorites_user.client)
     created_skill = skill_utils.create_skill(
-        project_name=favorites_user.email, visibility=SkillVisibility.PROJECT
+        project_name=favorites_user.email, visibility=SkillVisibility.PRIVATE
     )
     yield created_skill
     try:

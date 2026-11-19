@@ -36,4 +36,5 @@ def test_workflow_favorite_star_stays_filled_after_reload(page, workflow_to_favo
     workflows_page.should_show_workflow_favorited(workflow_to_favorite.name)
 
     workflows_page.refresh_page()
+    workflows_page.should_see_my_workflows_card(workflow_to_favorite.name)
     workflows_page.should_show_workflow_favorited(workflow_to_favorite.name)

@@ -34,4 +34,5 @@ def test_skill_favorite_star_stays_filled_after_reload(page, skill_to_favorite):
     skills_page.should_show_skill_favorited(skill_to_favorite.name)
 
     skills_page.refresh_page()
+    skills_page.should_see_skill_card(skill_to_favorite.name)
     skills_page.should_show_skill_favorited(skill_to_favorite.name)

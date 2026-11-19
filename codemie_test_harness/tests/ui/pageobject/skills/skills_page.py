@@ -421,6 +421,17 @@ class SkillsPage(BasePage):
         expect(self.skill_card(skill_name)).to_be_visible(timeout=10000)
         return self
 
+    @step("Verify skill card is visible on the current list")
+    def should_see_skill_card(self, skill_name: str):
+        """Wait until the named skill card is rendered on the list that is already open.
+
+        Unlike ``should_see_skill_with_name`` it does not navigate, so it can follow a
+        reload: it waits for the list (and with it the favorites preference) to load.
+        """
+        self.wait_for_page_load()
+        expect(self.skill_card(skill_name)).to_be_visible()
+        return self
+
     @step("Verify skill card is not visible")
     def should_not_see_skill_with_name(self, skill_name: str):
         """Verify that a skill with the given name is NOT visible (doesn't exist)."""

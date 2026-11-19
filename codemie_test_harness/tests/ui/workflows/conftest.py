@@ -15,7 +15,6 @@
 """Shared fixtures for workflow UI tests."""
 
 import logging
-import os
 
 import pytest
 from codemie_sdk.models.workflow import WorkflowMode
@@ -39,6 +38,7 @@ from codemie_sdk.models.assistant import ToolKitDetails, ToolDetails
 from codemie_test_harness.tests.enums.tools import Toolkit, ProjectManagementTool
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.workflow_utils import WorkflowUtils
 from codemie_test_harness.tests.utils.yaml_utils import (
     AssistantModel,
@@ -130,10 +130,14 @@ def login(request, page):
         user = request.getfixturevalue("favorites_user")
         username, password, user_id = user.email, user.password, user.user_id
     else:
-        username, password = os.getenv("AUTH_USERNAME"), os.getenv("AUTH_PASSWORD")
+        username = CredentialsManager.get_parameter("AUTH_USERNAME")
+        password = CredentialsManager.get_parameter("AUTH_PASSWORD")
         user_id = get_client().users.about_me().user_id
     LoginPage(page).login_suppressing_popups(
-        username, password, user_id, os.getenv("FRONTEND_URL", "")
+        username,
+        password,
+        user_id,
+        CredentialsManager.get_parameter("FRONTEND_URL", ""),
     )
 
 
