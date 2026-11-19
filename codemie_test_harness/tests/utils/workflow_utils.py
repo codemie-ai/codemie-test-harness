@@ -16,7 +16,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 import time
@@ -730,26 +730,82 @@ class WorkflowUtils(BaseUtils):
             for state in states_service.list(per_page=50)
         }
 
-    def get_last_state_output(self, workflow_id: str, execution_id: str) -> str:
+    def get_last_state_output(
+        self,
+        workflow_id: str,
+        execution_id: str,
+        timeout: int = 60,
+        poll_interval: int = 2,
+        stable_reads: int = 3,
+    ) -> str:
         """Return the output of the latest state of the run.
 
         A run can hold more than one state: besides the states of the workflow
         itself the platform may add a closing state (for example a conversation
-        summary). The history of a workflow conversation renders the output of the
-        latest state, so this is the output a later execution sees for this run.
+        summary), possibly after the execution is already reported as completed.
+        The history of a workflow conversation renders the output of the latest
+        state, so this is the output a later execution sees for this run.
+
+        The state list is read page by page until it is non-empty and unchanged for
+        ``stable_reads`` consecutive reads, so a closing state that is still being
+        added is not missed.
+
+        Raises:
+            AssertionError: if the run has no state, or its states keep changing,
+                within ``timeout`` seconds.
         """
         states_service = self.client.workflows.executions(workflow_id).states(
             execution_id
         )
-        states = states_service.list(per_page=50)
-        last_state = max(
-            states,
-            key=lambda state: (
-                state.started_at or datetime.min,
-                state.completed_at or datetime.min,
-            ),
-        )
-        return states_service.get_output(last_state.id).output
+        deadline = time.monotonic() + timeout
+        previous_ids = None
+        unchanged_reads = 0
+        while True:
+            states = self._list_all_states(states_service)
+            state_ids = sorted(state.id for state in states)
+            if states and state_ids == previous_ids:
+                unchanged_reads += 1
+            else:
+                unchanged_reads = 1 if states else 0
+            previous_ids = state_ids
+            if unchanged_reads >= stable_reads:
+                break
+            if time.monotonic() >= deadline:
+                raise AssertionError(
+                    f"Execution {execution_id} of workflow {workflow_id} has "
+                    f"{'no states' if not states else 'a state list that is still changing'}"
+                    f" after {timeout}s"
+                )
+            sleep(poll_interval)
+
+        def started_key(state):
+            return (
+                self._as_utc(state.started_at),
+                self._as_utc(state.completed_at),
+            )
+
+        last_state = max(states, key=started_key)
+        return states_service.get_output(last_state.id).output or ""
+
+    @staticmethod
+    def _list_all_states(states_service, per_page: int = 50) -> list:
+        states = []
+        page = 0
+        while True:
+            batch = states_service.list(page=page, per_page=per_page)
+            states.extend(batch)
+            if len(batch) < per_page:
+                return states
+            page += 1
+
+    @staticmethod
+    def _as_utc(value: Optional[datetime]) -> datetime:
+        """Timezone-aware UTC value; a missing timestamp sorts before every real one."""
+        if value is None:
+            return datetime.min.replace(tzinfo=timezone.utc)
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def wait_for_state_status(
         self,

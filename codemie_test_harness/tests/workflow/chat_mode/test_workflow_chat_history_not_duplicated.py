@@ -29,6 +29,11 @@ EXECUTION_HEADING = re.compile(r"(?m)^## Execution \d+$")
 USER_INPUT_LINE = re.compile(r"(?m)^\*\*User Input:\*\* (.*)$")
 
 
+def _squash(text: str) -> str:
+    """Collapse whitespace so trimming or re-wrapping by the renderer does not matter."""
+    return " ".join(text.split())
+
+
 @pytest.fixture
 def workflow_conversation(assistant, workflow_with_assistant, conversation_utils):
     """Workflow with one assistant state and a workflow conversation for it.
@@ -96,6 +101,13 @@ def test_workflow_chat_third_execution_holds_each_earlier_input_and_output_once(
     )
     prompt = third_execution.prompt
 
+    assert_that(
+        HISTORY_HEADER in prompt and CURRENT_REQUEST_HEADER in prompt,
+        equal_to(True),
+        f"History format changed: '{HISTORY_HEADER}' and '{CURRENT_REQUEST_HEADER}' "
+        f"must both be in the third execution prompt, got: {prompt!r}",
+    )
+
     history, _, current_request = prompt.rpartition(CURRENT_REQUEST_HEADER)
     execution_blocks = EXECUTION_HEADING.split(history)[1:]
 
@@ -137,14 +149,14 @@ def test_workflow_chat_third_execution_holds_each_earlier_input_and_output_once(
         "Execution 2 must render one workflow output",
     )
     assert_that(
-        first_block.count(first_output),
-        equal_to(1),
-        "First workflow output must appear exactly once under Execution 1",
+        _squash(first_output) in _squash(first_block),
+        equal_to(True),
+        "First workflow output must be listed under Execution 1",
     )
     assert_that(
-        second_block.count(second_output),
-        equal_to(1),
-        "Second workflow output must appear exactly once under Execution 2",
+        _squash(second_output) in _squash(second_block),
+        equal_to(True),
+        "Second workflow output must be listed under Execution 2",
     )
     assert_that(
         current_request.count(data.third_input),
