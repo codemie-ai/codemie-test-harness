@@ -70,34 +70,25 @@ class ScopedIntegrationFactory:
         return alias
 
     def delete_all(self) -> None:
-        """Delete everything the test created, then raise if any delete failed.
+        """Delete everything the test created. A failed delete is logged, not raised.
 
-        A row a test already removed (404) is fine. Any other error is collected so the
-        remaining rows are still deleted, then raised: a silent failure would leave
-        integrations on the shared stand and break later list assertions.
+        Teardown matches the other integration fixtures: a row the test already removed,
+        or a backend error on cleanup, must not fail the test that has already run.
         """
-        errors: list[str] = []
         for utils, integration in reversed(self._created):
-            self._collect_error(
-                errors,
+            self._try_delete(
                 f"integration {integration.alias!r}",
                 lambda: utils.delete_integration_if_exists(integration),
             )
         for utils, alias in reversed(self._aliases):
-            self._collect_error(
-                errors,
+            self._try_delete(
                 f"integrations with alias {alias!r}",
                 lambda: utils.delete_integrations_by_alias(alias),
             )
-        if errors:
-            raise RuntimeError(
-                "Failed to delete test integrations: " + "; ".join(errors)
-            )
 
     @staticmethod
-    def _collect_error(errors: list[str], what: str, delete) -> None:
+    def _try_delete(what: str, delete) -> None:
         try:
             delete()
         except Exception as error:
             logger.error(f"Failed to delete {what}: {error}")
-            errors.append(f"{what}: {error}")

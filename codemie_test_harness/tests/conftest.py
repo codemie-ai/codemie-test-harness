@@ -1953,6 +1953,7 @@ def scheduler_integration(integration_utils):
         schedule: str = None,
         is_enabled: bool = True,
         timezone: str = None,
+        project_name: str = None,
     ):
         # If schedule is not provided, calculate cron for every hour starting at current time + 1 minute
         if schedule is None:
@@ -1970,7 +1971,10 @@ def scheduler_integration(integration_utils):
         if timezone is not None:
             credential_values.append(CredentialValues(key="timezone", value=timezone))
         integration = integration_utils.create_integration(
-            CredentialTypes.SCHEDULER, credential_values, integration_alias=alias
+            CredentialTypes.SCHEDULER,
+            credential_values,
+            integration_alias=alias,
+            project_name=project_name,
         )
         created_integrations.append(integration)
         return integration
@@ -2328,7 +2332,7 @@ def ownership_project(project, project_utils):
 
 @pytest.fixture(scope="function")
 def workflow(workflow_utils):
-    created_workflow: Optional[Workflow] = None
+    created_workflows: list[Workflow] = []
 
     def _create_workflow(
         workflow_name=None,
@@ -2348,7 +2352,6 @@ def workflow(workflow_utils):
 
         yaml_content = prepare_yaml_content(workflow_yaml.model_dump(exclude_none=True))
 
-        nonlocal created_workflow
         created_workflow = workflow_utils.create_workflow(
             workflow_name=workflow_name,
             workflow_type=WorkflowMode.SEQUENTIAL,
@@ -2357,11 +2360,20 @@ def workflow(workflow_utils):
             workflow_yaml=yaml_content,
             project_name=project_name,
         )
+        created_workflows.append(created_workflow)
         return created_workflow
 
     yield _create_workflow
-    if created_workflow:
-        workflow_utils.delete_workflow(created_workflow)
+    # A test may create several workflows and every one is deleted. A failure on the
+    # last one still fails the teardown, as before; an earlier one (a test may have
+    # deleted it itself) is logged so it cannot hide the cleanup of the others.
+    for created_workflow in created_workflows[:-1]:
+        try:
+            workflow_utils.delete_workflow(created_workflow)
+        except Exception as e:
+            logger.warning(f"Failed to delete workflow {created_workflow.id}: {e}")
+    if created_workflows:
+        workflow_utils.delete_workflow(created_workflows[-1])
 
 
 @pytest.fixture(scope="function")

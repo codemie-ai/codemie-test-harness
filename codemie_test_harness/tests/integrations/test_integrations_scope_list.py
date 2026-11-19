@@ -131,6 +131,7 @@ def filter_rows(
 # @case unified-integrations-list_TC_001
 @pytest.mark.integration
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_scope_all_lists_both_scopes_newest_first(
     project_admin_user,
     default_project_member,
@@ -206,6 +207,7 @@ def test_scope_all_lists_both_scopes_newest_first(
 # @case unified-integrations-list_TC_002
 @pytest.mark.integration
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_scope_user_and_project_match_the_per_scope_lists(
     project_admin_user,
     default_project_member,
@@ -267,6 +269,7 @@ def test_scope_user_and_project_match_the_per_scope_lists(
 # @case unified-integrations-list_TC_003
 @pytest.mark.integration
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_scope_project_is_limited_by_role(
     admin_client,
     default_project_member,
@@ -326,6 +329,7 @@ def test_scope_project_is_limited_by_role(
 )
 @pytest.mark.integration
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_filters_narrow_a_scoped_result(
     scenario, filter_rows, project_admin_integrations
 ):
@@ -403,6 +407,7 @@ def test_project_admin_scope_all_omits_project_budget_litellm_integrations(
 # @case unified-integrations-list_TC_006
 @pytest.mark.integration
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_unknown_scope_is_rejected_with_the_allowed_values(integration_utils):
     with expected_http_errors(), pytest.raises(HTTPError) as error:
         integration_utils.list_combined(scope=UNKNOWN_SCOPE)
@@ -427,6 +432,7 @@ def test_unknown_scope_is_rejected_with_the_allowed_values(integration_utils):
 )
 @pytest.mark.integration
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_out_of_range_per_page_is_rejected(per_page, integration_utils):
     with expected_http_errors(), pytest.raises(HTTPError) as error:
         integration_utils.list_combined(per_page=per_page)
@@ -440,6 +446,7 @@ def test_out_of_range_per_page_is_rejected(per_page, integration_utils):
 )
 @pytest.mark.integration
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_malformed_filters_are_rejected_with_a_help_message(filters, integration_utils):
     with expected_http_errors(), pytest.raises(HTTPError) as error:
         integration_utils.list_combined(filters=filters)
