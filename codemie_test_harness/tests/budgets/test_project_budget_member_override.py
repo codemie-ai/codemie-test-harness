@@ -22,7 +22,6 @@ from hamcrest import (
     contains_string,
     equal_to,
     greater_than,
-    none,
     not_none,
 )
 from requests import HTTPError
@@ -845,7 +844,8 @@ def test_cli_spending_falls_back_to_platform_member_override_when_no_cli_overrid
         )
         customer_spend_phase1 = float(override_customer["spend"])
         assert_that(
-            lite_llm_budget_utils.get_customer_info(cli_override_customer_id), none()
+            lite_llm_budget_utils.get_customer_spend(cli_override_customer_id),
+            equal_to(0),
         )
 
         # Phase 2 — second request: verify spending increases
@@ -875,7 +875,8 @@ def test_cli_spending_falls_back_to_platform_member_override_when_no_cli_overrid
         )
         assert_that(float(current_shared_key["spend"]), greater_than(key_spend_phase1))
         assert_that(
-            lite_llm_budget_utils.get_customer_info(cli_override_customer_id), none()
+            lite_llm_budget_utils.get_customer_spend(cli_override_customer_id),
+            equal_to(0),
         )
 
         logger.info(
@@ -964,8 +965,8 @@ def test_premium_spending_falls_back_to_platform_member_override_when_no_premium
         )
         customer_spend_phase1 = float(override_customer["spend"])
         assert_that(
-            lite_llm_budget_utils.get_customer_info(premium_override_customer_id),
-            none(),
+            lite_llm_budget_utils.get_customer_spend(premium_override_customer_id),
+            equal_to(0),
         )
 
         # Phase 2 — second request: verify spending increases
@@ -995,8 +996,8 @@ def test_premium_spending_falls_back_to_platform_member_override_when_no_premium
         )
         assert_that(float(current_shared_key["spend"]), greater_than(key_spend_phase1))
         assert_that(
-            lite_llm_budget_utils.get_customer_info(premium_override_customer_id),
-            none(),
+            lite_llm_budget_utils.get_customer_spend(premium_override_customer_id),
+            equal_to(0),
         )
 
         logger.info(
@@ -1846,8 +1847,8 @@ def test_premium_spending_falls_back_to_platform_member_override_via_chat(
         )
         customer_spend_phase1 = float(override_customer["spend"])
         assert_that(
-            lite_llm_budget_utils.get_customer_info(premium_override_customer_id),
-            none(),
+            lite_llm_budget_utils.get_customer_spend(premium_override_customer_id),
+            equal_to(0),
         )
 
         # Phase 2 — second request: verify spending increases
@@ -1875,8 +1876,8 @@ def test_premium_spending_falls_back_to_platform_member_override_via_chat(
         )
         assert_that(float(current_shared_key["spend"]), greater_than(key_spend_phase1))
         assert_that(
-            lite_llm_budget_utils.get_customer_info(premium_override_customer_id),
-            none(),
+            lite_llm_budget_utils.get_customer_spend(premium_override_customer_id),
+            equal_to(0),
         )
 
         logger.info(

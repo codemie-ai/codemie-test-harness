@@ -257,37 +257,29 @@ def test_chatting_with_different_models_in_stream_mode(
 
     _assistant = assistant_factory.create(model_type, toolkits=[tool])
 
-    is_o_model = model_type in [
-        ModelTypes.O1,
-        ModelTypes.O3_MINI,
-        ModelTypes.O3_2025_04_16,
-        ModelTypes.O4_MINI_2025_04_16,
-    ]
+    streaming_prompt = (
+        "Write a short paragraph (20 sentences) about the importance of testing. "
+        "Make sure to mention unit tests, integration tests, and end-to-end tests."
+    )
 
-    if not is_o_model:
-        streaming_prompt = (
-            "Write a short paragraph (20 sentences) about the importance of testing. "
-            "Make sure to mention unit tests, integration tests, and end-to-end tests."
-        )
+    response_metadata = assistant_utils.ask_assistant(
+        _assistant, streaming_prompt, stream=True, return_stream_metadata=True
+    )
 
-        response_metadata = assistant_utils.ask_assistant(
-            _assistant, streaming_prompt, stream=True, return_stream_metadata=True
-        )
+    chunk_count = response_metadata["chunk_count"]
+    thought_count = response_metadata["thought_count"]
 
-        chunk_count = response_metadata["chunk_count"]
-        thought_count = response_metadata["thought_count"]
+    assert_that(
+        chunk_count,
+        greater_than(5),
+        f"Expected true streaming with many chunks, got only {chunk_count} (thoughts: {thought_count})",
+    )
 
-        assert_that(
-            chunk_count,
-            greater_than(5),
-            f"Expected true streaming with many chunks, got only {chunk_count} (thoughts: {thought_count})",
-        )
-
-        assert_that(
-            thought_count,
-            greater_than(3),
-            f"Expected multiple incremental thought chunks, got only {thought_count} (total chunks: {chunk_count})",
-        )
+    assert_that(
+        thought_count,
+        greater_than(3),
+        f"Expected multiple incremental thought chunks, got only {thought_count} (total chunks: {chunk_count})",
+    )
 
     simple_response = assistant_utils.ask_assistant(
         _assistant, SIMPLE_GREETING_PROMPT, stream=True

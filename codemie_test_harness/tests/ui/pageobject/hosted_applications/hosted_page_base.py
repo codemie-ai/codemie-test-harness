@@ -41,7 +41,12 @@ class HostedPageBase(BasePage):
         return self
 
     @step
+    def press_key(self, key: str):
+        """Press a key on the focused control."""
+        self.page.keyboard.press(key)
+        return self
+
+    @step
     def press_enter(self):
         """Press Enter on the focused control."""
-        self.page.keyboard.press("Enter")
-        return self
+        return self.press_key("Enter")

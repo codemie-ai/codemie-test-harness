@@ -133,6 +133,15 @@ class CreateUserIntegrationDialog:
         return self
 
     @step
+    def should_have_no_scope_field(self):
+        """Verify that the dialog offers no Scope field: no label and no User/Project toggle."""
+        expect(self.dialog.get_by_text("Scope", exact=True)).to_have_count(0)
+        expect(
+            self.dialog.get_by_role("button", name="User", exact=True)
+        ).to_have_count(0)
+        return self
+
+    @step
     def should_have_all_expected_elements(self):
         """Verify that all expected dialog elements are visible."""
         self.should_have_project_selector_disabled()

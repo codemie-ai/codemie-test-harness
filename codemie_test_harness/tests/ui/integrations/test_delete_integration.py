@@ -33,6 +33,9 @@ from codemie_test_harness.tests.ui.pageobject.components.delete_confirmation_dia
 from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestDataFactory,
 )
+from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    SAVED_TOAST,
+)
 
 
 @pytest.mark.smoke
@@ -75,9 +78,7 @@ def test_delete_integration_with_confirmation(page: Page):
 
     # Wait for integration to be created
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
-    )
+    integrations_page.should_see_saved_message(SAVED_TOAST)
     integrations_page.should_not_see_message()
 
     # Act - Delete the integration
