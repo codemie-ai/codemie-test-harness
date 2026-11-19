@@ -47,7 +47,9 @@ def catalog_entry_create_request(
     return MCPConfigCreateRequest(
         name=name or get_random_name(),
         description="Catalog entry created for MCP link-predicate save validation tests",
-        config=MCPServerConfigData(url="https://mcp.example.com/mcp", type="streamable-http"),
+        config=MCPServerConfigData(
+            url="https://mcp.example.com/mcp", type="streamable-http"
+        ),
         is_public=is_public,
     )
 

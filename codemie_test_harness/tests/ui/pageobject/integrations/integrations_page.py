@@ -110,8 +110,11 @@ class IntegrationsPage(BasePage):
 
     @property
     def toast_message(self) -> Locator:
-        """Toast after an operation: the success toast or the status region the update and delete toasts use."""
-        return self.page.locator(".codemie-toast-success, [role='status']")
+        """Toast after an operation: success for a save, info for an update or delete.
+
+        The warning and error variants are left out so a failure toast cannot satisfy a message check.
+        """
+        return self.page.locator(".codemie-toast-success, .codemie-toast-info")
 
     @property
     def pagination_container(self):
@@ -472,10 +475,10 @@ class IntegrationsPage(BasePage):
     @step
     def should_not_see_message(self):
         """
-        Verify that no success toast is displayed.
+        Verify that no success or info toast is displayed.
         """
         self.page.mouse.move(0, 0)
-        expect(self.success_toast).to_have_count(0)
+        expect(self.toast_message).to_have_count(0)
         return self
 
     def _integration_row_by_alias(self, alias: str):
