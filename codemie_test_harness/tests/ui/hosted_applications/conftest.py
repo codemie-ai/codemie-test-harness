@@ -54,6 +54,13 @@ def ui_live_app(ui_owner_apps, ui_project):
 
 
 @pytest.fixture
+def ui_empty_app(ui_owner_apps, ui_project):
+    """An application of the UI user that has no version at all."""
+    app = ui_owner_apps.create_app(ui_project)
+    return ui_owner_apps.get_app(app.id)
+
+
+@pytest.fixture
 def ui_unreleased_app(ui_owner_apps, ui_project):
     """An application of the UI user whose only version is accepted but not live.
 

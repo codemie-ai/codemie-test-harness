@@ -55,6 +55,8 @@ from codemie_test_harness.tests.utils.credentials_manager import CredentialsMana
 
 NOT_A_SHARABLE_INTERNAL_USER = "User {uid} is not a sharable internal user"
 OWNER_ONLY_MESSAGE = "Only the assistant owner can share or revoke access"
+# Any text of two characters or more is a valid people search.
+SHARABLE_USERS_QUERY = "autotest"
 PERSONAL_INTEGRATION_MESSAGE = (
     "Assistant uses a personal integration and cannot be shared with users. "
     "Replace personal integrations with project integrations before sharing."
@@ -77,6 +79,19 @@ def _require_distinct_owner_and_grantee(client, regular_client):
         "AUTH_USERNAME_DEFAULT must identify a different internal user from "
         "AUTH_USERNAME for these sharing tests to be meaningful",
     )
+
+
+@pytest.fixture
+def assistant_project_admin_client(platform_user, user_utils):
+    """Client of a plain user who is a project admin of the project the assistants here are made in."""
+    user_utils.assign_user_to_project(
+        platform_user.user_id, PROJECT, is_project_admin=True
+    )
+    yield platform_user.client
+    try:
+        user_utils.remove_user_from_project(platform_user.user_id, PROJECT)
+    except Exception:
+        pass
 
 
 def _find_active_external_user(user_utils):
@@ -325,13 +340,23 @@ def test_direct_share_rejects_non_internal_user_id(
 # ---------------------------------------------------------------------------
 
 
+NON_OWNER_ACTORS = [
+    "unrelated_client",
+    "regular_client",
+    "assistant_project_admin_client",
+    "admin_client",
+]
+NON_OWNER_ACTOR_IDS = [
+    "no_access_user",
+    "granted_read_only_user",
+    "project_admin_of_assistant_project",
+    "platform_admin",
+]
+
+
 @pytest.mark.assistant
 @pytest.mark.api
-@pytest.mark.parametrize(
-    "actor_fixture",
-    ["unrelated_client", "regular_client"],
-    ids=["no_access_user", "granted_read_only_user"],
-)
+@pytest.mark.parametrize("actor_fixture", NON_OWNER_ACTORS, ids=NON_OWNER_ACTOR_IDS)
 def test_non_owner_cannot_share_or_revoke(
     request, assistant_factory, client, regular_client, actor_fixture
 ):
@@ -356,6 +381,30 @@ def test_non_owner_cannot_share_or_revoke(
         has_item(grantee_id),
         "the shared-with list must be unchanged after both denied attempts",
     )
+
+
+@pytest.mark.assistant
+@pytest.mark.api
+@pytest.mark.parametrize("actor_fixture", NON_OWNER_ACTORS, ids=NON_OWNER_ACTOR_IDS)
+def test_non_owner_cannot_list_grants_or_search_sharable_users(
+    request, assistant_factory, client, regular_client, actor_fixture
+):
+    # @case hosted-app-managers-share_TC_008
+    assistant = assistant_factory.create()
+    grantee_id = regular_client.users.about_me().user_id
+    client.assistants.share(assistant.id, [grantee_id])
+
+    actor_client = request.getfixturevalue(actor_fixture)
+
+    with pytest.raises(HTTPError) as exc_info:
+        actor_client.assistants.list_shared_with(assistant.id)
+    assert_response(exc_info.value.response, 403, OWNER_ONLY_MESSAGE)
+
+    with pytest.raises(HTTPError) as exc_info:
+        actor_client.assistants.search_sharable_users(
+            assistant.id, SHARABLE_USERS_QUERY
+        )
+    assert_response(exc_info.value.response, 403, OWNER_ONLY_MESSAGE)
 
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,9 @@ import pytest
 from codemie_test_harness.tests.test_data.projects_test_data import (
     get_project_create_data,
 )
+from codemie_test_harness.tests.test_data.run_attributes_test_data import (
+    WORKFLOW_TASK,
+)
 from codemie_test_harness.tests.ui.pageobject.analytics.analytics_page import (
     AnalyticsPage,
 )
@@ -26,9 +29,16 @@ from codemie_test_harness.tests.ui.pageobject.analytics.usage_attribution_page i
 from codemie_test_harness.tests.ui.pageobject.analytics.usage_attribution_table import (
     UsageAttributionTable,
 )
+from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
+    INSIGHTS_SEEDED_RUN_COUNTS,
+)
 from codemie_test_harness.tests.utils.analytics_utils import CLIAnalyticsTestSession
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     delete_projects_strict,
+)
+from codemie_test_harness.tests.utils.run_attributes_utils import (
+    ChatRunSurface,
+    WorkflowRunSurface,
 )
 
 
@@ -53,6 +63,43 @@ def cli_analytics_session(
         yield analytics_utils.create_cli_session(project=project)
     finally:
         delete_projects_strict(project_utils, [project])
+
+
+@pytest.fixture
+def insights_activity(
+    assistant_factory,
+    workflow_with_assistant,
+    analytics_utils,
+    assistant_utils,
+    conversation_utils,
+    workflow_utils,
+):
+    """Assistant chats and workflow runs whose counts and costs differ, listed by the analytics.
+
+    One assistant is asked once and another twice, one workflow runs once and another twice.
+    Every run is waited for in the per-run analytics rows, so a page opened after this fixture
+    lists the activity. The assistants and workflows go with the test; the usage records stay,
+    like any usage. Request this fixture before ``analytics_page``.
+    """
+    runs = []
+    for count in INSIGHTS_SEEDED_RUN_COUNTS:
+        chat = ChatRunSurface(
+            analytics_utils,
+            assistant_factory.create(),
+            assistant_utils,
+            conversation_utils,
+        )
+        workflow = WorkflowRunSurface(
+            analytics_utils,
+            workflow_with_assistant(assistant_factory.create(), WORKFLOW_TASK),
+            workflow_utils,
+        )
+        for surface in (chat, workflow):
+            runs.extend((surface, surface.start()) for _ in range(count))
+    for surface, run_id in runs:
+        assert surface.wait_for_row(run_id), (
+            f"The analytics should list the {type(surface).__name__} run {run_id}"
+        )
 
 
 @pytest.fixture

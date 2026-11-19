@@ -59,7 +59,6 @@ def form_opened_from_project_page(page, project):
 # @case unified-integrations-list_TC_018
 @pytest.mark.integration
 @pytest.mark.ui
-@pytest.mark.oss_standalone
 def test_form_from_the_project_page_is_locked_and_cancel_returns_to_the_project(
     form_opened_from_project_page,
 ):
@@ -76,7 +75,6 @@ def test_form_from_the_project_page_is_locked_and_cancel_returns_to_the_project(
 # @case unified-integrations-list_TC_018
 @pytest.mark.integration
 @pytest.mark.ui
-@pytest.mark.oss_standalone
 def test_back_from_the_form_of_the_project_page_returns_to_the_project(
     form_opened_from_project_page,
 ):
@@ -90,7 +88,6 @@ def test_back_from_the_form_of_the_project_page_returns_to_the_project(
 # @case unified-integrations-list_TC_018
 @pytest.mark.integration
 @pytest.mark.ui
-@pytest.mark.oss_standalone
 def test_saving_the_form_from_the_project_page_returns_to_the_project_tab(
     page, project, integration_utils, scoped_integrations
 ):

@@ -56,7 +56,6 @@ def administered_projects(fresh_project_admin_client, default_project_member):
 # @case unified-integrations-list_TC_014
 @pytest.mark.integration
 @pytest.mark.ui
-@pytest.mark.oss_standalone
 def test_project_scope_offers_only_administered_projects_and_a_scope_change_clears_the_project(
     page, default_project_member, administered_projects
 ):

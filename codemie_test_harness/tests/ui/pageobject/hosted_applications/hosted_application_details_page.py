@@ -19,6 +19,9 @@ import re
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.options_menu import (
+    OptionsMenu,
+)
 from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_page_base import (
     NEW_TAB_NAME,
     HostedPageBase,
@@ -32,6 +35,15 @@ class HostedApplicationDetailsPage(HostedPageBase):
     def open_button(self) -> Locator:
         """Open button; disabled until a version is live."""
         return self.page.get_by_role("button", name="Open", exact=True)
+
+    def more_options_button(self, app_name: str) -> Locator:
+        """More options button of the page header."""
+        return self.page.get_by_role("button", name=f"More options {app_name}")
+
+    @property
+    def options_menu(self) -> OptionsMenu:
+        """The More options menu."""
+        return OptionsMenu(self.page)
 
     @property
     def new_tab_controls(self) -> Locator:
@@ -75,6 +87,29 @@ class HostedApplicationDetailsPage(HostedPageBase):
         """Cancel button of the upload dialog."""
         return self.upload_dialog.get_by_role("button", name="Cancel")
 
+    @property
+    def shared_with_heading(self) -> Locator:
+        """Heading of the 'Shared with' section, shown to the people who may share."""
+        return self.page.get_by_role("heading", name="Shared with", exact=True)
+
+    @property
+    def access_link_heading(self) -> Locator:
+        """Heading of the 'ACCESS LINK' section."""
+        return self.page.get_by_role("heading", name="ACCESS LINK", exact=True)
+
+    @property
+    def shared_with_section(self) -> Locator:
+        """The 'Shared with' section: the one block holding its heading and not the next section."""
+        return (
+            self.page.locator("div")
+            .filter(has=self.shared_with_heading)
+            .filter(has_not=self.access_link_heading)
+        )
+
+    def access_hint(self, text: str) -> Locator:
+        """The hint under the application link that says who can open it."""
+        return self.page.get_by_text(text, exact=True)
+
     @step
     def open(self, app_id: str):
         """Open the details page of an application."""
@@ -93,6 +128,20 @@ class HostedApplicationDetailsPage(HostedPageBase):
         """Open is available, and no control opens the application in a new tab."""
         expect(self.open_button).to_be_enabled()
         expect(self.new_tab_controls).to_have_count(0)
+        return self
+
+    @step
+    def open_more_options_menu(self, app_name: str):
+        """Open the More options menu of the page header."""
+        self.more_options_button(app_name).click()
+        self.options_menu.should_be_open()
+        return self.options_menu
+
+    @step
+    def should_have_open_disabled(self):
+        """Open is shown but cannot be pressed: the application has no live version."""
+        expect(self.open_button).to_be_visible()
+        expect(self.open_button).to_be_disabled()
         return self
 
     @step
@@ -119,4 +168,30 @@ class HostedApplicationDetailsPage(HostedPageBase):
         expect(self.upload_dialog_navigation_select).to_be_focused()
         self.focus_by_keyboard(self.upload_dialog_cancel_button)
         expect(self.upload_dialog_cancel_button).to_be_focused()
+        return self
+
+    @step
+    def should_list_shared_with(self, email: str):
+        """The 'Shared with' section lists the person with this e-mail."""
+        expect(self.shared_with_section.get_by_text(email, exact=True)).to_be_visible()
+        return self
+
+    @step
+    def should_offer_no_actions(self, app_name: str):
+        """The overflow menu has no entry at all, so nothing such as Share is offered."""
+        expect(self.more_options_button(app_name)).to_be_disabled()
+        return self
+
+    @step
+    def should_not_show_shared_with(self):
+        """The page has loaded its sections and has no 'Shared with' section."""
+        expect(self.access_link_heading).to_be_visible()
+        expect(self.shared_with_heading).to_have_count(0)
+        return self
+
+    @step
+    def should_show_access_hint(self, text: str):
+        """The hint under the application link reads exactly this."""
+        expect(self.access_link_heading).to_be_visible()
+        expect(self.access_hint(text)).to_be_visible()
         return self

@@ -92,6 +92,13 @@ class BudgetUsageUtils(BaseUtils):
             for column in self.client.analytics.get_budget_usage().data.columns
         ]
 
+    def get_column_labels(self) -> dict[str, str]:
+        """Label of each response column, by column id."""
+        return {
+            column.id: column.label
+            for column in self.client.analytics.get_budget_usage().data.columns
+        }
+
     def get_row_names(self) -> list[str]:
         return row_names(self.get_rows())
 
