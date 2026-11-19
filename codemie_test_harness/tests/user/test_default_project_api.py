@@ -43,17 +43,20 @@ from hamcrest import (
     assert_that,
     contains_exactly,
     equal_to,
+    greater_than_or_equal_to,
     has_item,
     is_in,
     not_,
 )
 
+from codemie_test_harness.tests.utils.activity_utils import ActivityUtils
 from codemie_test_harness.tests.utils.user_utils import UserUtils
 
 
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.smoke
+@pytest.mark.oss_standalone
 def test_set_default_project_marks_exactly_one_default(
     user_utils, default_project_member
 ):
@@ -78,6 +81,7 @@ def test_set_default_project_marks_exactly_one_default(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_switching_default_project_replaces_previous_default(
     user_utils, default_project_member
 ):
@@ -107,6 +111,7 @@ def test_switching_default_project_replaces_previous_default(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_personal_project_can_be_set_as_default(user_utils, default_project_member):
     """TC-03: the user's own personal project is a valid explicit default."""
     member = default_project_member
@@ -124,6 +129,7 @@ def test_personal_project_can_be_set_as_default(user_utils, default_project_memb
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.parametrize("case", ["non_member_project", "unknown_project"])
+@pytest.mark.oss_standalone
 def test_set_default_project_rejected_for_invalid_project(
     request, user_utils, default_project_member, case
 ):
@@ -147,6 +153,7 @@ def test_set_default_project_rejected_for_invalid_project(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_removing_default_membership_falls_back_to_personal_project(
     user_utils, default_project_member
 ):
@@ -165,6 +172,7 @@ def test_removing_default_membership_falls_back_to_personal_project(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_bulk_removing_default_membership_falls_back_to_personal_project(
     user_utils, project_utils, default_project_member
 ):
@@ -188,6 +196,7 @@ def test_bulk_removing_default_membership_falls_back_to_personal_project(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_removing_non_default_membership_keeps_default(
     user_utils, default_project_member
 ):
@@ -206,6 +215,7 @@ def test_removing_non_default_membership_keeps_default(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_clear_default_project(user_utils, default_project_member):
     """TC-08a: clearing unsets the default; clearing again, or a non-default project, is a no-op."""
     member = default_project_member
@@ -236,6 +246,7 @@ def test_clear_default_project(user_utils, default_project_member):
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_clear_default_project_for_non_member_returns_404(
     user_utils, default_project_member, temp_project
 ):
@@ -250,6 +261,7 @@ def test_clear_default_project_for_non_member_returns_404(
 @pytest.mark.user
 @pytest.mark.api
 @pytest.mark.parametrize("actor_utils", ["admin", "maintainer"], indirect=True)
+@pytest.mark.oss_standalone
 def test_admin_and_maintainer_can_set_and_clear_default_project(
     user_utils, actor_utils, default_project_member
 ):
@@ -276,6 +288,7 @@ def test_admin_and_maintainer_can_set_and_clear_default_project(
 @pytest.mark.parametrize(
     "actor_utils", ["project_admin", "auditor", "plain_user"], indirect=True
 )
+@pytest.mark.oss_standalone
 def test_roles_without_user_management_cannot_change_default_project(
     user_utils, actor_utils, default_project_member
 ):
@@ -301,6 +314,7 @@ def test_roles_without_user_management_cannot_change_default_project(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_auditor_can_see_default_project_marker(
     user_utils, auditor_client, default_project_member
 ):
@@ -328,6 +342,7 @@ def test_auditor_can_see_default_project_marker(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_admin_user_detail_and_list_expose_default_project_marker(
     user_utils, default_project_member
 ):
@@ -361,6 +376,7 @@ def test_admin_user_detail_and_list_expose_default_project_marker(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_member_profile_shows_default_project_and_follows_changes(
     user_utils, default_project_member
 ):
@@ -398,6 +414,7 @@ def test_member_profile_shows_default_project_and_follows_changes(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_user_projects_keep_their_order_when_defaults_change(
     user_utils, default_project_member
 ):
@@ -425,12 +442,13 @@ def test_user_projects_keep_their_order_when_defaults_change(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_defaults_of_different_users_in_one_project_are_independent(
-    user_utils, default_project_member, disposable_user
+    user_utils, default_project_member, admin_user
 ):
     """TC-15: two users can both have the same project as default."""
     member = default_project_member
-    _, other_user_id, _ = disposable_user
+    other_user_id = admin_user.user_id
     user_utils.assign_user_to_project(other_user_id, member.project_a)
 
     user_utils.set_default_project(member.user_id, member.project_a)
@@ -450,6 +468,7 @@ def test_defaults_of_different_users_in_one_project_are_independent(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_default_project_can_be_set_again_after_default_membership_removed(
     user_utils, default_project_member
 ):
@@ -469,6 +488,7 @@ def test_default_project_can_be_set_again_after_default_membership_removed(
 
 @pytest.mark.user
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_set_default_project_for_unknown_user_returns_404(
     user_utils, default_project_member
 ):
@@ -478,3 +498,49 @@ def test_set_default_project_for_unknown_user_returns_404(
     )
 
     assert_that(status_code, equal_to(404), "Unknown user must be rejected")
+
+
+@pytest.mark.user
+@pytest.mark.api
+def test_mixed_case_email_user_gets_one_membership_and_one_default_project(
+    user_utils, maintainer_client, mixed_case_personal_user
+):
+    """@case user-management-shows-no-default_TC_001
+
+    A user whose email contains uppercase letters must end up with exactly one
+    personal membership and exactly one default project, both under the
+    application's real (mixed-case) name rather than a lowercase orphan, and the
+    project.created activity event for it must carry that same canonical name.
+    """
+    email, user_id, _ = mixed_case_personal_user
+    activity_utils = ActivityUtils(maintainer_client)
+
+    assert_that(
+        user_utils.get_user_project_names(user_id),
+        contains_exactly(email),
+        "Exactly one membership must exist, named after the real mixed-case project",
+    )
+    assert_that(
+        user_utils.get_default_project_names_from_detail(user_id),
+        contains_exactly(email),
+        "The real mixed-case personal project must be the only one marked default (detail)",
+    )
+    assert_that(
+        user_utils.get_default_project_names_from_list(user_id, email),
+        contains_exactly(email),
+        "The real mixed-case personal project must be the only one marked default (list)",
+    )
+
+    events = activity_utils.list_activity_events(
+        event_type=["project.created"], entity_id=email
+    )
+    assert_that(
+        len(events.data),
+        greater_than_or_equal_to(1),
+        "A project.created event must exist for the real mixed-case project name",
+    )
+    assert_that(
+        events.data[0].entity_id,
+        equal_to(email),
+        "project.created must carry the application's real (mixed-case) name as entity_id",
+    )

@@ -516,6 +516,33 @@ class CreateEditAssistantPage(BasePage):
         return self.page.locator('input[name="top_p"][placeholder="0-1"]')
 
     @property
+    def effort_select(self) -> Locator:
+        """Effort select trigger. Rendered only when the selected model has effort levels.
+        Note: Requires 'Extra configuration' accordion to be expanded first.
+        """
+        return self.page.get_by_role("button", name="Effort", exact=True)
+
+    @property
+    def effort_options(self) -> Locator:
+        """Options of the open Effort select (one per effort level of the model).
+        Scoped to the overlay listbox: PrimeVue dropdowns also render a hidden native
+        select whose options (the placeholder, 'Auto') are always in the DOM.
+        """
+        return self.page.locator('ul[role="listbox"]').get_by_role("option")
+
+    @property
+    def effort_token_usage_warning(self) -> Locator:
+        """Warning shown under the model parameters when effort is xhigh or max."""
+        return self.page.get_by_text(
+            "Higher effort increases model thinking and may significantly increase token usage."
+        )
+
+    @property
+    def effort_unsupported_alert(self) -> Locator:
+        """Validation error shown when the effort is not a level of the selected model."""
+        return self.page.get_by_text("Effort is not supported for this model")
+
+    @property
     def tools_tokens_size_limit_input(self) -> Locator:
         """Tools Tokens Size Limit input field (positive integer).
         Note: Requires 'Extra configuration' accordion to be expanded first.
@@ -696,7 +723,16 @@ class CreateEditAssistantPage(BasePage):
         accordion = self.extra_configuration_accordion
         if accordion.get_attribute("aria-expanded") != "true":
             accordion.click()
-            self.temperature_input.wait_for(state="visible", timeout=5000)
+            # Temperature is hidden for models with effort levels, which show the
+            # Effort select instead; either one means the model fields have rendered.
+            try:
+                self.temperature_input.or_(self.effort_select).first.wait_for(
+                    state="visible", timeout=5000
+                )
+            except PlaywrightTimeoutError:
+                # A model with neither field: the always-rendered model field still
+                # confirms the accordion is open.
+                self.llm_model_dropdown.wait_for(state="visible", timeout=5000)
         return self
 
     @step
@@ -1053,6 +1089,13 @@ class CreateEditAssistantPage(BasePage):
         return self
 
     @step
+    def fill_temperature_and_leave_field(self, temperature: str):
+        """Fill the temperature field and press Tab so its validation runs."""
+        self.fill_temperature(temperature)
+        self.temperature_input.press("Tab")
+        return self
+
+    @step
     def fill_top_p(self, top_p: str):
         """
         Fill the Top P field.
@@ -1179,6 +1222,78 @@ class CreateEditAssistantPage(BasePage):
         return self
 
     # ==================== ACTION METHODS ====================
+
+    # ==================== EFFORT ====================
+
+    @step
+    def select_effort(self, level: str):
+        """Open the Effort select and choose a level; returns once the options closed."""
+        self.expand_extra_configuration()
+        self.effort_select.click()
+        self.effort_options.get_by_text(level, exact=True).click()
+        expect(self.effort_options).to_have_count(0)
+        return self
+
+    @step
+    def should_have_effort_levels(self, levels: list):
+        """Open the Effort select and verify it lists exactly the given levels, in order."""
+        self.expand_extra_configuration()
+        self.effort_select.click()
+        expect(self.effort_options).to_have_text(levels)
+        self.effort_select.click()
+        expect(self.effort_options).to_have_count(0)
+        return self
+
+    @step
+    def should_have_effort_select_visible(self):
+        """Verify the Effort select is rendered."""
+        self.expand_extra_configuration()
+        expect(self.effort_select).to_be_visible()
+        return self
+
+    @step
+    def should_not_have_effort_select(self):
+        """Verify no Effort select is rendered (the model has no effort levels)."""
+        self.expand_extra_configuration()
+        expect(self.effort_select).to_have_count(0)
+        return self
+
+    @step
+    def should_have_temperature_and_top_p_hidden(self):
+        """Verify the Temperature and Top P inputs are not rendered."""
+        self.expand_extra_configuration()
+        expect(self.temperature_input).to_have_count(0)
+        expect(self.top_p_input).to_have_count(0)
+        return self
+
+    @step
+    def should_have_temperature_value(self, expected: str):
+        """Verify the Temperature input is visible and holds the given value."""
+        self.expand_extra_configuration()
+        expect(self.temperature_input).to_be_visible()
+        expect(self.temperature_input).to_have_value(expected)
+        return self
+
+    @step
+    def should_show_effort_token_usage_warning(self):
+        """Verify the token-usage warning for a high effort is shown."""
+        expect(self.effort_token_usage_warning).to_be_visible()
+        return self
+
+    @step
+    def should_not_show_effort_token_usage_warning(self, level: str):
+        """Verify the token-usage warning is not shown once the Effort select shows level."""
+        expect(self.effort_select).to_contain_text(level)
+        expect(self.effort_token_usage_warning).to_have_count(0)
+        return self
+
+    @step
+    def should_not_show_effort_unsupported_alert(self, model_label: str):
+        """Verify the 'Effort is not supported for this model' error is not shown
+        once the model dropdown shows model_label."""
+        expect(self.llm_model_dropdown).to_contain_text(model_label)
+        expect(self.effort_unsupported_alert).to_have_count(0)
+        return self
 
     @step
     def click_create(self):

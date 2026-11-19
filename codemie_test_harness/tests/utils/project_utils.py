@@ -40,6 +40,7 @@ from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
 from codemie_test_harness.tests.utils.base_utils import BaseUtils, poll_until
+from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
 
 _BUDGET_SPENDING_POLL_INTERVAL = 10
 _USERS_PER_PAGE = 100
@@ -251,6 +252,24 @@ class ProjectUtils(BaseUtils):
             if found or len(response.data) < _USERS_PER_PAGE:
                 return found
             page += 1
+
+    def get_member_budget_spending(
+        self, budget_id: str, category: str, user_id: str
+    ) -> float:
+        """The user's current ledger spending for the budget and category.
+
+        A user holds no assignment for a category until the first request of that kind is
+        charged, so a missing assignment reads as 0.0 rather than as an error.
+        """
+        for user in self._users_holding_budget(budget_id, user_id):
+            for assignment in user.budget_assignments:
+                if (
+                    assignment.budget_id == budget_id
+                    and assignment.category == category
+                    and assignment.current_spending is not None
+                ):
+                    return assignment.current_spending
+        return 0.0
 
     def wait_for_member_budget_spending_above(
         self,
@@ -524,7 +543,13 @@ class ProjectUtils(BaseUtils):
         deletion — DELETE /v1/projects/{name} 409s if any remain). Project
         budgets are only ever created via budget groups now, and deleting a
         group cascades to all of its category budgets.
+
+        OSS standalone has no budgets/budget groups at all (403 on every
+        call), so this is a no-op there.
         """
+        if EnvironmentResolver.is_oss_standalone():
+            return
+
         budget_utils = AdminProjectBudgetUtils(self.client)
 
         response = self.client.project_budget_groups.list_by_project(project_name)
@@ -544,7 +569,12 @@ class ProjectUtils(BaseUtils):
         a project (required before deletion — DELETE /v1/projects/{name}
         409s if any remain). Fixtures use this cascade instead of a
         one-off sweep script.
+
+        OSS standalone only has integrations: none of these entity types
+        exist there (404 on every call), so this is a no-op there.
         """
+        if EnvironmentResolver.is_oss_standalone():
+            return
 
         def _fetch_assistants(per_page):
             # scope="visible_to_user" surfaces assistants owned by/visible to

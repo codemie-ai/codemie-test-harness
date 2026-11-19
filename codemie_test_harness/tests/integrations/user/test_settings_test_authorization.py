@@ -67,6 +67,7 @@ FORBIDDEN_TEST_DETAILS = (
 @pytest.mark.jira
 @pytest.mark.project_management
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_owner_can_test_own_user_setting(general_integration, integration_utils):
     """
     The owner of a stored USER Jira setting can test it via
@@ -109,6 +110,7 @@ def test_owner_can_test_own_user_setting(general_integration, integration_utils)
 @pytest.mark.jira
 @pytest.mark.project_management
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_non_owner_denied_testing_others_user_setting(
     general_integration, non_admin_integration_utils
 ):

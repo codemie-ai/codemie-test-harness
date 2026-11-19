@@ -45,6 +45,11 @@ class LiteLLMBudgetUtils:
         resp.raise_for_status()
         return resp.json()
 
+    def get_customer_spend(self, customer_id: str) -> float:
+        """Spend of the customer; 0.0 both when it is absent and when it exists uncharged."""
+        customer = self.get_customer_info(customer_id)
+        return float(customer.get("spend") or 0) if customer else 0.0
+
     def create_key(self) -> str:
         resp = requests.post(
             f"{self._url}/key/generate",
@@ -342,8 +347,7 @@ class LiteLLMBudgetUtils:
             info = self.get_key_info_by_alias(alias)
             spends[label] = float(info.get("spend", 0)) if info else 0.0
         for label, customer_id in customers.items():
-            info = self.get_customer_info(customer_id)
-            spends[label] = float(info.get("spend", 0)) if info else 0.0
+            spends[label] = self.get_customer_spend(customer_id)
         return spends
 
     def wait_for_charged_sources(
@@ -351,21 +355,22 @@ class LiteLLMBudgetUtils:
         before: dict[str, float],
         key_aliases: dict[str, str],
         customers: dict[str, str],
+        timeout: float = _CHARGE_POLL_TIMEOUT,
     ) -> set[str]:
         """Labels whose spend grew since ``before``.
 
         Waits for the first growth, then a grace period so that a request wrongly charged
-        to a second source is still noticed. Raises TimeoutError if nothing grew in time,
-        so a timeout is never mistaken for "nothing was charged".
+        to a second source is still noticed. Raises TimeoutError if nothing grew within
+        ``timeout`` seconds, so a timeout is never mistaken for "nothing was charged".
         """
-        deadline = time.monotonic() + _CHARGE_POLL_TIMEOUT
+        deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self._grown(before, self.get_spends(key_aliases, customers)):
                 time.sleep(_CHARGE_GRACE)
                 return self._grown(before, self.get_spends(key_aliases, customers))
             time.sleep(_SPENDING_POLL_INTERVAL)
         raise TimeoutError(
-            f"No spend growth within {_CHARGE_POLL_TIMEOUT}s for "
+            f"No spend growth within {timeout}s for "
             f"{sorted({*key_aliases, *customers})}"
         )
 

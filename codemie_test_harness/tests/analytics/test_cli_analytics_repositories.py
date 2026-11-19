@@ -33,6 +33,7 @@ def repository_sessions(seed_cli_sessions):
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_repository_rows_group_sessions_by_repository(
     analytics_utils, cli_analytics_project, repository_sessions
@@ -54,6 +55,7 @@ def test_repository_rows_group_sessions_by_repository(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_unattributed_filter_lists_only_sessions_without_repository(
     analytics_utils, cli_analytics_project, repository_sessions
@@ -74,6 +76,7 @@ def test_unattributed_filter_lists_only_sessions_without_repository(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 @pytest.mark.parametrize("repository", SEED_REPOSITORIES, ids=["first", "other"])
 def test_repositories_filter_selects_only_that_repository(

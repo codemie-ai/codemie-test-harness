@@ -67,6 +67,7 @@ def _filters(project_name: str) -> dict:
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 @pytest.mark.parametrize("project", ISOLATED_PROJECTS)
 def test_project_filter_totals_count_only_that_project(
@@ -85,6 +86,7 @@ def test_project_filter_totals_count_only_that_project(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 @pytest.mark.parametrize("project", ISOLATED_PROJECTS)
 def test_project_filter_cost_counts_only_that_project(
@@ -126,6 +128,7 @@ def test_project_filter_cost_counts_only_that_project(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 @pytest.mark.parametrize("project", ISOLATED_PROJECTS)
 def test_project_filter_lists_only_that_project_sessions(
@@ -156,6 +159,7 @@ def test_project_filter_lists_only_that_project_sessions(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 @pytest.mark.parametrize("project", ISOLATED_PROJECTS)
 def test_project_filter_user_rows_hold_only_that_project(
@@ -182,6 +186,7 @@ def test_project_filter_user_rows_hold_only_that_project(
 
 
 @pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
 @pytest.mark.api
 def test_project_without_sessions_has_empty_results(analytics_utils, empty_project):
     """Filtering by a project nobody reported to gives zero totals and no rows: the

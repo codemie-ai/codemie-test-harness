@@ -39,6 +39,10 @@ def assert_seed_incident_returned(response: str, seed):
 @pytest.mark.direct_tool
 @pytest.mark.servicenow
 @pytest.mark.api
+@pytest.mark.xfail(
+    reason="ServiceNow environment is temporary not available",
+    strict=False,
+)
 def test_workflow_with_servicenow_tools_direct(
     service_now_integration,
     workflow_utils,
@@ -62,6 +66,10 @@ def test_workflow_with_servicenow_tools_direct(
 @pytest.mark.direct_tool
 @pytest.mark.servicenow
 @pytest.mark.api
+@pytest.mark.xfail(
+    reason="ServiceNow environment is temporary not available",
+    strict=False,
+)
 def test_workflow_with_servicenow_tools_with_hardcoded_args(
     service_now_integration,
     workflow_utils,
@@ -86,6 +94,10 @@ def test_workflow_with_servicenow_tools_with_hardcoded_args(
 @pytest.mark.direct_tool
 @pytest.mark.servicenow
 @pytest.mark.api
+@pytest.mark.xfail(
+    reason="ServiceNow environment is temporary not available",
+    strict=False,
+)
 def test_workflow_with_servicenow_tools_with_overriding_args(
     service_now_integration,
     workflow_utils,

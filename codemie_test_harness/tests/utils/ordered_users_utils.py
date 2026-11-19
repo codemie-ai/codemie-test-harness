@@ -33,10 +33,11 @@ from codemie_test_harness.tests.test_data.admin_users_order_test_data import (
     OrderedUsers,
 )
 from codemie_test_harness.tests.utils.client_factory import get_client
-from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
-from codemie_test_harness.tests.utils.keycloak_utils import KeycloakUtils
 from codemie_test_harness.tests.utils.local_user_utils import LocalUserUtils
 from codemie_test_harness.tests.utils.logger_util import setup_logger
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    get_user_lifecycle_utils,
+)
 
 logger = setup_logger(__name__)
 
@@ -45,9 +46,8 @@ class OrderedUsersBuilder:
     def __init__(self, client, user_utils) -> None:
         self._client = client
         self._user_utils = user_utils
-        self._local = EnvironmentResolver.is_localhost()
-        self._local_users = LocalUserUtils(client) if self._local else None
-        self._keycloak = None if self._local else KeycloakUtils()
+        self._users = get_user_lifecycle_utils(client)
+        self._local = isinstance(self._users, LocalUserUtils)
         self._created: List[tuple] = []  # (user id, email)
 
     def create(self, scenario: OrderScenario) -> OrderedUsers:
@@ -65,7 +65,7 @@ class OrderedUsersBuilder:
         return OrderedUsers(token=token, users=[user for _, user in created])
 
     def _create_local(self, spec, token, email) -> str:
-        user = self._local_users.create_user(
+        user = self._users.create_user(
             email=email, username=spec.username(token), name=spec.name or None
         )
         self._created.append((user.id, email))
@@ -75,7 +75,7 @@ class OrderedUsersBuilder:
         # Recorded before the auth-server call: a failure part-way (user created, password or
         # role mapping not) must still be cleaned up. The platform id is filled in after login.
         self._created.append((None, email))
-        password = self._keycloak.create_platform_user(email=email)
+        password = self._users.create_platform_user(email=email)
         user_id = get_client(username=email, password=password).users.about_me().user_id
         self._created[-1] = (user_id, email)
         return user_id
@@ -118,9 +118,7 @@ class OrderedUsersBuilder:
                 logger.warning(f"Failed to deactivate user {email}: {e}")
             if not self._local:
                 try:
-                    self._keycloak.delete_user(
-                        email
-                    )  # no-op when the user is not there
+                    self._users.delete_user(email)  # no-op when the user is not there
                 except Exception as e:
                     logger.warning(f"Failed to delete auth-server user {email}: {e}")
 

@@ -15,6 +15,7 @@
 """Utility class for analytics operations."""
 
 import json
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -219,6 +220,45 @@ class AnalyticsUtils(BaseUtils):
         """
         params = PaginatedAnalyticsQueryParams(**kwargs) if kwargs else None
         return self.client.analytics.get_projects_spending(params)
+
+    def wait_for_projects_with_spend(
+        self,
+        projects: list[str],
+        expected: str,
+        user_id: str,
+        timeout: float = 600,
+        interval: float = 20,
+    ) -> set[str]:
+        """Names among ``projects`` that show spend of the user in the last hour.
+
+        Waits until ``expected`` shows spend, then one more interval so that a project
+        wrongly charged a little later is still seen. Raises TimeoutError if ``expected``
+        never shows spend.
+        """
+        deadline = time.monotonic() + timeout
+        while True:
+            shown = self._projects_with_spend(projects, user_id)
+            if expected in shown:
+                time.sleep(interval)
+                return self._projects_with_spend(projects, user_id)
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"{expected} shows no spend in the analytics within {timeout}s"
+                )
+            time.sleep(interval)
+
+    def _projects_with_spend(self, projects: list[str], user_id: str) -> set[str]:
+        response = self.get_projects_spending(
+            time_period="last_hour",
+            projects=",".join(projects),
+            users=user_id,
+            per_page=len(projects),
+        )
+        return {
+            row["project_name"]
+            for row in response.data.rows
+            if row["total_cost_usd"] > 0
+        }
 
     def get_llms_usage(self, **kwargs) -> TabularResponse:
         """Get top LLMs usage analytics.
@@ -559,7 +599,8 @@ class AnalyticsUtils(BaseUtils):
     def wait_for_cli_session_end(
         self, trace_id: str, timeout: float = CLI_SESSION_ROLLUP_TIMEOUT
     ) -> CliAnalyticsSessionRow:
-        """Wait until the rollup of a session includes its end event.
+        """Wait until the rollup of a session includes its last real-work event (the
+        turn stop at its end).
 
         Raises:
             AssertionError: If the session has no duration within timeout.

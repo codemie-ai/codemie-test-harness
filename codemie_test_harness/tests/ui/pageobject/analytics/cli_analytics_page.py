@@ -59,16 +59,14 @@ class CLIAnalyticsPage(BasePage):
     """CLI Analytics dashboard and its section navigation."""
 
     PATH = "/analytics?tab=cliAnalytics"
-    TAB_NAME = "CLI Analytics"
+    TAB_NAME = "AI Attribution"
     API_PATH = "/v1/analytics/cli-analytics/"
     SECTIONS = {
         CLIAnalyticsSection.OVERVIEW: SectionSpec(
             "Net Lines Over Time", ("overview", "repositories")
         ),
-        CLIAnalyticsSection.USERS: SectionSpec("All Users", ("users", "user-charts")),
-        CLIAnalyticsSection.REPOSITORIES: SectionSpec(
-            "Repositories", ("repositories",)
-        ),
+        CLIAnalyticsSection.USERS: SectionSpec("All Users", ("users",)),
+        CLIAnalyticsSection.REPOSITORIES: SectionSpec("Repositories", ("projects",)),
         CLIAnalyticsSection.TOOLS_AND_MODELS: SectionSpec(
             "Most Used Tools", ("tools",)
         ),
@@ -179,14 +177,24 @@ class CLIAnalyticsPage(BasePage):
             .filter(has_not=self.page.get_by_text(self.EMPTY_TABLE_TEXT, exact=True))
         )
 
-    def _user_row_tool_success_cell(self, row: Locator) -> Locator:
-        """Tool Success cell in a Users table row (5th column, index 4).
+    @property
+    def users_tool_success_header(self) -> Locator:
+        """'Tool Success' column header of the Users table."""
+        return self.section_panel.get_by_role("columnheader").filter(
+            has_text=re.compile(r"^Tool Success$")
+        )
 
-        Columns: USER(0) SESSIONS(1) TURNS(2) TOOL CALLS(3) TOOL SUCCESS(4) ...
-        The live component renders no data-testid on table cells; positional lookup
-        is used instead.
+    def _user_row_tool_success_cell(self, row: Locator) -> Locator:
+        """Tool Success cell in a Users table row.
+
+        The live component renders no data-testid on table cells, and columns have
+        been inserted before this one (Est. Cost), so the position is read from the
+        column header instead of being hard-coded.
         """
-        return row.get_by_role("cell").nth(4)
+        column = self.users_tool_success_header.evaluate(
+            "header => Array.from(header.parentElement.children).indexOf(header)"
+        )
+        return row.get_by_role("cell").nth(column)
 
     # ── Actions ──────────────────────────────────────────────────────────────────
 
