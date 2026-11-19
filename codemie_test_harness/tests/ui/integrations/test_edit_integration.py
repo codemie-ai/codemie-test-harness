@@ -36,6 +36,7 @@ from codemie_test_harness.tests.ui.test_data.integration_test_data import (
 )
 from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
     SAVED_TOAST,
+    UPDATED_TOAST,
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 
@@ -81,6 +82,7 @@ def test_edit_integration_update_credentials(page: Page):
     # Wait for integration to be created
     integrations_page.wait_for_page_load()
     integrations_page.should_see_saved_message(SAVED_TOAST)
+    integrations_page.close_toasts()
 
     # Act - Edit the integration
     integration_row = integrations_page.get_integration_row_by_alias(
@@ -98,9 +100,8 @@ def test_edit_integration_update_credentials(page: Page):
 
     # Assert - Verify success
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_updated"]
-    )
+    integrations_page.should_see_message(UPDATED_TOAST)
+
     integrations_page.should_see_specific_integration(integration_test_data.alias)
 
 
@@ -143,6 +144,7 @@ def test_edit_integration_update_alias(page: Page):
     # Wait for integration to be created
     integrations_page.wait_for_page_load()
     integrations_page.should_see_saved_message(SAVED_TOAST)
+    integrations_page.close_toasts()
 
     # Act - Edit the integration alias
     integration_row = integrations_page.get_integration_row_by_alias(
