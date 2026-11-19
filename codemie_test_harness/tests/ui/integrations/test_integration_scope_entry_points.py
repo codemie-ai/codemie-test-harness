@@ -59,6 +59,7 @@ def form_opened_from_project_page(page, project):
 # @case unified-integrations-list_TC_018
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_form_from_the_project_page_is_locked_and_cancel_returns_to_the_project(
     form_opened_from_project_page,
 ):
@@ -75,6 +76,7 @@ def test_form_from_the_project_page_is_locked_and_cancel_returns_to_the_project(
 # @case unified-integrations-list_TC_018
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_back_from_the_form_of_the_project_page_returns_to_the_project(
     form_opened_from_project_page,
 ):
@@ -88,6 +90,7 @@ def test_back_from_the_form_of_the_project_page_returns_to_the_project(
 # @case unified-integrations-list_TC_018
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_saving_the_form_from_the_project_page_returns_to_the_project_tab(
     page, project, integration_utils, scoped_integrations
 ):
@@ -110,6 +113,7 @@ def test_saving_the_form_from_the_project_page_returns_to_the_project_tab(
 # @case unified-integrations-list_TC_019
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.oss_standalone
 def test_quick_create_popup_shows_no_scope_field(page):
     create_page = CreateEditDatasourcePage(page)
     dialog = create_page.create_user_integration_dialog
@@ -129,6 +133,7 @@ def test_quick_create_popup_shows_no_scope_field(page):
 @pytest.mark.parametrize(
     "kind", SCHEDULER_KINDS, ids=lambda kind: f"{kind.lower()}_scheduler"
 )
+@pytest.mark.oss_standalone
 def test_schedulers_forms_show_no_scope_field(page, kind):
     schedulers_page = SchedulersPage(page)
     schedulers_page.navigate_to()
