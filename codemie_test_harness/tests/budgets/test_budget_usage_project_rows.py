@@ -63,12 +63,15 @@ from codemie_test_harness.tests.utils.budget_usage_steps import (
     assert_personal_page_limit_equals_admin_limit,
     assert_personal_page_spend_and_total_equal_admin_table,
     assert_personal_row_first_and_flagged_while_personal_is_default,
+    assert_personal_rows_are_not_shared_limit,
     assert_personal_rows_are_the_first_three_rows_while_personal_is_default,
     assert_only_platform_category_is_listed_for_budgeted_projects,
     assert_project_row_carries_reset_date_and_time_until_reset,
+    assert_project_row_flags_shared_limit,
     assert_project_without_budget_is_not_listed,
     assert_projects_with_a_budget_are_listed,
     assert_row_has_a_reset_date_to_compare,
+    assert_shared_limit_column_is_listed,
     assert_unenforced_row_at_rest_shows_hard_limit_without_spend,
     assert_user_without_memberships_gets_personal_rows_only,
     clear_member_override,
@@ -672,3 +675,33 @@ def test_get_budget_usage_override_is_capped_by_remaining_project_budget_when_no
 
     assert_member_with_override_is_capped_by_the_remaining_project_budget(scenario)
     assert_owner_without_override_sees_hard_limit_and_combined_total(scenario)
+
+
+# @case spendings-view-show-personal-project_TC_001
+@pytest.mark.parametrize(
+    "enforce, is_shared_limit",
+    [(False, True), (True, False)],
+    ids=["enforcement_off", "enforcement_on"],
+)
+@pytest.mark.enterprise
+@pytest.mark.budget
+@pytest.mark.timeout(1000)
+@pytest.mark.api
+def test_get_budget_usage_flags_project_row_as_shared_limit_by_enforcement_mode(
+    enforce,
+    is_shared_limit,
+    user_client,
+    keycloak_user,
+    assigned_platform_budget,
+    member_project_factory,
+    user_usage,
+):
+    project = create_member_project(
+        member_project_factory, user_client, keycloak_user, enforce=enforce
+    )
+    wait_for_project_row_and_personal_row(user_usage, project, keycloak_user)
+
+    rows = user_usage.get_rows()
+    assert_project_row_flags_shared_limit(rows, project, is_shared_limit)
+    assert_personal_rows_are_not_shared_limit(rows, keycloak_user)
+    assert_shared_limit_column_is_listed(user_usage)

@@ -15,7 +15,7 @@
 import logging
 
 import pytest
-from hamcrest import assert_that, greater_than, none, not_none, equal_to
+from hamcrest import assert_that, greater_than, not_none, equal_to
 
 from codemie_sdk.models.integration import CredentialTypes, CredentialValues
 
@@ -91,7 +91,7 @@ def test_litellm_key_overrides_project_platform_budget(
         float(lite_llm_budget_utils.get_key_info_by_alias(platform_alias)["spend"]),
         equal_to(0),
     )
-    assert_that(lite_llm_budget_utils.get_customer_info(user2_email), none())
+    assert_that(lite_llm_budget_utils.get_customer_spend(user2_email), equal_to(0))
 
 
 @pytest.mark.budget
@@ -129,10 +129,10 @@ def test_litellm_key_overrides_project_cli_budget(
         equal_to(0),
     )
     assert_that(
-        lite_llm_budget_utils.get_customer_info(
+        lite_llm_budget_utils.get_customer_spend(
             f"{user2_email}_{DEFAULT_CLI_BUDGET_ID}"
         ),
-        none(),
+        equal_to(0),
     )
 
 
@@ -170,10 +170,10 @@ def test_litellm_key_overrides_project_premium_budget(
         equal_to(0),
     )
     assert_that(
-        lite_llm_budget_utils.get_customer_info(
+        lite_llm_budget_utils.get_customer_spend(
             f"{user2_email}_{DEFAULT_PREMIUM_BUDGET_ID}"
         ),
-        none(),
+        equal_to(0),
     )
 
 
@@ -208,10 +208,10 @@ def test_litellm_key_overrides_project_premium_budget_via_chat(
         equal_to(0),
     )
     assert_that(
-        lite_llm_budget_utils.get_customer_info(
+        lite_llm_budget_utils.get_customer_spend(
             f"{user2_email}_{DEFAULT_PREMIUM_BUDGET_ID}"
         ),
-        none(),
+        equal_to(0),
     )
 
 

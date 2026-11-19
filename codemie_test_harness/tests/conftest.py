@@ -112,8 +112,12 @@ from codemie_test_harness.tests.utils.github_seed import (
 from codemie_test_harness.tests.utils.github_utils import GitHubUtils
 from codemie_test_harness.tests.utils.azure_devops_seed import SeedPullRequest
 from codemie_test_harness.tests.utils.azure_devops_utils import AzureDevOpsUtils
+from codemie_test_harness.tests.utils.hosted_sharing_utils import HostedPeople
 from codemie_test_harness.tests.utils.http_utils import RequestHandler
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
+from codemie_test_harness.tests.utils.scoped_integration_factory import (
+    ScopedIntegrationFactory,
+)
 from codemie_test_harness.tests.utils.jira_seed import (
     SeedIssue,
     resolve_seeded,
@@ -820,6 +824,18 @@ def keycloak_utils(client):
     return get_user_lifecycle_utils(client)
 
 
+@pytest.fixture
+def hosted_people(keycloak_utils, admin_utils, user_utils, project_utils):
+    """Users and shared projects for a hosted-application test, API or UI, removed after it.
+
+    Each user keeps its password, so a browser can sign in as them; see ``HostedPeople``.
+    """
+    with contextlib.ExitStack() as cleanup:
+        yield HostedPeople(
+            cleanup, keycloak_utils, admin_utils, user_utils, project_utils
+        )
+
+
 # Role fixtures. Each yields a LoggedInUser (email, password, user_id, client) of a fresh
 # user, created through keycloak_utils (local IdP or Keycloak, by domain) and deleted after
 # the test. A test that needs two users of one role takes the second_* fixture as well.
@@ -882,6 +898,26 @@ def project_admin_user(keycloak_utils, user_utils, default_project_member):
             user.user_id, default_project_member.project_a, is_project_admin=True
         )
         yield user
+
+
+@pytest.fixture
+def fresh_project_admin_client(project_admin_user):
+    """A fresh login of project_admin_user, made after the project admin role was assigned.
+
+    The client of the fixture itself logged in before the assignment, so a backend that caches
+    the administered projects per token may still hold an empty list for it.
+    """
+    return get_client(
+        username=project_admin_user.email, password=project_admin_user.password
+    )
+
+
+@pytest.fixture
+def scoped_integrations():
+    """Factory for user and project integrations created as any client; deleted after the test."""
+    factory = ScopedIntegrationFactory()
+    yield factory
+    factory.delete_all()
 
 
 @pytest.fixture

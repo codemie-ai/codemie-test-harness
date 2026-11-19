@@ -15,8 +15,12 @@
 import re
 
 from playwright.sync_api import Page, Locator, expect
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.assistants.tools_section import (
+    ToolsSection,
+)
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 
 
@@ -25,6 +29,7 @@ class AssistantNodeConfigPanel(BasePage):
 
     def __init__(self, page: Page):
         super().__init__(page)
+        self.tools = ToolsSection(page)
 
     # ==============================================
     # PROPERTIES - UI ELEMENTS
@@ -139,6 +144,19 @@ class AssistantNodeConfigPanel(BasePage):
         """Save button in config panel."""
         return self.config_panel.get_by_role("button", name="Save")
 
+    @step
+    def tools_group_header(self, group_name: str) -> Locator:
+        """Heading of a tool group in the Available Tools list of the panel."""
+        return self.config_panel.get_by_role("heading", name=group_name, exact=True)
+
+    @property
+    def available_tools_dialog(self) -> Locator:
+        """Available Tools modal opened by "Configure Available Tools" (groups on the
+        left, the tools of the chosen group on the right)."""
+        return self.page.get_by_role("dialog").filter(
+            has=self.page.locator("h4", has_text="Available Tools")
+        )
+
     # ==============================================
     # METHODS - VERIFICATION & ASSERTIONS
     # ==============================================
@@ -247,4 +265,50 @@ class AssistantNodeConfigPanel(BasePage):
     def should_have_reset_context_keys_value(self, expected: str):
         """Verify the Reset Context Keys input has the expected raw string value."""
         expect(self.reset_context_keys_input).to_have_value(expected)
+        return self
+
+    @step
+    def open_tools_group(self, group_name: str):
+        """Open the Available Tools modal of the panel on a tool group.
+
+        The group rows of the panel only list the groups; their tools show in the
+        modal opened by "Configure Available Tools". While the "Available Tools"
+        accordion is collapsed it clips that button, so it is expanded first.
+        """
+        # The accordion header is an <a aria-expanded> (no button role); its content
+        # is clipped to zero height while collapsed, so the button inside is only
+        # clickable once the accordion is open.
+        available_tools_header = self.config_panel.locator("a[aria-expanded]").filter(
+            has=self.page.get_by_role("heading", name="Available Tools", level=1)
+        )
+        expect(available_tools_header).to_have_count(1)
+        if available_tools_header.get_attribute("aria-expanded") == "false":
+            available_tools_header.click()
+        expect(available_tools_header).to_have_attribute("aria-expanded", "true")
+        configure_button = self.config_panel.get_by_role(
+            "button", name="Configure Available Tools"
+        )
+        expect(configure_button).to_be_visible()
+        # The panel has a sticky footer and sticky accordion headers: the nearest-edge
+        # scroll of an automatic click can leave the button under one of them, so the
+        # button is centered in the scroll area before every attempt.
+        for attempt in range(3):
+            configure_button.evaluate(
+                "el => el.scrollIntoView({block: 'center', inline: 'nearest'})"
+            )
+            try:
+                configure_button.click(timeout=10_000)
+                break
+            except PlaywrightTimeoutError:
+                if attempt == 2:
+                    raise
+        expect(self.available_tools_dialog).to_be_visible()
+        self.available_tools_dialog.get_by_text(group_name, exact=True).first.click()
+        return self
+
+    @step
+    def close_tools_dialog(self):
+        """Close the Available Tools modal."""
+        self.available_tools_dialog.get_by_role("button", name="Close").click()
+        self.available_tools_dialog.wait_for(state="hidden")
         return self
