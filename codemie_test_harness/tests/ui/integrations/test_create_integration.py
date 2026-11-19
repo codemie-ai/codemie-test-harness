@@ -25,13 +25,29 @@ from codemie_sdk.models.integration import CredentialTypes
 from codemie_test_harness.tests.ui.pageobject.integrations.create_integration_page import (
     CreateIntegrationPage,
 )
+from codemie_test_harness.tests.ui.pageobject.integrations.integration_form_page import (
+    IntegrationFormPage,
+)
+from codemie_test_harness.tests.ui.pageobject.integrations.integrations_list_page import (
+    IntegrationsListPage,
+)
 from codemie_test_harness.tests.ui.pageobject.integrations.integrations_page import (
     IntegrationsPage,
 )
 from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestDataFactory,
 )
+from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    SAVED_TOAST,
+    SCOPE_BADGE_PROJECT_ONLY,
+    SCOPE_BADGE_USER_ONLY,
+)
 from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
+
+# Hint on an option bound to the other scope (frontend settingsUIConfig / SettingsForm)
+SWITCHES_SCOPE_HINT_PREFIX = "Switches Scope to"
+SWITCHES_SCOPE_TO_PROJECT_HINT = f"{SWITCHES_SCOPE_HINT_PREFIX} Project"
+SWITCHES_SCOPE_TO_USER_HINT = f"{SWITCHES_SCOPE_HINT_PREFIX} User"
 
 
 @pytest.mark.integration
@@ -55,7 +71,7 @@ def test_navigate_to_integrations_via_menu(page):
     # Assert
     integrations_page.should_be_on_integrations_page()
     integrations_page.should_see_create_integration_button()
-    integrations_page.should_see_integration_type_switcher()
+    integrations_page.should_see_integration_scope_filter()
     integrations_page.should_see_integrations_table()
 
 
@@ -100,21 +116,30 @@ def test_navigate_to_create_integration_from_integrations_page(page):
     - Page Title matches integration type
     """
 
-    integrations_page = IntegrationsPage(page)
-
-    # Navigate to User Integration creation
-    integrations_page.navigate_to().navigate_to_user_integration_creation()
-
+    list_page = IntegrationsListPage(page)
     create_integration_page = CreateIntegrationPage(page)
+    form_page = IntegrationFormPage(page)
+
+    # Scope filter 'User' on the list: the 'New Integration' button opens the form with
+    # Scope 'User' already selected (the form is not told which Scope to take)
+    list_page.navigate_to()
+    list_page.select_scope("User")
+    list_page.click_new_integration()
+    form_page.wait_until_open()
 
     # Assert
-    create_integration_page.should_be_on_create_user_integration_page()
+    create_integration_page.should_be_on_new_integration_form()
+    form_page.should_have_scope_selected("User")
 
-    # Navigate to Project Integration creation
-    integrations_page.navigate_to().navigate_to_project_integration_creation()
+    # Scope filter 'Project' on the list: the same form opens with Scope 'Project'
+    list_page.navigate_to()
+    list_page.select_scope("Project")
+    list_page.click_new_integration()
+    form_page.wait_until_open()
 
     # Assert
-    create_integration_page.should_be_on_create_project_integration_page()
+    create_integration_page.should_be_on_new_integration_form()
+    form_page.should_have_scope_selected("Project")
 
 
 @pytest.mark.smoke
@@ -229,8 +254,8 @@ def test_create_git_integration_complete_workflow(page):
     create_integration_page.create_integration()
 
     # Assert
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
+    integrations_page.should_see_saved_message(
+        SAVED_TOAST
     ).should_see_specific_integration(integration_test_data.alias)
 
 
@@ -259,8 +284,8 @@ def test_create_jira_integration_complete_workflow(page):
     create_integration_page.fill_jira_integration_form(integration_test_data)
     create_integration_page.create_integration()
 
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
+    integrations_page.should_see_saved_message(
+        SAVED_TOAST
     ).should_see_specific_integration(integration_test_data.alias)
 
 
@@ -289,8 +314,8 @@ def test_create_confluence_integration_complete_workflow(page):
     create_integration_page.fill_confluence_integration_form(integration_test_data)
     create_integration_page.create_integration()
 
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
+    integrations_page.should_see_saved_message(
+        SAVED_TOAST
     ).should_see_specific_integration(integration_test_data.alias)
 
 
@@ -398,3 +423,28 @@ def test_credential_type_dropdown_shows_all_available_options(page):
             continue
 
         create_integration_page.should_see_dropdown_option(credential_type)
+
+    # Assert - Scope badge on each scope-bound option; the "Switches Scope to ..." hint appears
+    # only when the form's Scope differs from the type's own scope (User form: DIAL has it,
+    # Google OAuth does not)
+    check_google_oauth = "Google OAuth" not in ui_exceptions
+    create_integration_page.should_see_dropdown_option_badge(
+        "DIAL", SCOPE_BADGE_PROJECT_ONLY
+    ).should_see_dropdown_option_hint("DIAL", SWITCHES_SCOPE_TO_PROJECT_HINT)
+    if check_google_oauth:
+        create_integration_page.should_see_dropdown_option_badge(
+            "Google OAuth", SCOPE_BADGE_USER_ONLY
+        ).should_not_see_dropdown_option_hint(
+            "Google OAuth", SWITCHES_SCOPE_HINT_PREFIX
+        )
+
+    # Project form: the hint moves to Google OAuth, DIAL no longer has it
+    create_integration_page.navigate_to_project_integration_creation()
+    create_integration_page.credential_type_dropdown_button.click()
+    create_integration_page.should_see_dropdown_option_badge(
+        "DIAL", SCOPE_BADGE_PROJECT_ONLY
+    ).should_not_see_dropdown_option_hint("DIAL", SWITCHES_SCOPE_HINT_PREFIX)
+    if check_google_oauth:
+        create_integration_page.should_see_dropdown_option_badge(
+            "Google OAuth", SCOPE_BADGE_USER_ONLY
+        ).should_see_dropdown_option_hint("Google OAuth", SWITCHES_SCOPE_TO_USER_HINT)
