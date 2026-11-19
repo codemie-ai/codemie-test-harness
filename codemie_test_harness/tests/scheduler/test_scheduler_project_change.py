@@ -19,88 +19,104 @@ belongs to the scheduler's project. Each test pairs the moved resource with a
 positive control: a second scheduler with the same cron on an unmoved resource,
 which must fire. Without it, "nothing happened" could also mean the scheduler
 never fired at all.
+
+Every resource is created in fixtures. The test body then computes the cron
+minute, creates the two schedulers in the original project and moves the target,
+in that order: the guard under test runs when the scheduler fires, so the move
+must come after the scheduler exists, and nothing else may eat into the cron lead.
 """
 
 import pytest
 from hamcrest import assert_that, equal_to, has_item
 
-from codemie_sdk.models.workflow import WorkflowMode
 from codemie_test_harness.tests import PROJECT
 from codemie_test_harness.tests.test_data.project_change_trigger_test_data import (
     CONTROL_FIRE_TIMEOUT,
     MOVED_SCHEDULER_GRACE_TIMEOUT,
+    SCHEDULER_TEST_TIMEOUT,
+    assert_cron_minute_still_ahead,
     shared_cron_schedule,
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name, wait_for_entity
 from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
-from codemie_test_harness.tests.utils.yaml_utils import (
-    AssistantModel,
-    StateModel,
-    WorkflowYamlModel,
-    prepare_yaml_content,
-)
 
 
 @pytest.fixture
-def unmoved_workflow(workflow_utils, default_llm):
-    """Second workflow in the test project, the positive control of a scheduler test.
+def other_project(project):
+    """Project the target resource is moved to."""
+    return project()
 
-    The shared ``workflow`` fixture tracks only the last workflow it created, so a
-    test needing two workflows creates the second one here, with its own cleanup.
-    """
-    name = get_random_name()
-    workflow_yaml = WorkflowYamlModel(
-        assistants=[
-            AssistantModel(
-                id=name,
-                model=default_llm.base_name,
-                system_prompt="Act as a helpful assistant",
-            )
-        ],
-        states=[StateModel(id=name, assistant_id=name)],
-    )
-    created = workflow_utils.create_workflow(
-        workflow_type=WorkflowMode.SEQUENTIAL,
-        workflow_yaml=prepare_yaml_content(workflow_yaml.model_dump(exclude_none=True)),
-        workflow_name=name,
-        shared=True,
-        project_name=PROJECT,
-    )
-    yield created
-    try:
-        workflow_utils.delete_workflow(created)
-    except Exception:
-        pass
+
+@pytest.fixture
+def create_scheduler(scheduler_integration):
+    """Create a scheduler in the test project on the shared cron, in its timezone."""
+
+    def _create(resource_type, resource_id, prompt, cron):
+        return scheduler_integration(
+            alias=get_random_name(),
+            resource_type=resource_type,
+            resource_id=resource_id,
+            prompt=prompt,
+            schedule=cron.expression,
+            timezone=cron.timezone,
+            project_name=PROJECT,
+        )
+
+    return _create
+
+
+@pytest.fixture
+def moved_assistant(assistant_factory):
+    return assistant_factory.create(project_name=PROJECT)
+
+
+@pytest.fixture
+def control_assistant(assistant_factory):
+    return assistant_factory.create(project_name=PROJECT)
+
+
+@pytest.fixture
+def moved_workflow(workflow_with_virtual_assistant):
+    return workflow_with_virtual_assistant(get_random_name(), project_name=PROJECT)
+
+
+@pytest.fixture
+def control_workflow(workflow_with_virtual_assistant):
+    return workflow_with_virtual_assistant(get_random_name(), project_name=PROJECT)
 
 
 @pytest.mark.scheduler
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.timeout(SCHEDULER_TEST_TIMEOUT)
 @pytest.mark.skipif(
     EnvironmentResolver.is_sandbox(),
     reason="Scheduler is disabled on sandbox environments",
 )
 def test_scheduler_skips_assistant_moved_to_other_project(
-    project,
-    assistant_factory,
+    other_project,
+    moved_assistant,
+    control_assistant,
     assistant_utils,
-    scheduler_integration,
+    create_scheduler,
     conversation_utils,
 ):
     # @case webhook-scheduler-project-change_TC_004
-    other_project = project()
-    moved_assistant = assistant_factory.create(project_name=PROJECT)
-    control_assistant = assistant_factory.create(project_name=PROJECT)
-    schedule = shared_cron_schedule()
-    for target in (moved_assistant, control_assistant):
-        scheduler_integration(
-            alias=get_random_name(),
-            resource_type="assistant",
-            resource_id=target.id,
-            prompt=f"Scheduler project change {target.id}",
-            schedule=schedule,
-            project_name=PROJECT,
-        )
+    # Compute the cron only now: from here to the control wait, only the two
+    # scheduler creations and the move may spend the lead.
+    cron = shared_cron_schedule()
+    create_scheduler(
+        "assistant",
+        moved_assistant.id,
+        f"Scheduler project change {moved_assistant.id}",
+        cron,
+    )
+    create_scheduler(
+        "assistant",
+        control_assistant.id,
+        f"Scheduler project change {control_assistant.id}",
+        cron,
+    )
 
     stored = assistant_utils.move_assistant_to_project(
         moved_assistant.id, other_project.name
@@ -108,6 +124,7 @@ def test_scheduler_skips_assistant_moved_to_other_project(
     assert_that(
         stored.project, equal_to(other_project.name), "Assistant was not moved."
     )
+    assert_cron_minute_still_ahead(cron)
 
     # Positive control: the same cron fires for the assistant that stayed.
     control_conversation = wait_for_entity(
@@ -116,9 +133,15 @@ def test_scheduler_skips_assistant_moved_to_other_project(
         timeout=CONTROL_FIRE_TIMEOUT,
     )
     assert_that(
-        control_conversation.initial_assistant_id, equal_to(control_assistant.id)
+        control_conversation.initial_assistant_id,
+        equal_to(control_assistant.id),
+        "The control scheduler's conversation must start with the unmoved assistant.",
     )
-    assert_that(control_conversation.assistant_ids, has_item(control_assistant.id))
+    assert_that(
+        control_conversation.assistant_ids,
+        has_item(control_assistant.id),
+        "The control scheduler's conversation must include the unmoved assistant.",
+    )
 
     # The scheduler on the moved assistant is due at the same minute: it must not run.
     with pytest.raises(TimeoutError):
@@ -132,51 +155,45 @@ def test_scheduler_skips_assistant_moved_to_other_project(
 @pytest.mark.scheduler
 @pytest.mark.project
 @pytest.mark.api
+@pytest.mark.timeout(SCHEDULER_TEST_TIMEOUT)
 @pytest.mark.skipif(
     EnvironmentResolver.is_sandbox(),
     reason="Scheduler is disabled on sandbox environments",
 )
 def test_scheduler_skips_workflow_moved_to_other_project(
-    project,
-    workflow_with_virtual_assistant,
-    unmoved_workflow,
+    other_project,
+    moved_workflow,
+    control_workflow,
     workflow_utils,
-    scheduler_integration,
+    create_scheduler,
 ):
     # @case webhook-scheduler-project-change_TC_005
-    other_project = project()
-    moved_workflow = workflow_with_virtual_assistant(
-        get_random_name(), project_name=PROJECT
-    )
     moved_prompt = f"Scheduler project change {moved_workflow.id}"
-    control_prompt = f"Scheduler project change {unmoved_workflow.id}"
-    schedule = shared_cron_schedule()
-    for target, prompt in (
-        (moved_workflow, moved_prompt),
-        (unmoved_workflow, control_prompt),
-    ):
-        scheduler_integration(
-            alias=get_random_name(),
-            resource_type="workflow",
-            resource_id=target.id,
-            prompt=prompt,
-            schedule=schedule,
-            project_name=PROJECT,
-        )
+    control_prompt = f"Scheduler project change {control_workflow.id}"
 
-    workflow_utils.update_workflow(
-        workflow_utils.get_workflow(moved_workflow.id), project=other_project.name
+    # Compute the cron only now: from here to the control wait, only the two
+    # scheduler creations and the move may spend the lead.
+    cron = shared_cron_schedule()
+    create_scheduler("workflow", moved_workflow.id, moved_prompt, cron)
+    create_scheduler("workflow", control_workflow.id, control_prompt, cron)
+
+    stored = workflow_utils.move_workflow_to_project(
+        moved_workflow.id, other_project.name
     )
-    stored = workflow_utils.get_workflow(moved_workflow.id)
     assert_that(stored.project, equal_to(other_project.name), "Workflow was not moved.")
+    assert_cron_minute_still_ahead(cron)
 
     # Positive control: the same cron runs the workflow that stayed.
     control_execution = wait_for_entity(
-        lambda: workflow_utils.get_executions(unmoved_workflow),
+        lambda: workflow_utils.get_executions(control_workflow),
         entity_name=control_prompt,
         timeout=CONTROL_FIRE_TIMEOUT,
     )
-    assert_that(control_execution.workflow_id, equal_to(unmoved_workflow.id))
+    assert_that(
+        control_execution.workflow_id,
+        equal_to(control_workflow.id),
+        "The control scheduler's execution must belong to the unmoved workflow.",
+    )
 
     # The scheduler on the moved workflow is due at the same minute: it must not run.
     with pytest.raises(TimeoutError):

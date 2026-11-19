@@ -455,6 +455,31 @@ class WorkflowUtils(BaseUtils):
             entity_name=name,
         )
 
+    def move_workflow_to_project(self, workflow_id: str, project_name: str):
+        """Move a workflow to another project, keeping every other field as stored.
+
+        The update request is built from the stored workflow, so every field that
+        ``WorkflowUpdateRequest`` accepts is copied from it and only ``project``
+        changes. Returns the workflow as stored after the update, so a caller can
+        confirm the move took effect.
+        """
+        current = self.get_workflow(workflow_id)
+        self.send_update_workflow_request(
+            workflow_id,
+            WorkflowUpdateRequest(
+                project=project_name,
+                name=current.name,
+                description=current.description,
+                start_hint=current.start_hint,
+                yaml_config=current.yaml_config,
+                mode=current.mode,
+                shared=current.shared,
+                icon_url=current.icon_url,
+                categories=current.categories,
+            ),
+        )
+        return self.get_workflow(workflow_id)
+
     def get_prebuilt_workflows(self):
         return self.client.workflows.get_prebuilt()
 

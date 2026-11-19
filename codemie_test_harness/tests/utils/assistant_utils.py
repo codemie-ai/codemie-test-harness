@@ -506,22 +506,33 @@ class AssistantUtils(BaseUtils):
     def move_assistant_to_project(self, assistant_id: str, project_name: str):
         """Move an assistant to another project, keeping every other field as stored.
 
+        The update is a PUT, so the request carries every field of
+        ``AssistantUpdateRequest`` that the stored assistant also has (toolkits,
+        context, MCP servers, sub-assistants, categories, sampling parameters, ...),
+        read from the installed SDK models rather than a hand-kept list; only
+        ``project`` changes. ``id`` and ``created_by`` are not part of an update, and
+        ``skip_integration_validation`` is a request flag with no stored value.
+
         Returns the assistant as stored after the update, so a caller can confirm
         the move took effect.
         """
         current = self.get_assistant_by_id(assistant_id)
-        self.update_assistant(
-            assistant_id,
-            AssistantUpdateRequest(
-                name=current.name,
-                slug=current.slug,
-                description=current.description or "",
-                shared=current.shared,
-                system_prompt=current.system_prompt,
-                project=project_name,
-                llm_model_type=current.llm_model_type,
-            ),
-        )
+        fields = {
+            name: getattr(current, name)
+            for name in AssistantUpdateRequest.model_fields
+            if name in type(current).model_fields and name not in ("id", "created_by")
+        }
+        fields["project"] = project_name
+        # The stored description may be empty and the request requires a string.
+        fields["description"] = current.description or ""
+        # Stored categories may be objects; the request takes their ids.
+        fields["categories"] = [
+            category if isinstance(category, str) else category.id
+            for category in (current.categories or [])
+        ]
+        if fields.get("prompt_variables") is None:
+            fields["prompt_variables"] = []
+        self.update_assistant(assistant_id, AssistantUpdateRequest(**fields))
         return self.get_assistant_by_id(assistant_id)
 
     def rollback_to_version(

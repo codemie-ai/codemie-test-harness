@@ -90,10 +90,7 @@ def test_webhook_rejects_workflow_moved_to_other_project(
     workflow = workflow_with_virtual_assistant(webhook_id, project_name=PROJECT)
     webhook_integration(webhook_id, "workflow", workflow.id, project_name=PROJECT)
 
-    workflow_utils.update_workflow(
-        workflow_utils.get_workflow(workflow.id), project=other_project.name
-    )
-    stored = workflow_utils.get_workflow(workflow.id)
+    stored = workflow_utils.move_workflow_to_project(workflow.id, other_project.name)
     assert_that(stored.project, equal_to(other_project.name), "Workflow was not moved.")
 
     response = webhook_utils.trigger_webhook(
