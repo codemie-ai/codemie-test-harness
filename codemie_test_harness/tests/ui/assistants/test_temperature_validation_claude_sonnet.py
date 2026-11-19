@@ -44,7 +44,7 @@ from codemie_test_harness.tests.ui.test_data.assistant_test_data import (
 )
 @pytest.mark.prod_regression
 def test_temperature_validation_blocked_above_one_for_claude_sonnet(
-    page, assistant, model
+    page, assistant_factory, model
 ):
     """
     Regression: for Bedrock and Vertex Claude Sonnet models, the temperature field
@@ -57,7 +57,10 @@ def test_temperature_validation_blocked_above_one_for_claude_sonnet(
     - AC 5 / AC 6: Values > 1 are blocked with a validation message before save.
     """
     assistant_page = AssistantsPage(page)
-    created_assistant = assistant()
+    # A saved temperature keeps the Temperature input visible: effort models hide it otherwise
+    created_assistant = assistant_factory.create(
+        llm_model_type=model.value, temperature=0.7
+    )
 
     assistant_page.navigate_to()
     assistant_page.search_assistants(created_assistant.name)

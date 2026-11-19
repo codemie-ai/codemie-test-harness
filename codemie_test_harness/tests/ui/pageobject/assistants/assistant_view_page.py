@@ -198,6 +198,12 @@ class AssistantViewPage:
         )
 
     @property
+    def config_effort(self):
+        return self.configuration_block.locator("p:text('Effort')").locator(
+            "xpath=../div"
+        )
+
+    @property
     def config_additional_datasource_context_label(self):
         return self.configuration_block.locator(
             "p:text('Additional datasource context')"
@@ -435,6 +441,10 @@ class AssistantViewPage:
     @step
     def should_see_config_top_p(self, expected):
         expect(self.config_top_p).to_have_text(expected)
+
+    @step
+    def should_see_config_effort(self, expected):
+        expect(self.config_effort).to_have_text(expected)
 
     @step
     def should_see_toolkit_visible(self, toolkit_name: str):
