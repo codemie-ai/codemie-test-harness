@@ -17,7 +17,7 @@ remove everything afterwards."""
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from codemie_sdk import CodeMieClient
@@ -259,10 +259,17 @@ class HostedUser:
     user_id: str
     client: CodeMieClient
     apps: HostedApplicationUtils
+    # Kept for a browser sign-in; empty when the user only calls the API.
+    password: str = field(default="", repr=False)
 
     @property
     def personal_project(self) -> str:
         return self.email
+
+    @property
+    def name(self) -> str:
+        """Display name, as the people search and the share lists show it."""
+        return self.client.users.about_me().name
 
     @property
     def service(self) -> Any:

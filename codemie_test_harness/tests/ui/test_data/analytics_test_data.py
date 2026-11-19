@@ -14,6 +14,7 @@
 
 """Test data for Analytics UI tests."""
 
+from dataclasses import dataclass
 from enum import StrEnum
 
 
@@ -28,3 +29,40 @@ class CLIAnalyticsSection(StrEnum):
     EFFICIENCY = "Efficiency"
     COST = "Cost"
     SESSIONS = "Sessions"
+
+
+@dataclass(frozen=True)
+class InsightsTable:
+    """A table widget of Analytics > Insights.
+
+    ``title`` is the widget heading. ``name_column`` and ``count_column`` are the exact column
+    headers the rows are ordered by: the count descending, then the name ascending. The count
+    column also identifies the table, because the name column header is not unique on the page.
+    ``cost_column`` is set for a widget whose rows are ordered by that column instead.
+    """
+
+    title: str
+    name_column: str
+    count_column: str
+    cost_column: str | None = None
+
+
+ASSISTANTS_CHATS_COST_COLUMN = "Total Cost ($)"
+
+# Located by its Total Messages column; its rows are ordered by Total Cost ($), see the cost check.
+ASSISTANTS_CHATS_TABLE = InsightsTable(
+    title="Assistants Chats",
+    name_column="Assistant",
+    count_column="Total Messages",
+    cost_column=ASSISTANTS_CHATS_COST_COLUMN,
+)
+WORKFLOWS_TABLE = InsightsTable(
+    title="Workflows", name_column="Workflow Name", count_column="Total Runs"
+)
+
+# Label of the first cell of the totals footer row.
+INSIGHTS_FOOTER_LABEL = "Total"
+
+# Runs the Insights activity fixture starts per assistant and per workflow: the counts differ, so
+# the tables list rows with different message counts, run counts and costs.
+INSIGHTS_SEEDED_RUN_COUNTS = (1, 2)

@@ -14,8 +14,13 @@
 
 """Test data for the per-project rows on the personal spending page."""
 
+# Column of GET /v1/analytics/budget_usage that says whether a row's budget_limit is the project's
+# whole pooled budget, shared by every member, and its label.
+SHARED_LIMIT_COLUMN_ID = "is_shared_limit"
+SHARED_LIMIT_COLUMN_LABEL = "Shared Limit"
+
 # Row keys of GET /v1/analytics/budget_usage, shared by personal and per-project rows.
-# is_default is a row key only: it is not one of the response columns.
+# is_default is a row key only: it is not one of the response columns; is_shared_limit is both.
 BUDGET_USAGE_ROW_KEYS = {
     "project_name",
     "current_spending",
@@ -23,6 +28,7 @@ BUDGET_USAGE_ROW_KEYS = {
     "time_until_reset",
     "budget_limit",
     "total",
+    SHARED_LIMIT_COLUMN_ID,
     "is_default",
 }
 
@@ -41,6 +47,7 @@ BUDGET_USAGE_COLUMN_IDS = [
     "time_until_reset",
     "budget_limit",
     "total",
+    SHARED_LIMIT_COLUMN_ID,
 ]
 
 # Column ids of GET /v1/analytics/user-project-spending: the key column, then one per budget category.

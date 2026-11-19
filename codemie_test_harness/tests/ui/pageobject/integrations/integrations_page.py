@@ -21,6 +21,12 @@ from playwright.sync_api import expect, Locator
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.integrations.integration_form_page import (
+    IntegrationFormPage,
+)
+from codemie_test_harness.tests.ui.pageobject.integrations.integrations_list_page import (
+    IntegrationsListPage,
+)
 from codemie_test_harness.tests.ui.pageobject.components.integration_row import (
     IntegrationRow,
 )
@@ -43,10 +49,8 @@ class IntegrationsPage(BasePage):
 
     @property
     def create_button(self):
-        """Create Integration button."""
-        return self.page.locator('[data-pc-name="splitbutton"]').get_by_role(
-            "button", name="Create"
-        )
+        """'New Integration' button: the one entry to the create form (one scope-aware form)."""
+        return self.page.get_by_role("button", name="New Integration")
 
     @property
     def user_type_button(self):
@@ -100,9 +104,14 @@ class IntegrationsPage(BasePage):
         )
 
     @property
+    def success_toast(self) -> Locator:
+        """Success toast after a save."""
+        return self.page.locator(".codemie-toast-success")
+
+    @property
     def toast_message(self) -> Locator:
-        """Toast message after operation."""
-        return self.page.locator(".codemie-toast-info")
+        """Toast after an operation: the success toast or the status region the update and delete toasts use."""
+        return self.page.locator(".codemie-toast-success, [role='status']")
 
     @property
     def pagination_container(self):
@@ -133,15 +142,15 @@ class IntegrationsPage(BasePage):
 
     @step
     def switch_to_user_tab(self):
-        """Switch the integrations list to the User tab."""
-        self.user_type_button.click()
+        """Show the User integrations: the Scope filter's 'User' option replaces the old tab."""
+        IntegrationsListPage(self.page).select_scope("User")
         self.wait_for_page_load()
         return self
 
     @step
     def switch_to_project_tab(self):
-        """Switch the integrations list to the Project tab."""
-        self.project_type_button.click()
+        """Show the Project integrations: the Scope filter's 'Project' option replaces the old tab."""
+        IntegrationsListPage(self.page).select_scope("Project")
         self.wait_for_page_load()
         return self
 
@@ -155,51 +164,32 @@ class IntegrationsPage(BasePage):
     @step
     def navigate_to_user_integration_creation(self):
         """
-        Navigate to the User Integration creation page.
+        Open the New Integration form with Scope 'User'.
 
-        This method clicks the Create button to open the tiered menu,
-        then selects "Create User Integration" from the dropdown menu.
+        The 'New Integration' button opens one form for both scopes; Scope is its first field.
 
         Returns:
             self: For method chaining
         """
-        # Click the Create button to open the tiered menu
-        self.create_button.click()
-
-        # Wait for the tiered menu to appear
-        self.tiered_menu_overlay.wait_for(state="visible", timeout=5000)
-
-        # Click on "Create User Integration" menu item
-        self.create_user_integration_menu_item.click()
-
-        # Wait for navigation to complete
-        self.wait_for_page_load()
-
-        return self
+        return self._open_create_form("User")
 
     @step
     def navigate_to_project_integration_creation(self):
         """
-        Navigate to the Project Integration creation page.
+        Open the New Integration form with Scope 'Project'.
 
-        This method clicks the Create button to open the tiered menu,
-        then selects "Create Project Integration" from the dropdown menu.
+        The 'New Integration' button opens one form for both scopes; Scope is its first field.
 
         Returns:
             self: For method chaining
         """
-        # Click the Create button to open the tiered menu
+        return self._open_create_form("Project")
+
+    def _open_create_form(self, scope_label: str):
+        """Click 'New Integration', wait for the form and make sure its Scope is the label."""
         self.create_button.click()
-
-        # Wait for the tiered menu to appear
-        self.tiered_menu_overlay.wait_for(state="visible", timeout=5000)
-
-        # Click on "Create Project Integration" menu item
-        self.create_project_integration_menu_item.click()
-
-        # Wait for navigation to complete
+        IntegrationFormPage(self.page).wait_until_open().ensure_scope(scope_label)
         self.wait_for_page_load()
-
         return self
 
     @step
@@ -404,10 +394,18 @@ class IntegrationsPage(BasePage):
         return self
 
     @step
-    def should_see_integration_type_switcher(self):
-        """Verify that the Integration type selectors are visible."""
-        expect(self.user_type_button).to_be_visible()
-        expect(self.project_type_button).to_be_visible()
+    def should_see_integration_scope_filter(self):
+        """Verify that the Scope filter (All, User, Project) replaces the old type switcher."""
+        IntegrationsListPage(self.page).should_offer_scope_filter()
+        return self
+
+    @step
+    def should_see_saved_message(self, message: str):
+        """Verify the toast that confirms a save from the New Integration form.
+
+        The list confirms a save with a success toast, no longer the info toast.
+        """
+        expect(self.success_toast.filter(has_text=message).first).to_be_visible()
         return self
 
     @step
@@ -467,18 +465,17 @@ class IntegrationsPage(BasePage):
         Args:
             message (str, optional): Specific message to verify
         """
-        expect(self.toast_message).to_be_visible()
-        if message:
-            expect(self.toast_message).to_contain_text(message)
+        toast = self.toast_message.filter(has_text=message).first
+        expect(toast).to_be_visible()
         return self
 
     @step
     def should_not_see_message(self):
         """
-        Verify that a toast message is not displayed.
+        Verify that no success toast is displayed.
         """
         self.page.mouse.move(0, 0)
-        expect(self.toast_message).to_be_hidden()
+        expect(self.success_toast).to_have_count(0)
         return self
 
     def _integration_row_by_alias(self, alias: str):
