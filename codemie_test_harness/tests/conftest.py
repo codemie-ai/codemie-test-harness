@@ -114,6 +114,9 @@ from codemie_test_harness.tests.utils.azure_devops_seed import SeedPullRequest
 from codemie_test_harness.tests.utils.azure_devops_utils import AzureDevOpsUtils
 from codemie_test_harness.tests.utils.http_utils import RequestHandler
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
+from codemie_test_harness.tests.utils.scoped_integration_factory import (
+    ScopedIntegrationFactory,
+)
 from codemie_test_harness.tests.utils.jira_seed import (
     SeedIssue,
     resolve_seeded,
@@ -885,6 +888,26 @@ def project_admin_user(keycloak_utils, user_utils, default_project_member):
 
 
 @pytest.fixture
+def fresh_project_admin_client(project_admin_user):
+    """A fresh login of project_admin_user, made after the project admin role was assigned.
+
+    The client of the fixture itself logged in before the assignment, so a backend that caches
+    the administered projects per token may still hold an empty list for it.
+    """
+    return get_client(
+        username=project_admin_user.email, password=project_admin_user.password
+    )
+
+
+@pytest.fixture
+def scoped_integrations():
+    """Factory for user and project integrations created as any client; deleted after the test."""
+    factory = ScopedIntegrationFactory()
+    yield factory
+    factory.delete_all()
+
+
+@pytest.fixture
 def mixed_case_personal_user(keycloak_utils):
     """Function-scoped user whose email contains uppercase letters; deleted after each test.
 
@@ -1046,6 +1069,44 @@ def orphaned_creator_budget(keycloak_utils, user_utils, client):
             # The backend row goes first; leaving the block then removes the auth-server user.
             LocalUserUtils(client).delete_user_by_id(user.user_id)
     return budget_id
+
+
+@pytest.fixture
+def manual_budget(maintainer_client, lite_llm_budget_utils):
+    """A manually created platform budget with no assigned users, owned by the maintainer.
+
+    Yields the created budget (``budget_id``, ``name``, ...). Only a maintainer creates,
+    updates and deletes budgets, so the teardown deletes it as that maintainer when the
+    test has not (a 404 or 409 is expected then) and removes any LiteLLM leftover.
+    """
+    budget_utils = AdminBudgetUtils(maintainer_client)
+    budget = budget_utils.create_budget(
+        f"autotest-del-{secrets.token_hex(4)}", "platform"
+    )
+    yield budget
+    with contextlib.suppress(HTTPError):
+        budget_utils.delete_budget(budget["budget_id"])
+    lite_llm_budget_utils.delete_budget(budget["budget_id"])
+
+
+@pytest.fixture
+def assign_budget_user(manual_budget, maintainer_client):
+    """Factory ``(user_id)``: assigns the user to ``manual_budget`` as their platform budget.
+
+    The assignments are removed before the budget is, whether or not the user still exists.
+    """
+    budget_utils = AdminBudgetUtils(maintainer_client)
+    assigned = []
+
+    def _assign(user_id: str):
+        budget_utils.assign_user_budget(user_id, "platform", manual_budget["budget_id"])
+        assigned.append(user_id)
+
+    yield _assign
+
+    for user_id in assigned:
+        with contextlib.suppress(HTTPError):
+            budget_utils.unassign_user_budget(user_id, "platform")
 
 
 @pytest.fixture

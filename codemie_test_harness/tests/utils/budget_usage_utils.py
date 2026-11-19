@@ -92,6 +92,13 @@ class BudgetUsageUtils(BaseUtils):
             for column in self.client.analytics.get_budget_usage().data.columns
         ]
 
+    def get_column_labels(self) -> dict[str, str]:
+        """Label of each response column, by column id."""
+        return {
+            column.id: column.label
+            for column in self.client.analytics.get_budget_usage().data.columns
+        }
+
     def get_row_names(self) -> list[str]:
         return row_names(self.get_rows())
 
@@ -232,20 +239,14 @@ class BudgetUsageUtils(BaseUtils):
         )
 
 
-def _member_customer_spend(lite_llm_budget_utils, customer_id: str) -> float:
-    customer = lite_llm_budget_utils.get_customer_info(customer_id)
-    return float(customer.get("spend", 0)) if customer else 0.0
-
-
 def member_customer_spend(
     lite_llm_budget_utils, project_name: str, user_id: str, category: str = "platform"
 ) -> float:
     """Spend of the member's customer on the project category at the provider, read now."""
-    return _member_customer_spend(
-        lite_llm_budget_utils,
+    return lite_llm_budget_utils.get_customer_spend(
         MEMBER_OVERRIDE_CUSTOMER_ID_TEMPLATE.format(
             project_name=project_name, category=category, user_id=user_id
-        ),
+        )
     )
 
 
@@ -282,7 +283,7 @@ def generate_member_spend(
                 extra_headers=headers,
             ).raise_for_status()
         spend = poll_until(
-            lambda: _member_customer_spend(lite_llm_budget_utils, customer_id),
+            lambda: lite_llm_budget_utils.get_customer_spend(customer_id),
             lambda value: value >= target_spend,
             timeout=SPEND_POLL_TIMEOUT,
             interval=SPEND_POLL_INTERVAL,
@@ -292,7 +293,7 @@ def generate_member_spend(
     unchanged_reads = 0
     for _ in range(SPEND_SETTLE_CHECKS):
         time.sleep(SPEND_POLL_INTERVAL)
-        current = _member_customer_spend(lite_llm_budget_utils, customer_id)
+        current = lite_llm_budget_utils.get_customer_spend(customer_id)
         unchanged_reads = unchanged_reads + 1 if current == spend else 0
         spend = current
         if unchanged_reads >= SPEND_STABLE_READS - 1:
