@@ -20,6 +20,8 @@ import time
 from typing import Callable, List, Optional
 from uuid import UUID
 
+from requests import HTTPError
+
 from codemie_sdk.models.integration import IntegrationType
 from codemie_sdk.models.user import UserBudgetAssignmentInfo
 from codemie_sdk.models.project import (
@@ -396,6 +398,35 @@ class ProjectUtils(BaseUtils):
             display_name=display_name,
             chargeback_attribution=chargeback_attribution,
             cli_analytics_enabled=cli_analytics_enabled,
+        )
+
+    def wait_until_cli_analytics_setting_writable(
+        self, consecutive: int = 4, timeout: int = 120, interval: int = 2
+    ) -> None:
+        """Wait until this client's admin/maintainer role lets it change the CLI analytics setting.
+
+        The project API checks that role on its own, so the user-management probe can already
+        pass while PATCH /v1/projects/{name} still answers 403. The probe patches a project that
+        does not exist: 403 while the role is not yet seen, 404 (project not found) once it is.
+        Several consecutive 404s make it unlikely that one fresh replica answered them all.
+        """
+        deadline = time.monotonic() + timeout
+        streak = 0
+        status = None
+        while time.monotonic() < deadline:
+            try:
+                self.update_project(
+                    "nonexistent-project-000000", cli_analytics_enabled=True
+                )
+                status = 200
+            except HTTPError as e:
+                status = e.response.status_code
+            streak = streak + 1 if status == 404 else 0
+            if streak >= consecutive:
+                return
+            time.sleep(interval)
+        raise TimeoutError(
+            f"CLI analytics setting did not become writable in time, last status: {status}"
         )
 
     def delete_project_with_all_members(self, project_name: str) -> None:

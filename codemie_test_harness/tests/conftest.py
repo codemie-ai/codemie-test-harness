@@ -1143,6 +1143,7 @@ def _module_user_client(keycloak_utils, user_utils, label, **role):
         if role:
             user_utils.update_admin_user(user.user_id, **role)
             UserUtils(user.client).wait_until_user_management_effective()
+            ProjectUtils(user.client).wait_until_cli_analytics_setting_writable()
         yield user.client
 
 
