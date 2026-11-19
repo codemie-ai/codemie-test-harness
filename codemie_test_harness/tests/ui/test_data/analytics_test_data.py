@@ -62,3 +62,7 @@ WORKFLOWS_TABLE = InsightsTable(
 
 # Label of the first cell of the totals footer row.
 INSIGHTS_FOOTER_LABEL = "Total"
+
+# Runs the Insights activity fixture starts per assistant and per workflow: the counts differ, so
+# the tables list rows with different message counts, run counts and costs.
+INSIGHTS_SEEDED_RUN_COUNTS = (1, 2)

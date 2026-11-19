@@ -27,7 +27,9 @@ from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
 
 @pytest.mark.analytics
 @pytest.mark.ui
-def test_insights_assistants_chats_rows_ordered_by_total_cost(analytics_page):
+def test_insights_assistants_chats_rows_ordered_by_total_cost(
+    insights_activity, analytics_page
+):
     """Assistants Chats rows are ordered by Total Cost ($) descending, equal costs in any order."""
     # @case insights-page-fix-sorting-and_TC_001
     widget = InsightsTableWidget(analytics_page.page, ASSISTANTS_CHATS_TABLE).open()
@@ -38,7 +40,9 @@ def test_insights_assistants_chats_rows_ordered_by_total_cost(analytics_page):
 
 @pytest.mark.analytics
 @pytest.mark.ui
-def test_insights_workflows_rows_ordered_by_total_runs(analytics_page):
+def test_insights_workflows_rows_ordered_by_total_runs(
+    insights_activity, analytics_page
+):
     """Workflows rows are ordered by Total Runs descending, then Workflow Name ascending."""
     # @case insights-page-fix-sorting-and_TC_002
     widget = InsightsTableWidget(analytics_page.page, WORKFLOWS_TABLE).open()
@@ -54,7 +58,9 @@ def test_insights_workflows_rows_ordered_by_total_runs(analytics_page):
     ids=["assistants_chats", "workflows"],
 )
 @pytest.mark.ui
-def test_insights_table_footer_shows_labelled_aligned_totals(analytics_page, table):
+def test_insights_table_footer_shows_labelled_aligned_totals(
+    insights_activity, analytics_page, table
+):
     """The totals footer reads Total, sits in the table columns and shows its numbers on one line."""
     # @case insights-page-fix-sorting-and_TC_003
     widget = InsightsTableWidget(analytics_page.page, table).open()
