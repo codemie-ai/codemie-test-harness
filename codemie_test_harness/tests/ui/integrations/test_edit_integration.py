@@ -93,7 +93,7 @@ def test_edit_integration_update_credentials(page: Page):
 
     # Wait for integration to be created
     integrations_page.wait_for_page_load()
-    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.toast.should_show_success(SAVED_TOAST)
     integrations_page.toast.should_disappear()
 
     # Act - Edit the integration
@@ -155,7 +155,7 @@ def test_edit_integration_update_alias(page: Page):
 
     # Wait for integration to be created
     integrations_page.wait_for_page_load()
-    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.toast.should_show_success(SAVED_TOAST)
     integrations_page.toast.should_disappear()
 
     # Act - Edit the integration alias

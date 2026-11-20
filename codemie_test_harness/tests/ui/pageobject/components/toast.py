@@ -54,6 +54,11 @@ class Toast:
     def _toasts(self, variants) -> Locator:
         if variants is ALL_VARIANTS:
             return self.all_toasts
+        unknown = [variant for variant in variants if variant not in VARIANT_CLASSES]
+        if unknown:
+            raise ValueError(
+                f"Unknown toast variant {unknown}; expected one of {sorted(VARIANT_CLASSES)}"
+            )
         return self.page.locator(
             ", ".join(f".{VARIANT_CLASSES[variant]}" for variant in variants)
         )
@@ -80,6 +85,11 @@ class Toast:
             timeout=TOAST_TIMEOUT_MS
         )
         return self
+
+    @step
+    def should_show_success(self, text: str):
+        """A success toast shows the text in its header or content."""
+        return self.should_show(text, ("success",))
 
     @step
     def should_show_any(self, variants=CONFIRMATION_VARIANTS, timeout=TOAST_TIMEOUT_MS):

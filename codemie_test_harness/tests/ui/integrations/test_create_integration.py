@@ -270,11 +270,12 @@ def test_create_git_integration_complete_workflow(page):
     create_integration_page.create_integration()
 
     # Assert
-    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.toast.should_show_success(SAVED_TOAST)
     integrations_page.should_see_specific_integration(integration_test_data.alias)
 
 
 @pytest.mark.xfail(
+    raises=AssertionError,
     strict=True,
     reason="The saved toast covers the More options button of the first row and stays "
     "open while the pointer is on it, so the row actions cannot be reached",
@@ -291,7 +292,7 @@ def test_saved_toast_goes_away_while_the_pointer_is_on_the_row_actions(page):
     create_integration_page.navigate_to_user_integration_creation()
     create_integration_page.fill_git_integration_form(integration_test_data)
     create_integration_page.create_integration()
-    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.toast.should_show_success(SAVED_TOAST)
 
     # Act - the pointer goes to the row actions, which the toast covers
     integrations_page.get_integration_row_by_alias(
@@ -327,7 +328,7 @@ def test_create_jira_integration_complete_workflow(page):
     create_integration_page.fill_jira_integration_form(integration_test_data)
     create_integration_page.create_integration()
 
-    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.toast.should_show_success(SAVED_TOAST)
     integrations_page.should_see_specific_integration(integration_test_data.alias)
 
 
@@ -356,7 +357,7 @@ def test_create_confluence_integration_complete_workflow(page):
     create_integration_page.fill_confluence_integration_form(integration_test_data)
     create_integration_page.create_integration()
 
-    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.toast.should_show_success(SAVED_TOAST)
     integrations_page.should_see_specific_integration(integration_test_data.alias)
 
 
@@ -576,7 +577,7 @@ def test_saved_user_integration_keeps_the_filters_and_is_highlighted(
 
     form_page.save()
 
-    list_page.toast.should_show(SAVED_TOAST)
+    list_page.toast.should_show_success(SAVED_TOAST)
     list_page.toast.should_show(SAME_VIEW_TOAST)
     list_page.should_have_scope_selected(SCOPE_USER)
     list_page.should_show_scope_badge(alias, SCOPE_USER)
