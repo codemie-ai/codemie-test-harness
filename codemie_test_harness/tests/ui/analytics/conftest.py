@@ -12,8 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+from datetime import timedelta
+
 import pytest
 
+# The CLI Analytics fixtures of the API suite: the UI tests seed the same sessions through them.
+from codemie_test_harness.tests.analytics.conftest import (  # noqa: F401
+    cli_analytics_enabled,
+    cli_analytics_project,
+    cli_analytics_users,
+    create_cli_analytics_project,
+    ingest_cli_sessions,
+    seed_cli_sessions,
+)
+from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
+    OWNER,
+    CliSessionSeed,
+    seed_day_start,
+)
 from codemie_test_harness.tests.test_data.projects_test_data import (
     get_project_create_data,
 )
@@ -31,6 +48,10 @@ from codemie_test_harness.tests.ui.pageobject.analytics.usage_attribution_table 
 )
 from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
     INSIGHTS_SEEDED_RUN_COUNTS,
+)
+from codemie_test_harness.tests.ui.test_data.cli_analytics_tool_success_test_data import (
+    TOOL_SUCCESS_CASES,
+    ToolSuccessCase,
 )
 from codemie_test_harness.tests.utils.analytics_utils import CLIAnalyticsTestSession
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
@@ -63,6 +84,47 @@ def cli_analytics_session(
         yield analytics_utils.create_cli_session(project=project)
     finally:
         delete_projects_strict(project_utils, [project])
+
+
+@dataclass(frozen=True)
+class ToolSuccessScenario:
+    """A user whose one CLI session made the case's tool calls, in a project of its own."""
+
+    case: ToolSuccessCase
+    project: str
+    user_email: str
+
+
+@pytest.fixture(scope="module", params=TOOL_SUCCESS_CASES, ids=lambda case: case.id)
+def tool_success_scenario(
+    request,
+    create_cli_analytics_project,  # noqa: F811
+    seed_cli_sessions,  # noqa: F811
+    cli_analytics_users,  # noqa: F811
+) -> ToolSuccessScenario:
+    """One session of a fresh CLI Analytics user, seeded through the ingest API.
+
+    The project holds only this session, so filtering the dashboard by it shows this user's
+    tool calls alone. The ingested data cannot be deleted; the project, the user and its
+    membership go at the end of the module.
+    """
+    case = request.param
+    project = create_cli_analytics_project()
+    seed_cli_sessions(
+        [
+            CliSessionSeed(
+                key=case.id,
+                started_at=seed_day_start() + timedelta(hours=10),
+                input_tokens=1000,
+                output_tokens=10,
+                user=OWNER,
+                tool_calls_succeeded=case.tool_calls_succeeded,
+                tool_calls_failed=case.tool_calls_failed,
+            )
+        ],
+        project,
+    )
+    return ToolSuccessScenario(case, project, cli_analytics_users[OWNER].email)
 
 
 @pytest.fixture

@@ -371,7 +371,10 @@ class CliSessionSeed:
     (``x-litellm-model-name``) and the name it asked for as ``model_raw``.
     ``branch`` is the git branch the session started on; ``cache_read_tokens`` are the
     tokens its request read from the prompt cache (with a single request they are the
-    session's context per call).
+    session's context per call). ``tool_calls_succeeded`` and ``tool_calls_failed`` are the
+    tool calls the session makes: each has a tool start, and a tool end when it succeeded or
+    a tool error when it failed, so the session counts that many tool calls and a success
+    rate over them.
     """
 
     key: str
@@ -388,6 +391,8 @@ class CliSessionSeed:
     skill_name: str | None = None
     branch: str | None = None
     cache_read_tokens: int = 0
+    tool_calls_succeeded: int = 0
+    tool_calls_failed: int = 0
     session_id: str = field(
         default_factory=lambda: f"autotest-cli-{uuid.uuid4().hex[:12]}"
     )
@@ -443,6 +448,39 @@ class CliSessionSeed:
             )
         if self.cost_usd is None:
             events.append(self._usage_event(envelope))
+        events.extend(self._tool_events(envelope))
+        return events
+
+    def _tool_events(self, envelope: dict) -> list[dict]:
+        outcomes = ["agent.tool.end"] * self.tool_calls_succeeded + [
+            "agent.tool.error"
+        ] * self.tool_calls_failed
+        events = []
+        for number, outcome in enumerate(outcomes, start=1):
+            call = {
+                **envelope,
+                "tool_name": "Bash",
+                "tool_use_id": f"toolu_{self.session_id}_{number}",
+            }
+            events.append(
+                {
+                    **call,
+                    "type": "agent.tool.start",
+                    "event_id": f"tool-start:{self.session_id}:{number}",
+                }
+            )
+            events.append(
+                {
+                    **call,
+                    "type": outcome,
+                    "event_id": f"tool-result:{self.session_id}:{number}",
+                    **(
+                        {"error_message": "command failed"}
+                        if outcome == "agent.tool.error"
+                        else {}
+                    ),
+                }
+            )
         return events
 
     def _usage_event(self, envelope: dict) -> dict:

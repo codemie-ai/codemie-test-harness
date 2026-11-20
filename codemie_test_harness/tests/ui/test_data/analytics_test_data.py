@@ -31,6 +31,10 @@ class CLIAnalyticsSection(StrEnum):
     SESSIONS = "Sessions"
 
 
+# Em dash (U+2014): what a CLI Analytics Tool Success shows when there are no tool calls.
+TOOL_SUCCESS_DASH = "—"
+
+
 @dataclass(frozen=True)
 class InsightsTable:
     """A table widget of Analytics > Insights.
