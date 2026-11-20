@@ -197,7 +197,7 @@ file_test_data = [
         """,
         Default.FILE_ANALYSIS,
     ),
-    pytest.param(
+    (
         "test.gif",
         """
             The image is a GIF showing a dog that appears to be smiling or showing its teeth in a playful manner.
@@ -208,7 +208,6 @@ file_test_data = [
             which often results in comical interpretations in GIFs and memes.
         """,
         (),
-        marks=[pytest.mark.smoke, pytest.mark.sanity],
     ),
     (
         "test.jpeg",
