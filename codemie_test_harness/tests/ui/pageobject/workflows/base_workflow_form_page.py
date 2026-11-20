@@ -189,6 +189,24 @@ class BaseWorkflowFormPage(BasePage):
         return self.canvas.locator(".react-flow__node")
 
     @property
+    def canvas_edges(self) -> Locator:
+        """All edges (transitions) rendered on the visual editor canvas.
+
+        The ReactFlow edge wrapper carries the ``react-flow__edge`` class; there is
+        one per transition (confirmed on the Edit Workflow page of a 59-node graph).
+        """
+        return self.canvas.locator(".react-flow__edge")
+
+    def canvas_node_for_state(self, state_id: str) -> Locator:
+        """Canvas node of the state or generated node ``state_id``.
+
+        ReactFlow renders it with ``data-testid="rf__node-<state_id>"``.
+        """
+        return self.canvas.locator(
+            f'.react-flow__node[data-testid="rf__node-{state_id}"]'
+        )
+
+    @property
     def non_default_canvas_nodes(self) -> Locator:
         """Canvas nodes excluding the default "Start"/"End" nodes.
 
@@ -389,6 +407,34 @@ class BaseWorkflowFormPage(BasePage):
         expect(self.canvas).to_be_visible()
         expect(self.start_node).to_be_visible()
         expect(self.end_node).to_be_visible()
+
+    @step
+    def should_have_canvas_node_count(self, expected: int, timeout: int = 30000):
+        """Verify the canvas holds exactly ``expected`` nodes (start, end, branch and iterator nodes included)."""
+        expect(self.canvas_nodes).to_have_count(expected, timeout=timeout)
+        return self
+
+    @step
+    def should_have_canvas_edge_count(self, expected: int, timeout: int = 30000):
+        """Verify the canvas holds exactly ``expected`` edges."""
+        expect(self.canvas_edges).to_have_count(expected, timeout=timeout)
+        return self
+
+    @step
+    def should_have_canvas_node_for_each_state(
+        self, state_ids: list[str], timeout: int = 30000
+    ):
+        """Verify the canvas holds exactly one node for every id in ``state_ids``.
+
+        A node is "off screen" in a large graph but still in the DOM, so the check
+        is on presence and count, not on visibility.
+        """
+        for state_id in state_ids:
+            expect(
+                self.canvas_node_for_state(state_id),
+                f"no canvas node for state '{state_id}'",
+            ).to_have_count(1, timeout=timeout)
+        return self
 
     @step
     def should_have_node_on_canvas(self, node_type: str):

@@ -15,8 +15,10 @@
 """Shared fixtures for workflow UI tests."""
 
 import logging
+from dataclasses import dataclass
 
 import pytest
+import yaml
 from codemie_sdk.models.workflow import WorkflowMode
 from hamcrest import assert_that, greater_than
 
@@ -34,6 +36,7 @@ from codemie_test_harness.tests.ui.test_data.workflows_test_data import (
     WorkflowCategoriesUiDataFactory,
 )
 from codemie_sdk.models.assistant import ToolKitDetails, ToolDetails
+from codemie_sdk.models.workflow import Workflow
 
 from codemie_test_harness.tests.enums.tools import Toolkit, ProjectManagementTool
 from codemie_test_harness.tests.utils.base_utils import get_random_name
@@ -650,6 +653,46 @@ def create_node_workflow(workflow_utils, default_llm):
                 **yaml_options,
             )
         )
+
+    yield _create
+
+    for workflow in reversed(created):
+        try:
+            workflow_utils.delete_workflow(workflow)
+        except Exception as e:
+            logger.warning(f"Failed to delete workflow {workflow.id}: {e}")
+
+
+@dataclass(frozen=True)
+class GraphWorkflow:
+    """A workflow created for a graph test, with the state ids its stored YAML lists."""
+
+    workflow: Workflow
+    state_ids: list[str]
+
+
+@pytest.fixture
+def graph_workflow(workflow_utils):
+    """Factory creating a workflow from YAML under a per-run name.
+
+    ``graph_workflow(yaml_config)`` creates the workflow through the API, reads it back
+    and returns a ``GraphWorkflow`` whose ``state_ids`` come from the stored
+    ``yaml_config`` (the API payload), not from the YAML the test sent.
+
+    Teardown: deletes every workflow the factory created, also when the test failed.
+    """
+    created: list[Workflow] = []
+
+    def _create(yaml_config: str) -> GraphWorkflow:
+        created_workflow = workflow_utils.create_workflow(
+            workflow_name=get_random_name(),
+            workflow_type=WorkflowMode.SEQUENTIAL,
+            workflow_yaml=yaml_config,
+        )
+        created.append(created_workflow)
+        stored = workflow_utils.get_workflow(created_workflow.id)
+        stored_states = yaml.safe_load(stored.yaml_config)["states"]
+        return GraphWorkflow(stored, [state["id"] for state in stored_states])
 
     yield _create
 
