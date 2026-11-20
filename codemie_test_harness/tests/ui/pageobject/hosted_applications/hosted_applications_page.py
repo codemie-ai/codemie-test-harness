@@ -36,6 +36,8 @@ APPS_ROUTE = "/apps"
 LEGACY_ROUTE = "/applications"
 COLLECTION_ROUTES = {"mine": APPS_ROUTE, "marketplace": f"{APPS_ROUTE}/marketplace"}
 SHARED_WITH_ME = "Shared with me"
+# A collection page can render slowly on a loaded stand.
+PAGE_READY_TIMEOUT_MS = 30000
 NO_ACTIVE_VERSION = "No active version yet"
 # A card holds its own role=button element plus the More options button.
 CARD_BUTTONS_WITHOUT_NEXT_STEP = 2
@@ -138,7 +140,7 @@ class HostedApplicationsPage(HostedPageBase):
     def open_collection_searched_by(self, collection: str, text: str):
         """Open a collection (mine, marketplace) with a name search in its address."""
         self.page.goto(f"{COLLECTION_ROUTES[collection]}?q={quote(text)}")
-        expect(self.search_input).to_be_visible()
+        expect(self.search_input).to_be_visible(timeout=PAGE_READY_TIMEOUT_MS)
         return self
 
     @step

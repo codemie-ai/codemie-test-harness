@@ -79,7 +79,7 @@ def ui_unreleased_app(ui_owner_apps, ui_project):
 
 
 # The applications of the category filter test that are published, by the collection it opens.
-PUBLISHED_IN_COLLECTION = {"mine": (), "marketplace": ("alpha", "beta")}
+PUBLISHED_IN_COLLECTION = {"mine": (), "marketplace": ("alpha", "beta", "both")}
 # The ones that collection does not list while no category is selected.
 UNLISTED_IN_COLLECTION = {"mine": (), "marketplace": ("plain",)}
 
