@@ -213,6 +213,18 @@ class ModelsManagementPage(BasePage):
         return self
 
     @step
+    def select_provider_of_model(self, base_name: str):
+        """Filter the list by the provider a model row shows, spelled as the filter spells it."""
+        row = self.row_for_model(base_name)
+        expect(row).to_be_visible(timeout=_LOAD_TIMEOUT_MS)
+        headers = self.model_table.get_by_role("columnheader").all_inner_texts()
+        provider_column = next(
+            index for index, header in enumerate(headers) if "Provider" in header
+        )
+        provider_label = row.get_by_role("cell").nth(provider_column).inner_text()
+        return self.select_provider(provider_label.strip())
+
+    @step
     def toggle_status_filter_option(self, label: str):
         """Check or uncheck a status in the Status filter, then close the list."""
         self.status_filter_control.click()

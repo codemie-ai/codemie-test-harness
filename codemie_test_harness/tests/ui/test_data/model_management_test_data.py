@@ -52,15 +52,6 @@ ALL_STATUSES_LABEL = "All statuses"
 # Statuses the UI tests move a model to.
 CHANGED_STATUSES = [ModelStatus.DEPRECATED, ModelStatus.DISABLED]
 
-# Provider values of the API → the labels of the Provider filter.
-PROVIDER_LABELS = {
-    "azure_openai": "Azure OpenAI",
-    "aws_bedrock": "AWS Bedrock",
-    "google_vertexai": "Google Vertex AI",
-    "anthropic": "Anthropic",
-    "vertex_ai-anthropic_models": "Vertex AI Anthropic",
-}
-
 
 def expected_summary(shown: list[AdminLLMModel], total: int) -> str:
     """Start of the summary line for the models shown out of `total`, as the page words it.
@@ -90,9 +81,7 @@ LIST_FILTERS = {
         ),
     ),
     "provider": ListFilter(
-        apply=lambda page, target: page.select_provider(
-            PROVIDER_LABELS.get(target.provider, target.provider)
-        ),
+        apply=lambda page, target: page.select_provider_of_model(target.base_name),
         keeps=lambda model, target: model.provider == target.provider,
     ),
 }

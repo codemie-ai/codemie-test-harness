@@ -19,9 +19,6 @@ from codemie_sdk.models.llm import ModelStatus
 
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 
-# Every status an administrator can set.
-ALL_STATUSES = [ModelStatus.ENABLED, ModelStatus.DISABLED, ModelStatus.DEPRECATED]
-
 # Statuses that make a model unusable as the global default.
 NON_SELECTABLE_STATUSES = [ModelStatus.DEPRECATED, ModelStatus.DISABLED]
 

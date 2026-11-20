@@ -21,7 +21,6 @@ They carry ``xdist_group(name="model_status")``, so they run one after another o
 """
 
 import pytest
-from hamcrest import assert_that, equal_to
 
 from codemie_test_harness.tests.ui.pageobject.administration.models_management_page import (
     ModelsManagementPage,
@@ -82,11 +81,7 @@ def test_admin_changes_a_model_status_in_the_row_select_and_applies_it(
 
     models_page.navigate_to()
     models_page.should_show_row_status(base_name, STATUS_LABELS[status])
-    assert_that(
-        llm_model_status_utils.status_of(base_name),
-        equal_to(status),
-        "the admin API list must agree with the row after reload",
-    )
+    llm_model_status_utils.wait_until_status_listed(base_name, status)
 
 
 # @case platform-model-management_TC_012
@@ -110,11 +105,7 @@ def test_admin_changes_statuses_with_the_bulk_actions_menu(
 
     models_page.navigate_to()
     models_page.should_show_row_status(base_name, STATUS_LABELS[status])
-    assert_that(
-        llm_model_status_utils.status_of(base_name),
-        equal_to(status),
-        "the admin API list must agree with the row after reload",
-    )
+    llm_model_status_utils.wait_until_status_listed(base_name, status)
 
 
 # @case platform-model-management_TC_019
@@ -147,6 +138,7 @@ def test_management_status_filter_narrows_the_list_and_clearing_restores_it(
     page, llm_model_status_utils, status_test_model, status
 ):
     llm_model_status_utils.set_status(status_test_model.base_name, status)
+    llm_model_status_utils.wait_until_status_listed(status_test_model.base_name, status)
     models = llm_model_status_utils.list_statuses()
     kept = [model for model in models if model.status == status]
     models_page = ModelsManagementPage(page)

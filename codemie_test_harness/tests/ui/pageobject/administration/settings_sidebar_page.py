@@ -121,9 +121,7 @@ class SettingsSidebarPage(BasePage):
         Returns:
             ``self`` for chaining.
         """
-        btn = self.administration_section_button
-        if btn.get_attribute("aria-expanded") == "false":
-            btn.click()
+        self.expand_administration_section()
         expect(self.model_management_item).to_be_visible(timeout=5000)
         self.model_management_item.click()
         return self

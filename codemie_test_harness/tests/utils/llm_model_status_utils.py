@@ -23,6 +23,8 @@ one must restore it in a fixture teardown and carry
 ``xdist_group(name="model_status")`` so that such tests never overlap.
 """
 
+from hamcrest import assert_that, empty, greater_than_or_equal_to
+
 from codemie_sdk import CodeMieClient
 from codemie_sdk.models.admin import (
     AdminLLMModel,
@@ -52,11 +54,29 @@ CATALOG_PROPAGATION_TIMEOUT = 30.0
 CONSISTENT_CATALOG_READS = 4
 
 
+def wait_for_consistent_reads(fetch, holds, wanted: str) -> None:
+    """Poll `fetch` until `holds` is true for several reads in a row, or fail.
+
+    Raises an AssertionError that names `wanted` and the last value read when
+    the propagation timeout expires, so a test never carries on over a stale read.
+    """
+    streak = 0
+
+    def in_a_row(value) -> bool:
+        nonlocal streak
+        streak = streak + 1 if holds(value) else 0
+        return streak >= CONSISTENT_CATALOG_READS
+
+    last = poll_until(fetch, in_a_row, timeout=CATALOG_PROPAGATION_TIMEOUT)
+    assert_that(
+        streak,
+        greater_than_or_equal_to(CONSISTENT_CATALOG_READS),
+        f"after {CATALOG_PROPAGATION_TIMEOUT:.0f}s still waiting for {wanted}; last read: {last}",
+    )
+
+
 class LlmModelStatusUtils(BaseUtils):
     """Reads and writes model statuses and the global default model."""
-
-    def __init__(self, client: CodeMieClient):
-        super().__init__(client)
 
     # ── Admin API ─────────────────────────────────────────────────────────────
 
@@ -100,6 +120,18 @@ class LlmModelStatusUtils(BaseUtils):
         """Models of GET /v1/llm_models for the user behind the client, by base name."""
         return {model.base_name: model for model in client.llms.list()}
 
+    def wait_until_status_listed(self, base_name: str, status: ModelStatus) -> None:
+        """Wait until the admin list shows the status of a model, then return.
+
+        The status must show on several reads in a row, because the reads may be
+        served by different instances. Raises when the time is up.
+        """
+        wait_for_consistent_reads(
+            lambda: self.status_of(base_name),
+            lambda listed: listed == status,
+            f"the admin list to show {base_name} as {status.value}",
+        )
+
     def wait_until_catalog_shows(
         self,
         base_name: str,
@@ -110,8 +142,7 @@ class LlmModelStatusUtils(BaseUtils):
 
         A Disabled model leaves the catalog; any other status keeps it listed with
         that status. The status must show on several reads in a row, because the
-        reads may be served by different instances. Never raises: whatever the
-        catalog still shows when the time is up is what the test asserts on.
+        reads may be served by different instances. Raises when the time is up.
         """
 
         def reflects(catalog: dict[str, LLMModel]) -> bool:
@@ -121,23 +152,19 @@ class LlmModelStatusUtils(BaseUtils):
             return model is not None and model.status == status
 
         for client in (self.client, *clients):
-            streak = 0
-
-            def reflects_in_a_row(catalog: dict[str, LLMModel]) -> bool:
-                nonlocal streak
-                streak = streak + 1 if reflects(catalog) else 0
-                return streak >= CONSISTENT_CATALOG_READS
-
-            poll_until(
+            wait_for_consistent_reads(
                 lambda c=client: self.catalog_of(c),
-                reflects_in_a_row,
-                timeout=CATALOG_PROPAGATION_TIMEOUT,
+                reflects,
+                f"the catalog to show {base_name} as {status.value}",
             )
 
     def apply_status(
         self, base_name: str, status: ModelStatus, *clients: CodeMieClient
     ) -> LLMModelStatusUpdate:
-        """Set a status and wait until the catalog shows it to the admin and to `clients`."""
+        """Set a status and wait until the catalog of the admin and of `clients` shows it.
+
+        Tests that assert on the admin list wait for it with `wait_until_status_listed`.
+        """
         updated = self.set_status(base_name, status)
         self.wait_until_catalog_shows(base_name, status, *clients)
         return updated
@@ -194,19 +221,37 @@ class LlmModelStatusUtils(BaseUtils):
         return candidates[:count]
 
     def restore_enabled(self, base_names: list[str]) -> None:
-        """Set the models back to Enabled; a failure is logged, never raised."""
+        """Set the models back to Enabled and wait until the admin catalog shows it.
+
+        Every model is tried. A model that cannot be restored is logged as an error
+        and makes the call raise at the end, because its status stays changed for
+        every later test and for other users of the stand.
+        """
+        failed = []
         for base_name in base_names:
             try:
-                self.set_status(base_name, ModelStatus.ENABLED)
+                self.apply_status(base_name, ModelStatus.ENABLED)
             except Exception as e:
-                logger.warning(f"Failed to restore status of model {base_name}: {e}")
+                logger.error(f"Failed to restore status of model {base_name}: {e}")
+                failed.append(base_name)
+        assert_that(failed, empty(), "models left with a changed status on the stand")
 
     def restore_default(self, saved_base_name: str | None) -> None:
-        """Put the saved global default back; a failure is logged, never raised."""
+        """Put the saved global default back and wait until it is read back.
+
+        A failure is logged as an error and raised: the default stays changed for
+        every later test and for other users of the stand.
+        """
         try:
             if saved_base_name:
                 self.set_default(saved_base_name)
             else:
                 self.reset_default()
+            wait_for_consistent_reads(
+                lambda: self.get_default().saved_base_name,
+                lambda saved: saved == (saved_base_name or None),
+                f"the saved global default to be {saved_base_name}",
+            )
         except Exception as e:
-            logger.warning(f"Failed to restore the global default model: {e}")
+            logger.error(f"Failed to restore the global default model: {e}")
+            raise

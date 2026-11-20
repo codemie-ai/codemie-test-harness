@@ -44,7 +44,7 @@ CHAT_PROMPT = "Reply with one short sentence."
 
 @pytest.fixture
 def isolated_project_name(project):
-    """A new project: no project default model and no model restriction."""
+    """A new project; it starts with a default model of its own and no model restriction."""
     return project().name
 
 

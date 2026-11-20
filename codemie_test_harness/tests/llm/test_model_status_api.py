@@ -38,7 +38,6 @@ from codemie_sdk.models.llm import ModelStatus
 
 from codemie_test_harness.tests.test_data.llm_model_status_test_data import (
     ADMIN_STATUS_ROUTES,
-    ALL_STATUSES,
     CATALOG_STATUS_BY_STATUS,
     DEFAULT_REFUSAL_REASON,
     INVALID_BULK_REQUESTS,
@@ -61,11 +60,7 @@ def test_admin_sets_model_status_and_it_persists(
 ):
     base_name = status_test_model.base_name
     llm_model_status_utils.set_status(base_name, initial_status)
-    assert_that(
-        llm_model_status_utils.status_of(base_name),
-        equal_to(initial_status),
-        "the starting status must be stored before the change under test",
-    )
+    llm_model_status_utils.wait_until_status_listed(base_name, initial_status)
 
     updated = llm_model_status_utils.set_status(base_name, status)
 
@@ -75,22 +70,21 @@ def test_admin_sets_model_status_and_it_persists(
         equal_to(status),
         "the PUT response must carry the requested status",
     )
-    assert_that(
-        llm_model_status_utils.status_of(base_name),
-        equal_to(status),
-        "the admin model list must show the stored status",
-    )
+    llm_model_status_utils.wait_until_status_listed(base_name, status)
 
 
 # @case platform-model-management_TC_002
 @pytest.mark.xdist_group(name="model_status")
 @pytest.mark.llm
 @pytest.mark.api
-@pytest.mark.parametrize("status", ALL_STATUSES, ids=lambda s: s.value)
+@pytest.mark.parametrize(
+    "initial_status, status", STATUS_TRANSITIONS, ids=STATUS_TRANSITION_IDS
+)
 def test_regular_user_catalog_reflects_persisted_status(
-    llm_model_status_utils, status_test_model, regular_client, status
+    llm_model_status_utils, status_test_model, regular_client, initial_status, status
 ):
     base_name = status_test_model.base_name
+    llm_model_status_utils.apply_status(base_name, initial_status)
     llm_model_status_utils.apply_status(base_name, status, regular_client)
 
     catalog = llm_model_status_utils.catalog_of(regular_client)
@@ -133,6 +127,8 @@ def test_bulk_status_update_reports_per_item_results(
         contains_string(unknown),
         "the failed item must say which model was not found",
     )
+    llm_model_status_utils.wait_until_status_listed(first, ModelStatus.DEPRECATED)
+    llm_model_status_utils.wait_until_status_listed(second, ModelStatus.DEPRECATED)
     stored = {m.base_name: m.status for m in llm_model_status_utils.list_statuses()}
     assert_that(
         stored,
