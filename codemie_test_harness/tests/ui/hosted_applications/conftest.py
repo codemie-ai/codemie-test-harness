@@ -18,12 +18,18 @@ The signed-in UI user owns the applications: they are created through the API an
 through the API after the test.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from codemie_test_harness.tests import PROJECT
 from codemie_test_harness.tests.test_data.hosted_application_test_data import (
     html_artifact,
 )
+from codemie_test_harness.tests.test_data.hosted_application_category_test_data import (
+    CATEGORY_APP_LABELS,
+)
+from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.hosted_application_utils import (
     HostedApplicationUtils,
 )
@@ -70,3 +76,52 @@ def ui_unreleased_app(ui_owner_apps, ui_project):
     app = ui_owner_apps.create_app(ui_project)
     version = ui_owner_apps.upload_accepted_version(app.id, artifact)
     return ui_owner_apps.get_app(app.id), artifact, version
+
+
+# The applications of the category filter test that are published, by the collection it opens.
+PUBLISHED_IN_COLLECTION = {"mine": (), "marketplace": ("alpha", "beta")}
+# The ones that collection does not list while no category is selected.
+UNLISTED_IN_COLLECTION = {"mine": (), "marketplace": ("plain",)}
+
+
+@pytest.fixture
+def ui_new_app_name(ui_owner_apps):
+    """A name for an application the test creates through the browser.
+
+    After the test, an application of that name is found and deleted through the API.
+    """
+    name = get_random_name()
+    yield name
+    ui_owner_apps.adopt(name)
+
+
+@pytest.fixture
+def ui_category_apps(request, ui_owner_apps, ui_project, hosted_categories):
+    """Applications of the UI user tagged with the first two of ``hosted_categories``, or with none.
+
+    Parametrize it indirectly with a collection name: ``mine`` or ``marketplace``. The
+    applications of the marketplace are published, the one without a category is not.
+    ``names`` maps a label from ``CATEGORY_APP_LABELS`` to the application's name, which starts
+    with ``token``.
+    """
+    token = get_random_name()
+    names = {}
+    for label, indexes in CATEGORY_APP_LABELS.items():
+        app = ui_owner_apps.create_app(
+            ui_project,
+            name=f"{token} {label}",
+            categories=[hosted_categories[index].id for index in indexes],
+        )
+        names[label] = app.name
+        if label in PUBLISHED_IN_COLLECTION[request.param]:
+            ui_owner_apps.publish(app.id, [c.id for c in app.categories])
+    return SimpleNamespace(
+        collection=request.param,
+        token=token,
+        names=names,
+        listed=[
+            name
+            for label, name in names.items()
+            if label not in UNLISTED_IN_COLLECTION[request.param]
+        ],
+    )

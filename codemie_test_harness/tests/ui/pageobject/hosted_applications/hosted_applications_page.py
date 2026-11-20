@@ -21,6 +21,9 @@ from urllib.parse import quote
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.category_picker import (
+    CategoryPicker,
+)
 from codemie_test_harness.tests.ui.pageobject.components.options_menu import (
     OptionsMenu,
 )
@@ -31,6 +34,7 @@ from codemie_test_harness.tests.ui.pageobject.hosted_applications.hosted_page_ba
 
 APPS_ROUTE = "/apps"
 LEGACY_ROUTE = "/applications"
+COLLECTION_ROUTES = {"mine": APPS_ROUTE, "marketplace": f"{APPS_ROUTE}/marketplace"}
 SHARED_WITH_ME = "Shared with me"
 NO_ACTIVE_VERSION = "No active version yet"
 # A card holds its own role=button element plus the More options button.
@@ -100,9 +104,43 @@ class HostedApplicationsPage(HostedPageBase):
         """Any control of the card that talks about a new tab."""
         return self.card(name).get_by_role("button", name=NEW_TAB_NAME)
 
+    @property
+    def category_filter_button(self) -> Locator:
+        """Button that expands the CATEGORIES section of the filter sidebar."""
+        return self.page.get_by_role("button", name="CATEGORIES", exact=True)
+
+    @property
+    def category_filter_section(self) -> Locator:
+        """The expanded CATEGORIES section of the filter sidebar."""
+        return self.page.get_by_role("region", name="CATEGORIES")
+
+    @property
+    def category_filter(self) -> CategoryPicker:
+        """The Categories filter of the catalog."""
+        return CategoryPicker(self.page, self.category_filter_section)
+
+    @property
+    def search_input(self) -> Locator:
+        """Name search of the catalog filters."""
+        return self.page.get_by_role("textbox", name="Search", exact=True)
+
+    @property
+    def marketplace_tab(self) -> Locator:
+        """Marketplace collection button."""
+        return self.collections_navigation.get_by_role(
+            "button", name="Marketplace", exact=True
+        )
+
     # ------------------------------------------------------------------
     # Navigation
     # ------------------------------------------------------------------
+    @step
+    def open_collection_searched_by(self, collection: str, text: str):
+        """Open a collection (mine, marketplace) with a name search in its address."""
+        self.page.goto(f"{COLLECTION_ROUTES[collection]}?q={quote(text)}")
+        expect(self.search_input).to_be_visible()
+        return self
+
     @step
     def open_my_apps(self):
         """Open the My apps collection."""
@@ -256,4 +294,43 @@ class HostedApplicationsPage(HostedPageBase):
         """The card has no control for opening the application in a new tab."""
         expect(self.open_card_button(name)).to_be_visible()
         expect(self.new_tab_controls(name)).to_have_count(0)
+        return self
+
+    # ------------------------------------------------------------------
+    # Category filter and category names
+    # ------------------------------------------------------------------
+    @step
+    def show_category_filter(self):
+        """Expand the CATEGORIES section of the filter sidebar when it is collapsed."""
+        if not self.category_filter_section.is_visible():
+            self.category_filter_button.click()
+        expect(self.category_filter_section).to_be_visible()
+        return self.category_filter
+
+    @step
+    def search_by_name(self, text: str):
+        """Type a name search; the list follows after its debounce."""
+        self.search_input.fill(text)
+        return self
+
+    @step
+    def should_list_cards(self, names: list[str]):
+        """Each of these applications has a card on the page."""
+        for name in names:
+            expect(self.card(name)).to_be_visible()
+        return self
+
+    @step
+    def should_not_list_cards(self, names: list[str]):
+        """None of these applications has a card on the page."""
+        for name in names:
+            expect(self.card(name)).to_have_count(0)
+        return self
+
+    @step
+    def should_show_no_category_names_on_card(self, name: str, categories: list[str]):
+        """The card of the application names none of its categories."""
+        expect(self.card(name)).to_be_visible()
+        for category in categories:
+            expect(self.card(name).get_by_text(category)).to_have_count(0)
         return self
