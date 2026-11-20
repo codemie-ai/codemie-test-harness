@@ -108,9 +108,18 @@ class InsightsTableWidget(BasePage):
         )
 
     @property
+    def card(self) -> Locator:
+        """The widget card: the nearest ancestor of the heading that holds a table."""
+        return self.heading.locator("xpath=ancestor::*[.//table][1]")
+
+    @property
     def table(self) -> Locator:
-        """The widget table, found by its count column header."""
-        return self.page.get_by_role("table").filter(
+        """The widget table, found in its card by its count column header.
+
+        The card scope tells apart widgets that share a count column: Invocations heads both
+        Top Assistants Usage and Top Workflow Usage.
+        """
+        return self.card.get_by_role("table").filter(
             has=self.page.get_by_role(
                 "columnheader", name=self.widget.count_column, exact=True
             )

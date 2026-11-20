@@ -56,8 +56,23 @@ ASSISTANTS_CHATS_TABLE = InsightsTable(
     count_column="Total Messages",
     cost_column=ASSISTANTS_CHATS_COST_COLUMN,
 )
+# Located by its heading: the Invocations column is shared by both Top usage widgets.
+TOP_ASSISTANTS_USAGE_TABLE = InsightsTable(
+    title="Top Assistants Usage",
+    name_column="Assistant Name",
+    count_column="Invocations",
+)
+TOP_WORKFLOW_USAGE_TABLE = InsightsTable(
+    title="Top Workflow Usage",
+    name_column="Workflow Name",
+    count_column="Invocations",
+)
+# Located by its Total Runs column; its rows are ordered by Total Cost ($), see the cost check.
 WORKFLOWS_TABLE = InsightsTable(
-    title="Workflows", name_column="Workflow Name", count_column="Total Runs"
+    title="Workflows",
+    name_column="Workflow Name",
+    count_column="Total Runs",
+    cost_column="Total Cost ($)",
 )
 
 # Label of the first cell of the totals footer row.
