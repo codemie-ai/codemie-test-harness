@@ -412,6 +412,17 @@ class IntegrationsPage(BasePage):
         return self
 
     @step
+    def close_toasts(self):
+        """Close every open toast so it no longer covers the row menus below it."""
+        close_buttons = self.page.locator("#toast-container").get_by_role(
+            "button", name="Close notification"
+        )
+        while close_buttons.count():
+            close_buttons.first.click()
+        expect(close_buttons).to_have_count(0)
+        return self
+
+    @step
     def should_see_search_input(self):
         """Verify that the search input is visible."""
         expect(self.search_input).to_be_visible()
