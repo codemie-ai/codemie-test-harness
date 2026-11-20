@@ -284,11 +284,14 @@ def test_create_git_integration_complete_workflow(page):
 @pytest.mark.ui
 @pytest.mark.prod_regression
 @pytest.mark.oss_standalone
-def test_saved_toast_goes_away_while_the_pointer_is_on_the_row_actions(page):
+def test_saved_toast_goes_away_while_the_pointer_is_on_the_row_actions(
+    page, integration_utils, scoped_integrations
+):
     # Arrange
     integrations_page = IntegrationsPage(page)
     create_integration_page = CreateIntegrationPage(page)
     integration_test_data = IntegrationTestDataFactory.git_integration()
+    scoped_integrations.track_alias(integration_utils, integration_test_data.alias)
     create_integration_page.navigate_to_user_integration_creation()
     create_integration_page.fill_git_integration_form(integration_test_data)
     create_integration_page.create_integration()
