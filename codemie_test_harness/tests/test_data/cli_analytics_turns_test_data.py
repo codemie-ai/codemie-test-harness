@@ -24,33 +24,74 @@ from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     to_iso,
 )
 
-TYPED_PROMPT = "use an Explore subagent to list the files in this folder"
+TYPED_PROMPT_TEXT = "use an Explore subagent to list the files in this folder"
+# A prompt the user typed that starts like the message Claude Desktop shows for a peer
+# session's hand-back, but without the "<agent-message" tag Claude Code injects.
+TYPED_PEER_LOOKALIKE_TEXT = (
+    "Another Claude session sent a message: summarise it for me in one line"
+)
 SUBAGENT_HAND_BACK_BODY = '<agent-message from="autotest-subagent-1"> [Subagent hand-back] The folder is empty.'
+SECOND_SUBAGENT_HAND_BACK_BODY = '<agent-message from="autotest-subagent-2"> [Subagent hand-back] README.md has 3 lines.'
+TASK_NOTIFICATION_BODY = (
+    "<task-notification><task-id>autotest-subagent-1</task-id></task-notification>"
+)
 TYPED_INPUT_TOKENS = 1000
-HAND_BACK_INPUT_TOKENS = 2000
+INJECTED_INPUT_TOKENS = 2000
+# Seconds between two prompts of a session.
+PROMPT_SPACING = 20
 
 
 @dataclass(frozen=True)
-class InjectedPrompt:
-    """A message Claude Code adds to the conversation on its own, as an interaction span.
+class SessionPrompt:
+    """A prompt of a Claude Code session, sent as its own interaction span.
 
     ``hook_body`` is the body of the agent.prompt.submit hook of the same prompt_id, or
     None when no hook arrives for it. ``answered`` is whether the model replied to it,
-    that is, whether its span holds an api_request.
+    that is, whether its span holds an api_request. ``typed`` is whether the user typed
+    it: only typed prompts are turns.
     """
 
     log_body: str
     hook_body: str | None
     answered: bool
+    typed: bool
 
 
-HAND_BACK = InjectedPrompt(
-    log_body=SUBAGENT_HAND_BACK_BODY, hook_body=SUBAGENT_HAND_BACK_BODY, answered=True
+TYPED_PROMPT = SessionPrompt(
+    log_body=TYPED_PROMPT_TEXT,
+    hook_body=TYPED_PROMPT_TEXT,
+    answered=True,
+    typed=True,
 )
-UNANSWERED_TASK_NOTIFICATION = InjectedPrompt(
-    log_body="<task-notification><task-id>autotest-subagent-1</task-id></task-notification>",
+TYPED_PEER_LOOKALIKE = SessionPrompt(
+    log_body=TYPED_PEER_LOOKALIKE_TEXT,
+    hook_body=TYPED_PEER_LOOKALIKE_TEXT,
+    answered=True,
+    typed=True,
+)
+HAND_BACK = SessionPrompt(
+    log_body=SUBAGENT_HAND_BACK_BODY,
+    hook_body=SUBAGENT_HAND_BACK_BODY,
+    answered=True,
+    typed=False,
+)
+SECOND_HAND_BACK = SessionPrompt(
+    log_body=SECOND_SUBAGENT_HAND_BACK_BODY,
+    hook_body=SECOND_SUBAGENT_HAND_BACK_BODY,
+    answered=True,
+    typed=False,
+)
+UNANSWERED_TASK_NOTIFICATION = SessionPrompt(
+    log_body=TASK_NOTIFICATION_BODY,
     hook_body=None,
     answered=False,
+    typed=False,
+)
+ANSWERED_TASK_NOTIFICATION = SessionPrompt(
+    log_body=TASK_NOTIFICATION_BODY,
+    hook_body=TASK_NOTIFICATION_BODY,
+    answered=True,
+    typed=False,
 )
 
 
@@ -67,117 +108,137 @@ def _nanos(moment: datetime) -> str:
 
 @dataclass
 class ClaudeCodeTurnsSeed:
-    """One Claude Code session: a typed prompt answered by the model, then one injected
-    prompt. Typed prompts are the only turns, so the session has exactly one turn.
+    """One Claude Code session: a typed prompt answered by the model, then ``followups``,
+    one interaction span each. Only typed prompts are turns.
 
-    ``summary_turns`` is the turn count of the agent.session.summary the client sends at the
-    end: a client that counts the injected prompt too reports 2. None sends no summary."""
+    With ``client_summary`` the client sends an agent.session.summary at the end whose
+    turns are ``summary_turns``: the CLI counts every prompt line of the transcript,
+    injected ones included, so one per prompt. With ``late_injected_hooks`` the prompt
+    hooks of the injected prompts are left out of ``events`` and sent later through
+    ``late_events``, as when they reach the backend after the session was first rolled
+    up."""
 
     key: str
-    injected: InjectedPrompt
+    followups: tuple[SessionPrompt, ...]
     started_at: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc).replace(microsecond=0)
         - timedelta(minutes=10)
     )
     user: str = OWNER
-    summary_turns: int | None = 2
+    client_summary: bool = True
+    late_injected_hooks: bool = False
     session_id: str = field(
         default_factory=lambda: f"autotest-cc-{uuid.uuid4().hex[:12]}"
     )
 
     @property
+    def prompts(self) -> tuple[SessionPrompt, ...]:
+        return (TYPED_PROMPT, *self.followups)
+
+    @property
+    def summary_turns(self) -> int:
+        return len(self.prompts)
+
+    @property
     def expected_turns(self) -> int:
-        return 1
+        return sum(1 for prompt in self.prompts if prompt.typed)
+
+    @property
+    def turns_before_late_hooks(self) -> int:
+        """Turns while the late hooks are still missing: an answered injected prompt
+        without its hook cannot be told from a typed one, so it counts until the hook
+        arrives."""
+        return sum(
+            1
+            for prompt in self.prompts
+            if prompt.typed or (prompt.answered and prompt.hook_body is not None)
+        )
 
     @property
     def trace_id(self) -> str:
         return uuid.uuid5(uuid.NAMESPACE_URL, self.session_id).hex
 
-    @property
-    def typed_span_id(self) -> str:
-        return self.trace_id[:16]
+    def span_id(self, index: int) -> str:
+        return uuid.uuid5(uuid.NAMESPACE_URL, f"{self.session_id}/{index}").hex[:16]
+
+    def prompt_id(self, index: int) -> str:
+        return f"prompt-{index}-{self.session_id}"
+
+    def prompted_at(self, index: int) -> datetime:
+        return self.started_at + timedelta(seconds=1 + PROMPT_SPACING * index)
 
     @property
-    def injected_span_id(self) -> str:
-        return self.trace_id[16:]
+    def ended_at(self) -> datetime:
+        return self.prompted_at(len(self.prompts) - 1) + timedelta(seconds=10)
 
-    @property
-    def typed_prompt_id(self) -> str:
-        return f"typed-{self.session_id}"
-
-    @property
-    def injected_prompt_id(self) -> str:
-        return f"injected-{self.session_id}"
-
-    @property
-    def injected_at(self) -> datetime:
-        return self.started_at + timedelta(seconds=20)
-
-    @property
-    def typed_input_tokens(self) -> int:
-        return TYPED_INPUT_TOKENS
-
-    def events(self, project_name: str) -> list[dict]:
-        """Hook events for ``POST /v1/analytics/cli-analytics/event-hooks``."""
-        envelope = {
+    def _envelope(self, project_name: str) -> dict:
+        return {
             "session_id": self.session_id,
             "schema_version": 2,
             "codemie_project_name": project_name,
         }
 
-        def hook(event_type: str, moment: datetime, **fields) -> dict:
-            return {
-                **envelope,
-                "type": event_type,
-                "timestamp": to_iso(moment),
-                "event_id": f"{event_type}:{self.session_id}:{fields.get('prompt_id', '')}",
-                **fields,
-            }
+    def _hook(
+        self, project_name: str, event_type: str, moment: datetime, **fields
+    ) -> dict:
+        return {
+            **self._envelope(project_name),
+            "type": event_type,
+            "timestamp": to_iso(moment),
+            "event_id": f"{event_type}:{self.session_id}:{fields.get('prompt_id', '')}",
+            **fields,
+        }
 
-        events = [
-            hook("agent.session.start", self.started_at),
-            hook(
+    def _prompt_hooks(self, project_name: str, typed: bool) -> list[dict]:
+        return [
+            self._hook(
+                project_name,
                 "agent.prompt.submit",
-                self.started_at,
-                prompt_id=self.typed_prompt_id,
-                prompt_body=TYPED_PROMPT,
-            ),
-        ]
-        if self.injected.hook_body is not None:
-            events.append(
-                hook(
-                    "agent.prompt.submit",
-                    self.injected_at,
-                    prompt_id=self.injected_prompt_id,
-                    prompt_body=self.injected.hook_body,
-                )
+                self.prompted_at(index),
+                prompt_id=self.prompt_id(index),
+                prompt_body=prompt.hook_body,
             )
-        if self.summary_turns is not None:
+            for index, prompt in enumerate(self.prompts)
+            if prompt.hook_body is not None and prompt.typed == typed
+        ]
+
+    def events(self, project_name: str) -> list[dict]:
+        """Hook events for ``POST /v1/analytics/cli-analytics/event-hooks``, without the
+        injected prompts' hooks when they arrive late."""
+        events = [self._hook(project_name, "agent.session.start", self.started_at)]
+        events.extend(self._prompt_hooks(project_name, typed=True))
+        if not self.late_injected_hooks:
+            events.extend(self._prompt_hooks(project_name, typed=False))
+        if self.client_summary:
             events.append(
-                hook(
+                self._hook(
+                    project_name,
                     "agent.session.summary",
-                    self.injected_at + timedelta(seconds=10),
+                    self.ended_at,
                     is_final=True,
                     turns=self.summary_turns,
                     started_at=to_iso(self.started_at),
-                    ended_at=to_iso(self.injected_at + timedelta(seconds=10)),
+                    ended_at=to_iso(self.ended_at),
                 )
             )
         return events
+
+    def late_events(self, project_name: str) -> list[dict]:
+        """The injected prompts' hooks a session with ``late_injected_hooks`` sends late."""
+        return self._prompt_hooks(project_name, typed=False)
 
     def _log_record(
         self,
         name: str,
         moment: datetime,
-        span_id: str,
-        prompt_id: str,
+        index: int,
         user_email,
         *extra,
     ) -> dict:
         attributes = [
             _attr("session.id", self.session_id),
             _attr("event.name", name),
-            _attr("prompt.id", prompt_id),
+            _attr("prompt.id", self.prompt_id(index)),
             _attr("user.email", user_email),
             *extra,
         ]
@@ -186,65 +247,45 @@ class ClaudeCodeTurnsSeed:
             "body": {"stringValue": f"claude_code.{name}"},
             "attributes": attributes,
             "traceId": self.trace_id,
-            "spanId": span_id,
+            "spanId": self.span_id(index),
         }
 
-    def _api_request(
-        self, moment, span_id, prompt_id, user_email, input_tokens
-    ) -> dict:
-        return self._log_record(
-            "api_request",
-            moment,
-            span_id,
-            prompt_id,
-            user_email,
-            _attr("model", SEED_MODEL),
-            _attr("request_id", f"req_{prompt_id}"),
-            _attr("input_tokens", input_tokens),
-            _attr("output_tokens", 10),
-            _attr("cache_read_tokens", 0),
-            _attr("cache_creation_tokens", 0),
-            _attr("cost_usd", 0.01),
-        )
-
     def otlp_logs(self, user_email: str) -> dict:
-        """OTLP logs (JSON form) for ``POST /v1/analytics/cli-analytics/logs``."""
-        typed_at = self.started_at + timedelta(seconds=1)
-        records = [
-            self._log_record(
-                "user_prompt",
-                typed_at,
-                self.typed_span_id,
-                self.typed_prompt_id,
-                user_email,
-                _attr("prompt_length", len(TYPED_PROMPT)),
-            ),
-            self._api_request(
-                typed_at + timedelta(seconds=2),
-                self.typed_span_id,
-                self.typed_prompt_id,
-                user_email,
-                TYPED_INPUT_TOKENS,
-            ),
-            self._log_record(
-                "user_prompt",
-                self.injected_at,
-                self.injected_span_id,
-                self.injected_prompt_id,
-                user_email,
-                _attr("prompt_length", len(self.injected.log_body)),
-            ),
-        ]
-        if self.injected.answered:
+        """OTLP logs (JSON form) for ``POST /v1/analytics/cli-analytics/logs``: the
+        user_prompt of every prompt and the api_request of every answered one."""
+        records = []
+        for index, prompt in enumerate(self.prompts):
+            moment = self.prompted_at(index)
             records.append(
-                self._api_request(
-                    self.injected_at + timedelta(seconds=2),
-                    self.injected_span_id,
-                    self.injected_prompt_id,
+                self._log_record(
+                    "user_prompt",
+                    moment,
+                    index,
                     user_email,
-                    HAND_BACK_INPUT_TOKENS,
+                    _attr("prompt_length", len(prompt.log_body)),
                 )
             )
+            if prompt.answered:
+                records.append(
+                    self._log_record(
+                        "api_request",
+                        moment + timedelta(seconds=2),
+                        index,
+                        user_email,
+                        _attr("model", SEED_MODEL),
+                        _attr("request_id", f"req_{self.prompt_id(index)}"),
+                        _attr(
+                            "input_tokens",
+                            TYPED_INPUT_TOKENS
+                            if prompt.typed
+                            else INJECTED_INPUT_TOKENS,
+                        ),
+                        _attr("output_tokens", 10),
+                        _attr("cache_read_tokens", 0),
+                        _attr("cache_creation_tokens", 0),
+                        _attr("cost_usd", 0.01),
+                    )
+                )
         return {
             "resourceLogs": [
                 {
@@ -260,13 +301,14 @@ class ClaudeCodeTurnsSeed:
         }
 
     def otlp_traces(self) -> dict:
-        """OTLP traces (JSON form) for ``POST /v1/analytics/cli-analytics/traces``: the
-        interaction span of the typed prompt and the one of the injected prompt."""
+        """OTLP traces (JSON form) for ``POST /v1/analytics/cli-analytics/traces``: one
+        interaction span per prompt."""
 
-        def interaction(span_id: str, moment: datetime, sequence: int) -> dict:
+        def interaction(index: int) -> dict:
+            moment = self.prompted_at(index) - timedelta(seconds=1)
             return {
                 "traceId": self.trace_id,
-                "spanId": span_id,
+                "spanId": self.span_id(index),
                 "name": "claude_code.interaction",
                 "kind": 1,
                 "startTimeUnixNano": _nanos(moment),
@@ -274,7 +316,7 @@ class ClaudeCodeTurnsSeed:
                 "attributes": [
                     _attr("session.id", self.session_id),
                     _attr("span.type", "interaction"),
-                    _attr("interaction.sequence", sequence),
+                    _attr("interaction.sequence", index + 1),
                 ],
                 "status": {"code": 0},
             }
@@ -287,8 +329,7 @@ class ClaudeCodeTurnsSeed:
                         {
                             "scope": {"name": "com.anthropic.claude_code.tracing"},
                             "spans": [
-                                interaction(self.typed_span_id, self.started_at, 1),
-                                interaction(self.injected_span_id, self.injected_at, 2),
+                                interaction(index) for index in range(len(self.prompts))
                             ],
                         }
                     ],
@@ -298,10 +339,37 @@ class ClaudeCodeTurnsSeed:
 
 
 def get_injected_prompt_seeds() -> dict[str, ClaudeCodeTurnsSeed]:
-    """One session per kind of injected prompt, keyed by the scenario id."""
+    """One session per kind of injected prompt, keyed by the scenario id. Each has one
+    typed prompt, so one turn, and a client summary that counts every prompt."""
     return {
-        "subagent-hand-back": ClaudeCodeTurnsSeed("hand_back", HAND_BACK),
+        "subagent-hand-back": ClaudeCodeTurnsSeed("hand_back", (HAND_BACK,)),
         "unanswered-task-notification": ClaudeCodeTurnsSeed(
-            "task_notification", UNANSWERED_TASK_NOTIFICATION
+            "task_notification", (UNANSWERED_TASK_NOTIFICATION,)
+        ),
+        "answered-task-notification": ClaudeCodeTurnsSeed(
+            "answered_task_notification", (ANSWERED_TASK_NOTIFICATION,)
+        ),
+        "parallel-subagent-hand-backs": ClaudeCodeTurnsSeed(
+            "parallel_hand_backs", (HAND_BACK, SECOND_HAND_BACK)
         ),
     }
+
+
+def get_typed_prompts_seed() -> ClaudeCodeTurnsSeed:
+    """Two typed prompts, the second starting like a peer session's hand-back, and a
+    subagent hand-back between them: two turns. No client summary: its count of every
+    prompt would be served over a typed prompt wrongly left out."""
+    return ClaudeCodeTurnsSeed(
+        "typed_prompts", (HAND_BACK, TYPED_PEER_LOOKALIKE), client_summary=False
+    )
+
+
+def get_late_hook_seed() -> ClaudeCodeTurnsSeed:
+    """A typed prompt and a subagent hand-back whose prompt hook reaches the backend after
+    the session was rolled up. No client summary, so the served turns are the counted ones."""
+    return ClaudeCodeTurnsSeed(
+        "late_hand_back_hook",
+        (HAND_BACK,),
+        client_summary=False,
+        late_injected_hooks=True,
+    )
