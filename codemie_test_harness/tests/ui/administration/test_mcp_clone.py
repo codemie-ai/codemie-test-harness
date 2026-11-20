@@ -76,6 +76,7 @@ def mcp_page(page, mcp_source):
 
 @pytest.mark.mcp
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clone_mcp_server_from_list_validates_name_and_creates_clone(
     mcp_page, mcp_source, clone_name
 ):
@@ -107,6 +108,7 @@ def test_clone_mcp_server_from_list_validates_name_and_creates_clone(
 
 @pytest.mark.mcp
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize("acting_credentials", ["plain_user"], indirect=True)
 def test_mcp_management_page_is_not_available_for_user_without_permission(
     page, mcp_source

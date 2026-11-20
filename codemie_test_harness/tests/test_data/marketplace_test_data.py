@@ -67,12 +67,23 @@ GOOD_CONVERSATION_STARTERS = [
 # Random data for tests where field should be wrong
 WRONG_DATA = get_random_name()
 
+# A name and a description that contradict the (platform guide) system prompt and each
+# other. The quality check grades a field CRITICAL when a shopper would be misled about
+# what the assistant does; gibberish like WRONG_DATA is only graded OPTIONAL when the
+# other fields still make the purpose clear.
+WRONG_NAME = f"Pizza Delivery Route Planner ID{random.randint(0, 999)}"
+WRONG_DESCRIPTION = (
+    "Generates photorealistic marketing videos and social media ad campaigns for "
+    "fashion brands, with automatic voice-over, background music and influencer "
+    "casting suggestions."
+)
+
 # Test configurations for parametrized validation tests
 VALIDATION_TEST_CONFIGS = [
     {
         "id": "wrong_name_good_description_good_prompt",
         "config": {
-            "assistant_name": WRONG_DATA,
+            "assistant_name": WRONG_NAME,
             "description": COMPLETE_DESCRIPTION,
             "system_prompt": COMPLETE_SYSTEM_PROMPT,
             "conversation_starters": GOOD_CONVERSATION_STARTERS,
@@ -85,7 +96,7 @@ VALIDATION_TEST_CONFIGS = [
         "id": "good_name_wrong_description_good_prompt",
         "config": {
             "assistant_name": COMPLETE_ASSISTANT_NAME,
-            "description": WRONG_DATA,
+            "description": WRONG_DESCRIPTION,
             "system_prompt": COMPLETE_SYSTEM_PROMPT,
             "conversation_starters": GOOD_CONVERSATION_STARTERS,
             "categories": [COMPLETE_CATEGORIES],

@@ -32,6 +32,7 @@ CAPABILITY = "features:hostedApplications"
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_card_menu_details_item_opens_details_for_the_owner(page, ui_live_app):
     # @case clicking-a-hosted-app-opens_TC_006
     # @case clicking-a-hosted-app-opens_TC_003
@@ -49,6 +50,7 @@ def test_card_menu_details_item_opens_details_for_the_owner(page, ui_live_app):
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_details_and_viewer_menus_have_no_second_details_entry(page, ui_live_app):
     # @case clicking-a-hosted-app-opens_TC_007
     app, _ = ui_live_app
@@ -73,6 +75,7 @@ def test_details_and_viewer_menus_have_no_second_details_entry(page, ui_live_app
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_openable_card_has_no_launch_button_and_its_menu_open_item_opens_the_viewer(
     page, ui_live_app
 ):

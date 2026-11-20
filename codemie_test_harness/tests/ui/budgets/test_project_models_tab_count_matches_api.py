@@ -31,6 +31,7 @@ from codemie_test_harness.tests.ui.pageobject.administration.project_details_pag
 
 
 @pytest.mark.project
+@pytest.mark.budget
 @pytest.mark.ui
 def test_models_tab_lists_every_api_model(page, project_admin_setup, client):
     project_name, _, _, _ = project_admin_setup

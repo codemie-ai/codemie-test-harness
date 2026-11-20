@@ -32,6 +32,7 @@ DEFAULT_SELECT_LABEL = "Project default model"
 
 
 @pytest.mark.project
+@pytest.mark.budget
 @pytest.mark.ui
 def test_selected_models_are_offered_in_default_dropdown(
     page, project_admin_setup, client

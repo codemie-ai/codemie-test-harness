@@ -36,6 +36,7 @@ DEFAULT_SELECT_LABEL = "Project default model"
 
 
 @pytest.mark.project
+@pytest.mark.budget
 @pytest.mark.ui
 def test_reset_to_global_settings_restores_default_model_and_selection(
     page, project_admin_setup, client

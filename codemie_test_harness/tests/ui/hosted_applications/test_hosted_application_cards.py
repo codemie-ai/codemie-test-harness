@@ -33,6 +33,7 @@ CAPABILITY = "features:hostedApplications"
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize("key", ["Enter", "Space"])
 def test_keyboard_user_reaches_the_card_of_an_openable_application_and_opens_it(
     page, ui_live_app, key
@@ -54,6 +55,7 @@ def test_keyboard_user_reaches_the_card_of_an_openable_application_and_opens_it(
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_keyboard_user_opens_the_upload_dialog_and_reaches_its_labelled_controls(
     page, ui_live_app
 ):
@@ -71,6 +73,7 @@ def test_keyboard_user_opens_the_upload_dialog_and_reaches_its_labelled_controls
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clicking_the_card_of_an_openable_application_opens_it_in_the_viewer(
     page, ui_live_app
 ):
@@ -90,6 +93,7 @@ def test_clicking_the_card_of_an_openable_application_opens_it_in_the_viewer(
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_open_on_the_details_page_opens_the_application_in_the_viewer(
     page, ui_live_app
 ):
@@ -109,6 +113,7 @@ def test_open_on_the_details_page_opens_the_application_in_the_viewer(
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_no_open_in_new_tab_control_remains_on_card_details_page_or_viewer(
     page, ui_live_app
 ):
@@ -129,6 +134,7 @@ def test_no_open_in_new_tab_control_remains_on_card_details_page_or_viewer(
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_card_without_a_live_version_shows_its_statuses_and_a_clickable_activate_button(
     page, ui_unreleased_app
 ):
@@ -146,6 +152,7 @@ def test_card_without_a_live_version_shows_its_statuses_and_a_clickable_activate
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_clicking_the_card_of_an_application_without_a_live_version_opens_its_details(
     page, ui_empty_app
 ):
@@ -161,6 +168,7 @@ def test_clicking_the_card_of_an_application_without_a_live_version_opens_its_de
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_card_of_an_application_without_a_version_offers_upload_version_that_opens_details(
     page, ui_empty_app
 ):
@@ -177,6 +185,7 @@ def test_card_of_an_application_without_a_version_offers_upload_version_that_ope
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_open_on_the_details_page_is_disabled_until_a_version_is_live(
     page, ui_unreleased_app
 ):

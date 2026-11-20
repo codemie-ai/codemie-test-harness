@@ -56,6 +56,7 @@ def _open_tool_node_config_panel(page, edit_page, test_workflow) -> ToolNodeConf
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize("tool_name", EXCHANGE_TOOLS, ids=EXCHANGE_TOOL_IDS)
 def test_required_list_argument_shows_persistent_asterisk_and_aria_required(
     page, test_workflow, ms_exchange_integration, tool_name
@@ -80,6 +81,7 @@ def test_required_list_argument_shows_persistent_asterisk_and_aria_required(
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize("tool_name", EXCHANGE_TOOLS, ids=EXCHANGE_TOOL_IDS)
 def test_required_list_argument_blocks_save_until_populated(
     page, test_workflow, ms_exchange_integration, workflow_utils, tool_name

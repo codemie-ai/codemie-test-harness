@@ -30,6 +30,7 @@ from codemie_test_harness.tests.ui.pageobject.assistants.assistants_page import 
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_owner_removes_access_from_share_popup_immediately_and_persists(
     assistant_factory, client, regular_client, page
 ):
@@ -56,6 +57,7 @@ def test_owner_removes_access_from_share_popup_immediately_and_persists(
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_shared_with_section_reflects_grant_and_revoke(
     assistant_factory, client, regular_client, page
 ):

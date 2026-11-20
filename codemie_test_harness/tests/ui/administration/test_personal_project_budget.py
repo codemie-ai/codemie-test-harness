@@ -34,6 +34,7 @@ from codemie_test_harness.tests.ui.pageobject.administration.project_management_
 
 @pytest.mark.ui
 @pytest.mark.project
+@pytest.mark.budget
 @pytest.mark.parametrize("acting_credentials", ["maintainer"], indirect=True)
 def test_maintainer_personal_project_has_no_create_budget_button(
     page, acting_credentials
