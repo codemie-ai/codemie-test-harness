@@ -97,6 +97,14 @@ class CliAnalyticsApi(BaseUtils):
             timeout=REQUEST_TIMEOUT,
         )
 
+    def read(self, path: str, **params) -> requests.Response:
+        """GET a CLI Analytics read endpoint (``path`` below ``/v1/analytics/cli-analytics``
+        or the full path) with query parameters the SDK models do not carry, such as
+        ``sort_by``, ``search``, ``framework`` and ``branch`` of the session list."""
+        if not path.startswith(INGEST_PREFIX):
+            path = f"{INGEST_PREFIX}{path}"
+        return self.request("GET", path, params=params)
+
 
 class IngestClient(CliAnalyticsApi):
     """POSTs to the four CLI Analytics ingest endpoints (logs, metrics, traces, event-hooks)."""
