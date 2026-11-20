@@ -103,6 +103,38 @@ def _workflow_yaml(states: list[StateModel]) -> str:
     return prepare_yaml_content(workflow.model_dump(exclude_none=True))
 
 
+def _canvas_counts(states: list[StateModel]) -> tuple[int, int]:
+    """Nodes and edges the editor draws for ``states``, derived from their ``next`` fields.
+
+    Nodes: the states, ``start``, ``end``, one node per conditional or switch, and one
+    iterator per distinct (``iter_key``, ``meta_iter_state_id`` of the iterated state):
+    iterator parents with the same pair share one iterator (the editor's iterator grouping).
+    Edges: ``start`` to the first state, one per ``state_id`` / ``state_ids`` target, and per
+    branch the edge to the branch node plus one per branch target.
+    """
+    by_id = {state.id: state for state in states}
+    branches = 0
+    iterators = set()
+    edges = 1
+    for state in states:
+        next_fields = state.next
+        edges += int(bool(next_fields.get("state_id")))
+        edges += len(next_fields.get("state_ids", []))
+        if "condition" in next_fields:
+            branches += 1
+            edges += 3
+        if "switch" in next_fields:
+            branches += 1
+            edges += 2 + len(next_fields["switch"]["cases"])
+        if next_fields.get("iter_key"):
+            child = by_id[next_fields["state_id"]]
+            iterators.add(
+                (next_fields["iter_key"], child.next.get("meta_iter_state_id"))
+            )
+    nodes = len(states) + START_AND_END_NODES + branches + len(iterators)
+    return nodes, edges
+
+
 # ---------------- 50-state workflow ----------------
 
 # Topology of the frontend's large-workflow fixture: 50 states, 4 conditionals, 2 switches
@@ -167,11 +199,10 @@ _LARGE_WORKFLOW_STATES = [
     _go("notify", "end"),
 ]
 
-LARGE_WORKFLOW_STATE_COUNT = 50
-# 50 states + start + end + 6 branch nodes (4 conditionals, 2 switches) + 1 iterator.
-LARGE_WORKFLOW_NODE_COUNT = 59
-# One edge per transition of the topology above.
-LARGE_WORKFLOW_EDGE_COUNT = 72
+LARGE_WORKFLOW_STATE_COUNT = len(_LARGE_WORKFLOW_STATES)
+LARGE_WORKFLOW_NODE_COUNT, LARGE_WORKFLOW_EDGE_COUNT = _canvas_counts(
+    _LARGE_WORKFLOW_STATES
+)
 
 
 def build_large_workflow_yaml() -> str:
@@ -193,9 +224,8 @@ _REPEATED_BRANCH_STATES = [
     _go("wrap_up", "end"),
 ]
 
-REPEATED_BRANCH_STATE_COUNT = 5
-# 5 states + start + end + 3 branch nodes.
-REPEATED_BRANCH_NODE_COUNT = 10
+REPEATED_BRANCH_STATE_COUNT = len(_REPEATED_BRANCH_STATES)
+REPEATED_BRANCH_NODE_COUNT, _ = _canvas_counts(_REPEATED_BRANCH_STATES)
 
 
 def build_repeated_branch_workflow_yaml() -> str:
@@ -243,55 +273,19 @@ _MEDIUM_BRANCHING_STATES = [
     _go("process_item", "end"),
 ]
 
+
+def _graph_case(case_id: str, states: list[StateModel]) -> GraphWorkflowCase:
+    nodes, edges = _canvas_counts(states)
+    return GraphWorkflowCase(case_id, _workflow_yaml(states), nodes, edges)
+
+
 SMALL_AND_MEDIUM_WORKFLOW_CASES = [
-    GraphWorkflowCase(
-        "small-linear",
-        _workflow_yaml(_SMALL_LINEAR_STATES),
-        expected_nodes=5,
-        expected_edges=4,
-    ),
-    GraphWorkflowCase(
-        "medium-conditional-switch-iterator",
-        _workflow_yaml(_MEDIUM_BRANCHING_STATES),
-        expected_nodes=12,
-        expected_edges=13,
-    ),
+    _graph_case("small-linear", _SMALL_LINEAR_STATES),
+    _graph_case("medium-conditional-switch-iterator", _MEDIUM_BRANCHING_STATES),
 ]
 
 
 # ---------------- shared meta ids ----------------
-
-
-def _canvas_counts(states: list[StateModel]) -> tuple[int, int]:
-    """Nodes and edges the editor draws for ``states``, derived from their ``next`` fields.
-
-    Nodes: the states, ``start``, ``end``, one node per conditional or switch, and one
-    iterator per distinct (``iter_key``, ``meta_iter_state_id`` of the iterated state):
-    iterator parents with the same pair share one iterator (the editor's iterator grouping).
-    Edges: ``start`` to the first state, one per ``state_id`` / ``state_ids`` target, and per
-    branch the edge to the branch node plus one per branch target.
-    """
-    by_id = {state.id: state for state in states}
-    branches = 0
-    iterators = set()
-    edges = 1
-    for state in states:
-        next_fields = state.next
-        edges += int(bool(next_fields.get("state_id")))
-        edges += len(next_fields.get("state_ids", []))
-        if "condition" in next_fields:
-            branches += 1
-            edges += 3
-        if "switch" in next_fields:
-            branches += 1
-            edges += 2 + len(next_fields["switch"]["cases"])
-        if next_fields.get("iter_key"):
-            child = by_id[next_fields["state_id"]]
-            iterators.add(
-                (next_fields["iter_key"], child.next.get("meta_iter_state_id"))
-            )
-    nodes = len(states) + START_AND_END_NODES + branches + len(iterators)
-    return nodes, edges
 
 
 def _iterated(state_id: str, target: str, meta_iter_state_id: str) -> StateModel:

@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+from collections import Counter
+
 from playwright.sync_api import Locator, Page, expect
 from reportportal_client import step
 
@@ -427,14 +430,29 @@ class BaseWorkflowFormPage(BasePage):
         """Verify the canvas holds exactly one node for every id in ``state_ids``.
 
         A node is "off screen" in a large graph but still in the DOM, so the check
-        is on presence and count, not on visibility.
+        is on presence and count, not on visibility. All ids are read in one query and
+        share one ``timeout``; a failure lists every missing or repeated id.
         """
-        for state_id in state_ids:
-            expect(
-                self.canvas_node_for_state(state_id),
-                f"no canvas node for state '{state_id}'",
-            ).to_have_count(1, timeout=timeout)
-        return self
+        deadline = time.monotonic() + timeout / 1000
+        while True:
+            rendered = Counter(
+                self.canvas_nodes.evaluate_all(
+                    "nodes => nodes.map(node => node.dataset.testid)"
+                )
+            )
+            wrong = {
+                state_id: rendered[f"rf__node-{state_id}"]
+                for state_id in state_ids
+                if rendered[f"rf__node-{state_id}"] != 1
+            }
+            if not wrong:
+                return self
+            if time.monotonic() >= deadline:
+                raise AssertionError(
+                    f"expected exactly one canvas node per state, but {len(wrong)} of "
+                    f"{len(state_ids)} states differ (state id: nodes found): {wrong}"
+                )
+            self.page.wait_for_timeout(250)
 
     @step
     def should_have_node_on_canvas(self, node_type: str):

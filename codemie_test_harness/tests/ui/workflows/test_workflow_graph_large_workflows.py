@@ -37,6 +37,7 @@ from codemie_test_harness.tests.ui.test_data.workflow_graph_test_data import (
 # @case workflow-graph-large-workflows_TC_001
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_large_workflow_renders_every_state_and_transition(page, graph_workflow):
     """A 50-state workflow draws a node per state and an edge per transition.
 
@@ -62,6 +63,7 @@ def test_large_workflow_renders_every_state_and_transition(page, graph_workflow)
 # @case workflow-graph-large-workflows_TC_002
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_repeated_branch_ids_and_state_named_like_generated_id_keep_every_node(
     page, graph_workflow
 ):
@@ -84,6 +86,7 @@ def test_repeated_branch_ids_and_state_named_like_generated_id_keep_every_node(
 # @case workflow-graph-large-workflows_TC_004
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize(
     "graph_case",
     SMALL_AND_MEDIUM_WORKFLOW_CASES,
@@ -107,6 +110,7 @@ def test_small_and_medium_workflows_keep_their_nodes_and_edges(
 # @case workflow-graph-large-workflows_TC_008
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_shared_meta_ids_across_conditional_and_iterator_states_keep_every_node(
     page, graph_workflow
 ):

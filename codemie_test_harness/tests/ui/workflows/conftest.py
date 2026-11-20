@@ -614,19 +614,18 @@ def slow_response_workflow(workflow_utils, default_llm):
 
 
 @pytest.fixture(scope="function")
-def create_node_workflow(workflow_utils, default_llm):
-    """Factory creating a workflow with one node (state ``NODE_STATE_ID``) of a chosen kind.
+def workflow_factory(workflow_utils):
+    """Factory creating a shared sequential workflow from YAML under a per-run name.
 
-    For ``NodeKind.SUB_WORKFLOW`` the factory first creates a minimal target workflow
-    to call. Created workflows are deleted on teardown, the calling workflow before
-    its sub-workflow target.
+    ``workflow_factory(yaml_config)`` creates the workflow through the API, reads it
+    back and returns it.
 
-    Usage: ``create_node_workflow(NodeKind.CUSTOM, CustomNodeType.STATE_PROCESSOR)``;
-    see ``build_node_workflow_yaml`` for the keyword options.
+    Teardown: deletes every created workflow, the last created first (so a calling
+    workflow goes before its sub-workflow target), also when the test failed.
     """
     created = []
 
-    def _create_workflow(workflow_yaml):
+    def _create(workflow_yaml):
         created_workflow = workflow_utils.create_workflow(
             workflow_name=get_random_name(),
             workflow_type=WorkflowMode.SEQUENTIAL,
@@ -637,14 +636,35 @@ def create_node_workflow(workflow_utils, default_llm):
         created.append(workflow)
         return workflow
 
+    yield _create
+
+    for workflow in reversed(created):
+        try:
+            workflow_utils.delete_workflow(workflow)
+        except Exception as e:
+            logger.warning(f"Failed to delete workflow {workflow.id}: {e}")
+
+
+@pytest.fixture(scope="function")
+def create_node_workflow(workflow_factory, default_llm):
+    """Factory creating a workflow with one node (state ``NODE_STATE_ID``) of a chosen kind.
+
+    For ``NodeKind.SUB_WORKFLOW`` the factory first creates a minimal target workflow
+    to call. Created workflows are deleted on teardown, the calling workflow before
+    its sub-workflow target.
+
+    Usage: ``create_node_workflow(NodeKind.CUSTOM, CustomNodeType.STATE_PROCESSOR)``;
+    see ``build_node_workflow_yaml`` for the keyword options.
+    """
+
     def _create(node_kind, custom_node_type=None, **yaml_options):
         sub_workflow_id = None
         if node_kind == NodeKind.SUB_WORKFLOW:
-            target = _create_workflow(
+            target = workflow_factory(
                 build_simple_assistant_workflow_yaml(default_llm.base_name)
             )
             sub_workflow_id = target.id
-        return _create_workflow(
+        return workflow_factory(
             build_node_workflow_yaml(
                 default_llm.base_name,
                 node_kind,
@@ -654,13 +674,7 @@ def create_node_workflow(workflow_utils, default_llm):
             )
         )
 
-    yield _create
-
-    for workflow in reversed(created):
-        try:
-            workflow_utils.delete_workflow(workflow)
-        except Exception as e:
-            logger.warning(f"Failed to delete workflow {workflow.id}: {e}")
+    return _create
 
 
 @dataclass(frozen=True)
@@ -672,32 +686,17 @@ class GraphWorkflow:
 
 
 @pytest.fixture
-def graph_workflow(workflow_utils):
-    """Factory creating a workflow from YAML under a per-run name.
+def graph_workflow(workflow_factory):
+    """Factory creating a workflow from YAML for a graph test.
 
-    ``graph_workflow(yaml_config)`` creates the workflow through the API, reads it back
+    ``graph_workflow(yaml_config)`` creates the workflow through ``workflow_factory``
     and returns a ``GraphWorkflow`` whose ``state_ids`` come from the stored
     ``yaml_config`` (the API payload), not from the YAML the test sent.
-
-    Teardown: deletes every workflow the factory created, also when the test failed.
     """
-    created: list[Workflow] = []
 
     def _create(yaml_config: str) -> GraphWorkflow:
-        created_workflow = workflow_utils.create_workflow(
-            workflow_name=get_random_name(),
-            workflow_type=WorkflowMode.SEQUENTIAL,
-            workflow_yaml=yaml_config,
-        )
-        created.append(created_workflow)
-        stored = workflow_utils.get_workflow(created_workflow.id)
+        stored = workflow_factory(yaml_config)
         stored_states = yaml.safe_load(stored.yaml_config)["states"]
         return GraphWorkflow(stored, [state["id"] for state in stored_states])
 
-    yield _create
-
-    for workflow in reversed(created):
-        try:
-            workflow_utils.delete_workflow(workflow)
-        except Exception as e:
-            logger.warning(f"Failed to delete workflow {workflow.id}: {e}")
+    return _create
