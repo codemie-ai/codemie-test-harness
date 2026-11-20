@@ -52,6 +52,10 @@ class CLIAnalyticsUserModal(BasePage):
         """
         return self.root.get_by_text(EM_DASH, exact=True)
 
+    def metric_card(self, label: str) -> Locator:
+        """Summary metric card by its exact label (a div holding the label and the value)."""
+        return self.root.get_by_text(label, exact=True).locator("xpath=../..")
+
     # ── Actions ──────────────────────────────────────────────────────────────────
 
     @step
@@ -67,6 +71,15 @@ class CLIAnalyticsUserModal(BasePage):
         """Assert the user detail dialog is open."""
         expect(self.root).to_be_visible(timeout=15000)
         expect(self.close_button).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_show_tool_success(self, text: str):
+        """Assert the Summary card Tool Success shows the text."""
+        expect(
+            self.metric_card("Tool Success").get_by_text(text, exact=True),
+            f"modal Tool Success should show '{text}'",
+        ).to_be_visible(timeout=15000)
         return self
 
     @step
