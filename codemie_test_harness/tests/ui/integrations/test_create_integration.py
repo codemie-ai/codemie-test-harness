@@ -21,6 +21,7 @@ All tests follow the Page Object Model pattern with reusable components abstract
 
 import pytest
 from codemie_sdk.models.integration import CredentialTypes
+from hamcrest import assert_that, has_item, is_not
 
 from codemie_test_harness.tests.ui.pageobject.integrations.create_integration_page import (
     CreateIntegrationPage,
@@ -38,11 +39,26 @@ from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestDataFactory,
 )
 from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    DIAL,
+    DIAL_MEMBER_HINT,
+    DIAL_SWITCH_NOTE,
+    GOOGLE_OAUTH,
+    GOOGLE_OAUTH_SWITCH_NOTE,
+    HIDDEN_PROJECT_TOAST,
+    NEW_INTEGRATION_FORM_SCOPE_BY_LIST_SCOPE,
+    PROJECT_ADMINS_ONLY_REASON,
+    PROJECT_CLEARED_NOTE,
+    SAME_VIEW_TOAST,
     SAVED_TOAST,
+    SCOPE_ALL,
     SCOPE_BADGE_PROJECT_ONLY,
     SCOPE_BADGE_USER_ONLY,
+    SCOPE_PROJECT,
+    SCOPE_USER,
 )
+from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
+from codemie_test_harness.tests.utils.user_utils import UserUtils
 
 # Hint on an option bound to the other scope (frontend settingsUIConfig / SettingsForm)
 SWITCHES_SCOPE_HINT_PREFIX = "Switches Scope to"
@@ -254,9 +270,36 @@ def test_create_git_integration_complete_workflow(page):
     create_integration_page.create_integration()
 
     # Assert
-    integrations_page.should_see_saved_message(
-        SAVED_TOAST
-    ).should_see_specific_integration(integration_test_data.alias)
+    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.should_see_specific_integration(integration_test_data.alias)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="The saved toast covers the More options button of the first row and stays "
+    "open while the pointer is on it, so the row actions cannot be reached",
+)
+@pytest.mark.integration
+@pytest.mark.ui
+@pytest.mark.prod_regression
+@pytest.mark.oss_standalone
+def test_saved_toast_goes_away_while_the_pointer_is_on_the_row_actions(page):
+    # Arrange
+    integrations_page = IntegrationsPage(page)
+    create_integration_page = CreateIntegrationPage(page)
+    integration_test_data = IntegrationTestDataFactory.git_integration()
+    create_integration_page.navigate_to_user_integration_creation()
+    create_integration_page.fill_git_integration_form(integration_test_data)
+    create_integration_page.create_integration()
+    integrations_page.toast.should_show(SAVED_TOAST)
+
+    # Act - the pointer goes to the row actions, which the toast covers
+    integrations_page.get_integration_row_by_alias(
+        integration_test_data.alias
+    ).point_at_menu_button()
+
+    # Assert
+    integrations_page.toast.should_disappear(move_cursor_away=False)
 
 
 @pytest.mark.integration
@@ -284,9 +327,8 @@ def test_create_jira_integration_complete_workflow(page):
     create_integration_page.fill_jira_integration_form(integration_test_data)
     create_integration_page.create_integration()
 
-    integrations_page.should_see_saved_message(
-        SAVED_TOAST
-    ).should_see_specific_integration(integration_test_data.alias)
+    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.should_see_specific_integration(integration_test_data.alias)
 
 
 @pytest.mark.integration
@@ -314,9 +356,8 @@ def test_create_confluence_integration_complete_workflow(page):
     create_integration_page.fill_confluence_integration_form(integration_test_data)
     create_integration_page.create_integration()
 
-    integrations_page.should_see_saved_message(
-        SAVED_TOAST
-    ).should_see_specific_integration(integration_test_data.alias)
+    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.should_see_specific_integration(integration_test_data.alias)
 
 
 @pytest.mark.sanity
@@ -448,3 +489,190 @@ def test_credential_type_dropdown_shows_all_available_options(page):
         create_integration_page.should_see_dropdown_option_badge(
             "Google OAuth", SCOPE_BADGE_USER_ONLY
         ).should_see_dropdown_option_hint("Google OAuth", SWITCHES_SCOPE_TO_USER_HINT)
+
+
+# @case unified-integrations-list_TC_013
+@pytest.mark.parametrize(
+    "list_scope",
+    list(NEW_INTEGRATION_FORM_SCOPE_BY_LIST_SCOPE),
+    ids=lambda label: f"list_scope_{label.lower()}",
+)
+@pytest.mark.integration
+@pytest.mark.ui
+@pytest.mark.prod_regression
+@pytest.mark.oss_standalone
+@pytest.mark.ui_login_as("project_admin")
+def test_create_opens_one_form_with_scope_first_taken_from_the_list_scope(
+    page, list_scope
+):
+    list_page = IntegrationsListPage(page)
+    form_page = IntegrationFormPage(page)
+    list_page.navigate_to()
+    list_page.select_scope(list_scope)
+
+    list_page.click_new_integration()
+
+    form_page.wait_until_open()
+    form_page.should_show_heading()
+    form_page.should_have_scope_first()
+    form_page.should_have_scope_selected(
+        NEW_INTEGRATION_FORM_SCOPE_BY_LIST_SCOPE[list_scope]
+    )
+
+
+# @case unified-integrations-list_TC_013
+@pytest.mark.integration
+@pytest.mark.ui
+@pytest.mark.prod_regression
+@pytest.mark.oss_standalone
+@pytest.mark.ui_login_as("project_admin")
+def test_form_opened_with_scope_in_the_address_preselects_it(page):
+    form_page = IntegrationFormPage(page)
+
+    form_page.navigate_to("scope=user")
+
+    form_page.should_have_scope_selected(SCOPE_USER)
+
+
+# @case unified-integrations-list_TC_016
+@pytest.mark.integration
+@pytest.mark.ui
+@pytest.mark.prod_regression
+@pytest.mark.ui_login_as("project_admin")
+def test_picking_dial_switches_scope_to_project_and_google_oauth_switches_back(page):
+    form_page = IntegrationFormPage(page)
+    form_page.navigate_to("scope=user")
+
+    form_page.pick_credential_type(DIAL)
+
+    form_page.should_have_scope_selected(SCOPE_PROJECT)
+    form_page.should_show_note(DIAL_SWITCH_NOTE)
+
+    form_page.pick_credential_type(GOOGLE_OAUTH)
+
+    form_page.should_have_scope_selected(SCOPE_USER)
+    form_page.should_show_note(GOOGLE_OAUTH_SWITCH_NOTE)
+
+
+# @case unified-integrations-list_TC_017
+@pytest.mark.integration
+@pytest.mark.ui
+@pytest.mark.prod_regression
+@pytest.mark.oss_standalone
+@pytest.mark.ui_login_as("project_admin")
+def test_saved_user_integration_keeps_the_filters_and_is_highlighted(
+    page, project_admin_integrations, scoped_integrations
+):
+    alias = scoped_integrations.track_alias(
+        project_admin_integrations, get_random_name()
+    )
+    list_page = IntegrationsListPage(page)
+    form_page = IntegrationFormPage(page)
+    list_page.navigate_to()
+    list_page.select_scope(SCOPE_USER)
+    list_page.click_new_integration()
+    form_page.wait_until_open()
+    form_page.fill_alias(alias)
+
+    form_page.save()
+
+    list_page.toast.should_show(SAVED_TOAST)
+    list_page.toast.should_show(SAME_VIEW_TOAST)
+    list_page.should_have_scope_selected(SCOPE_USER)
+    list_page.should_show_scope_badge(alias, SCOPE_USER)
+    list_page.should_mark_row_as_just_saved(alias)
+
+
+# @case unified-integrations-list_TC_017
+@pytest.mark.integration
+@pytest.mark.ui
+@pytest.mark.prod_regression
+@pytest.mark.oss_standalone
+@pytest.mark.ui_login_as("project_admin")
+def test_saved_project_integration_hidden_by_filters_is_shown_by_the_toast_action(
+    page, default_project_member, project_admin_integrations, scoped_integrations
+):
+    alias = scoped_integrations.track_alias(
+        project_admin_integrations, get_random_name()
+    )
+    list_page = IntegrationsListPage(page)
+    form_page = IntegrationFormPage(page)
+    list_page.navigate_to()
+    list_page.select_scope(SCOPE_USER)
+    list_page.click_new_integration()
+    form_page.wait_until_open()
+    form_page.fill_alias(alias)
+    form_page.select_scope(SCOPE_PROJECT)
+    form_page.pick_project(default_project_member.project_a)
+
+    form_page.save()
+
+    list_page.toast.should_show(HIDDEN_PROJECT_TOAST)
+    list_page.should_offer_show_all_scopes_and_types()
+    list_page.should_not_show_row(alias)
+
+    list_page.click_show_all_scopes_and_types()
+
+    list_page.should_have_scope_selected(SCOPE_ALL)
+    list_page.should_show_scope_badge(alias, SCOPE_PROJECT)
+
+
+@pytest.fixture
+def administered_projects(fresh_project_admin_client, default_project_member):
+    """Projects the signed-in user administers, as their profile lists them.
+
+    The selector at Project scope offers the user's projects that appear in the profile's
+    administered list; a personal project is a membership without the admin flag, so it is
+    not among them.
+    """
+    me = UserUtils(fresh_project_admin_client).get_about_me()
+    names = [p.name for p in me.projects if p.name in me.applications_admin]
+    assert_that(names, has_item(default_project_member.project_a))
+    assert_that(names, is_not(has_item(me.email)))
+    return names
+
+
+# @case unified-integrations-list_TC_014
+@pytest.mark.integration
+@pytest.mark.ui
+@pytest.mark.prod_regression
+@pytest.mark.oss_standalone
+@pytest.mark.ui_login_as("project_admin_member_of_project_b")
+def test_project_scope_offers_only_administered_projects_and_a_scope_change_clears_the_project(
+    page, default_project_member, administered_projects
+):
+    member_only = default_project_member.project_b
+    form_page = IntegrationFormPage(page)
+    form_page.navigate_to("scope=user")
+    form_page.should_offer_global_switch()
+    form_page.pick_project(member_only)
+    form_page.switch_global_on()
+
+    form_page.select_scope(SCOPE_PROJECT)
+
+    form_page.should_have_project_cleared(member_only)
+    form_page.should_show_note(PROJECT_CLEARED_NOTE)
+    form_page.should_not_offer_global_switch()
+
+    form_page.open_project_list()
+
+    form_page.should_offer_exactly_projects(administered_projects)
+    form_page.should_not_offer_project(member_only)
+
+
+# @case unified-integrations-list_TC_015
+@pytest.mark.integration
+@pytest.mark.ui
+@pytest.mark.prod_regression
+@pytest.mark.oss_standalone
+@pytest.mark.ui_login_as("member")
+def test_member_sees_project_scope_and_dial_disabled_on_the_create_form(page):
+    form_page = IntegrationFormPage(page)
+
+    form_page.navigate_to()
+
+    form_page.should_have_project_scope_disabled(PROJECT_ADMINS_ONLY_REASON)
+
+    form_page.open_credential_type_list()
+
+    form_page.should_disable_credential_type(DIAL, DIAL_MEMBER_HINT)

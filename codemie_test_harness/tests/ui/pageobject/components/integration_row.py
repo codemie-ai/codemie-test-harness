@@ -204,6 +204,15 @@ class IntegrationRow:
         return self
 
     @step
+    def point_at_menu_button(self):
+        """Move the pointer onto the menu button without clicking it."""
+        box = self.menu_button.bounding_box()
+        self.card.page.mouse.move(
+            box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+        )
+        return self
+
+    @step
     def click_menu(self):
         """Click the menu button to open context menu."""
         self.menu_button.click()

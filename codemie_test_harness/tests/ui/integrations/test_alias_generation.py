@@ -140,9 +140,8 @@ def test_alias_auto_generation_happy_path(page):
     create_integration_page.create_integration()
 
     # Assert — Integration appears in the list under the auto-generated alias
-    integrations_page.should_see_saved_message(
-        SAVED_TOAST
-    ).should_be_on_integrations_page().should_see_specific_integration(
+    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.should_be_on_integrations_page().should_see_specific_integration(
         auto_generated_alias
     )
 
@@ -188,9 +187,10 @@ def test_manual_alias_override_retained(page):
     create_integration_page.create_integration()
 
     # Assert — Integration saved with the custom alias
-    integrations_page.should_see_saved_message(
-        SAVED_TOAST
-    ).should_be_on_integrations_page().should_see_specific_integration(custom_alias)
+    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.should_be_on_integrations_page().should_see_specific_integration(
+        custom_alias
+    )
 
 
 @pytest.mark.sanity

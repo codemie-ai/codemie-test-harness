@@ -180,11 +180,3 @@ class IntegrationTestDataFactory:
         "cannot_create_setting": "Cannot create specified setting",
         "alias_required": "Alias is required",
     }
-
-    # Success messages
-    success_messages = {
-        "integration_created": "Integration created successfully",
-        "integration_updated": "Integration updated successfully",
-        "connection_test_passed": "Connection test passed",
-        "integration_deleted": "Integration deleted successfully",
-    }

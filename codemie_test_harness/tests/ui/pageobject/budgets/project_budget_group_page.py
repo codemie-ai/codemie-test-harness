@@ -33,6 +33,9 @@ For a maintainer/platform admin:
 from playwright.sync_api import expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.toast import (
+    ERROR_TOAST_SELECTOR,
+)
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 
 
@@ -116,11 +119,6 @@ class ProjectBudgetGroupPage(BasePage):
         """Close (×) button in the modal header."""
         return self.page.get_by_role("button", name="Close")
 
-    @property
-    def error_toast_header(self):
-        """Header text of the error toast notification."""
-        return self.error_toast.locator(".codemie-toast-header")
-
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @step
@@ -188,11 +186,12 @@ class ProjectBudgetGroupPage(BasePage):
         self.submit_button.click()
         # React removes the dialog from the DOM on close; the toast is injected on error.
         self.page.wait_for_function(
-            """() => {
+            """(errorToastSelector) => {
                 const dialog = document.querySelector('[role="dialog"]');
-                const toast = document.querySelector('.codemie-toast-err');
+                const toast = document.querySelector(errorToastSelector);
                 return !dialog || !!toast;
             }""",
+            arg=ERROR_TOAST_SELECTOR,
             timeout=15000,
         )
         return self
@@ -227,9 +226,9 @@ class ProjectBudgetGroupPage(BasePage):
     @step
     def should_show_validation_error(self, expected_text: str = None):
         """Assert an error toast is visible after submitting invalid data."""
-        expect(self.error_toast).to_be_visible(timeout=10000)
+        self.toast.should_show_any(("error",), timeout=10000)
         if expected_text:
-            expect(self.error_toast_header).to_contain_text(expected_text)
+            expect(self.toast.error_header).to_contain_text(expected_text)
         return self
 
     @step
@@ -239,7 +238,7 @@ class ProjectBudgetGroupPage(BasePage):
         Uses an explicit timeout so a transient backend error toast that appears
         briefly after networkidle is not silently missed.
         """
-        expect(self.error_toast).not_to_be_visible(timeout=5000)
+        self.toast.should_not_show(variants=("error",))
         return self
 
     @step

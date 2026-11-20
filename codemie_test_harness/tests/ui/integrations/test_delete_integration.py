@@ -34,6 +34,7 @@ from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestDataFactory,
 )
 from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    DELETED_TOAST,
     SAVED_TOAST,
 )
 
@@ -78,9 +79,8 @@ def test_delete_integration_with_confirmation(page: Page):
 
     # Wait for integration to be created
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_saved_message(SAVED_TOAST)
-    integrations_page.close_toasts()
-    integrations_page.should_not_see_message()
+    integrations_page.toast.should_show(SAVED_TOAST)
+    integrations_page.toast.should_disappear()
 
     # Act - Delete the integration
     integration_row = integrations_page.get_integration_row_by_alias(
@@ -96,9 +96,7 @@ def test_delete_integration_with_confirmation(page: Page):
 
     # Assert - Verify deletion success
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_deleted"]
-    )
+    integrations_page.toast.should_show(DELETED_TOAST)
 
     # Verify integration is no longer in the list
     integrations_page.should_not_see_integration(integration_test_data.alias)

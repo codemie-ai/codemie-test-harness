@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""UI fixtures for the unified Integrations list and form tests.
+"""UI fixtures for the Integrations tests.
 
-Overrides the `login` autouse fixture of tests/ui/conftest.py so the browser signs in as the
-user of `ui_login_user`: a project admin by default, another role in a module that overrides
-`ui_login_user`. The package's tests seed rows through the API as that user and clean them up
-through the API.
+Overrides the `login` autouse fixture of tests/ui/conftest.py. A test without a marker signs in
+as the harness account, like everywhere else in tests/ui. A test marked
+`@pytest.mark.ui_login_as("<role>")` signs in as a fresh user of that role (`UI_LOGIN_USERS`);
+the test seeds rows through the API as that user and cleans them up through the API.
 """
 
 import pytest
@@ -25,24 +25,54 @@ import pytest
 from codemie_sdk.models.integration import IntegrationType
 from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
 from codemie_test_harness.tests.utils.base_utils import get_random_name
+from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
 
+UI_LOGIN_USERS = {
+    "project_admin": "project_admin_user",
+    "member": "platform_user",
+    "project_admin_member_of_project_b": "project_admin_member_of_project_b",
+}
+
 
 @pytest.fixture
-def ui_login_user(project_admin_user):
-    """The user the browser signs in as: a project admin of one project."""
+def project_admin_member_of_project_b(
+    project_admin_user, default_project_member, user_utils
+):
+    """The project admin of project A, made a plain member of project B before signing in."""
+    user_utils.assign_user_to_project(
+        project_admin_user.user_id, default_project_member.project_b
+    )
     return project_admin_user
+
+
+@pytest.fixture
+def ui_login_user(request):
+    """The user the browser signs in as: the one of the `ui_login_as` marker, else None."""
+    marker = request.node.get_closest_marker("ui_login_as")
+    if marker is None:
+        return None
+    return request.getfixturevalue(UI_LOGIN_USERS[marker.args[0]])
 
 
 @pytest.fixture(autouse=True)
 def login(page, ui_login_user):
-    """Override tests/ui/conftest.py login: sign in as `ui_login_user`."""
+    """Override tests/ui/conftest.py login: sign in as `ui_login_user`, else as the harness account."""
+    frontend_url = CredentialsManager.get_parameter("FRONTEND_URL", "")
+    if ui_login_user is None:
+        LoginPage(page).login_suppressing_popups(
+            CredentialsManager.get_parameter("AUTH_USERNAME"),
+            CredentialsManager.get_parameter("AUTH_PASSWORD"),
+            get_client().users.about_me().user_id,
+            frontend_url,
+        )
+        return
     LoginPage(page).login_suppressing_popups(
         ui_login_user.email,
         ui_login_user.password,
         ui_login_user.user_id,
-        CredentialsManager.get_parameter("FRONTEND_URL", ""),
+        frontend_url,
     )
 
 

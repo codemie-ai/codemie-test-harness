@@ -17,7 +17,7 @@ Integrations page object for managing integrations.
 Contains methods for navigating to integrations, viewing integration lists, and interacting with integrations.
 """
 
-from playwright.sync_api import expect, Locator
+from playwright.sync_api import expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
@@ -102,19 +102,6 @@ class IntegrationsPage(BasePage):
         return self.page.locator(
             '.no-results, .empty-state, [data-testid="no-integrations"]'
         )
-
-    @property
-    def success_toast(self) -> Locator:
-        """Success toast after a save."""
-        return self.page.locator(".codemie-toast-success")
-
-    @property
-    def toast_message(self) -> Locator:
-        """Toast after an operation: success for a save, info for an update or delete.
-
-        The warning and error variants are left out so a failure toast cannot satisfy a message check.
-        """
-        return self.page.locator(".codemie-toast-success, .codemie-toast-info")
 
     @property
     def pagination_container(self):
@@ -403,26 +390,6 @@ class IntegrationsPage(BasePage):
         return self
 
     @step
-    def should_see_saved_message(self, message: str):
-        """Verify the toast that confirms a save from the New Integration form.
-
-        The list confirms a save with a success toast, no longer the info toast.
-        """
-        expect(self.success_toast.filter(has_text=message).first).to_be_visible()
-        return self
-
-    @step
-    def close_toasts(self):
-        """Close every open toast so it no longer covers the row menus below it."""
-        close_buttons = self.page.locator("#toast-container").get_by_role(
-            "button", name="Close notification"
-        )
-        while close_buttons.count():
-            close_buttons.first.click()
-        expect(close_buttons).to_have_count(0)
-        return self
-
-    @step
     def should_see_search_input(self):
         """Verify that the search input is visible."""
         expect(self.search_input).to_be_visible()
@@ -469,27 +436,6 @@ class IntegrationsPage(BasePage):
     def should_have_pagination(self):
         """Verify that pagination controls are visible."""
         expect(self.pagination_container).to_be_visible()
-        return self
-
-    @step
-    def should_see_message(self, message: str):
-        """
-        Verify that a message is displayed.
-
-        Args:
-            message (str, optional): Specific message to verify
-        """
-        toast = self.toast_message.filter(has_text=message).first
-        expect(toast).to_be_visible()
-        return self
-
-    @step
-    def should_not_see_message(self):
-        """
-        Verify that no success or info toast is displayed.
-        """
-        self.page.mouse.move(0, 0)
-        expect(self.toast_message).to_have_count(0)
         return self
 
     def _integration_row_by_alias(self, alias: str):

@@ -89,11 +89,6 @@ class CustomerConfigurationPage(BasePage):
         """'Reset to default' button — visible only when an override is active."""
         return self.chat_disclaimer_card.get_by_role("button", name="Reset to default")
 
-    @property
-    def save_success_status(self):
-        """Status message shown after a successful save."""
-        return self.page.get_by_role("status").filter(has_text="Setting saved")
-
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @step

@@ -31,6 +31,7 @@ from playwright.sync_api import expect, TimeoutError as PlaywrightTimeoutError
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 
 
 class BudgetsManagementPage(BasePage):
@@ -134,14 +135,6 @@ class BudgetsManagementPage(BasePage):
     def _delete_dialog_confirm_button(self):
         """'Delete' button of the delete confirmation dialog."""
         return self._delete_dialog.get_by_role("button", name="Delete", exact=True)
-
-    def _toast(self, text: str):
-        """A toast notification containing `text`.
-
-        The `.codemie-toast` class comes from toaster.ts (`toaster.info` ->
-        'codemie-toast codemie-toast-info'); confirmed live by the delete flow test.
-        """
-        return self.page.locator(".codemie-toast").filter(has_text=text)
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
@@ -350,7 +343,7 @@ class BudgetsManagementPage(BasePage):
     @step
     def should_see_budget_deleted_toast(self, expected_text: str):
         """Assert the success toast with `expected_text` is shown."""
-        expect(self._toast(expected_text)).to_be_visible(timeout=15000)
+        self.toast.should_show(expected_text, ALL_VARIANTS)
         return self
 
     @step

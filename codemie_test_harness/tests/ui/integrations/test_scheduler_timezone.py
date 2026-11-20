@@ -144,7 +144,7 @@ def test_scheduler_form_shows_timezone_field_and_allows_selection(
 
     # Assert — success toast confirms creation
     integrations_page = IntegrationsPage(page)
-    integrations_page.should_see_saved_message(SAVED_TOAST)
+    integrations_page.toast.should_show(SAVED_TOAST)
 
 
 @pytest.mark.integration
