@@ -23,7 +23,9 @@ from codemie_sdk.models.analytics import (
 )
 
 
+@pytest.mark.sanity
 @pytest.mark.smoke
+@pytest.mark.prod_regression
 @pytest.mark.cli_analytics
 @pytest.mark.oss_standalone
 @pytest.mark.api
@@ -35,7 +37,9 @@ def test_get_cli_analytics_cost(analytics_utils, cli_analytics_enabled):
     assert_that(response.data.kpis.total_sessions, greater_than_or_equal_to(0))
 
 
+@pytest.mark.sanity
 @pytest.mark.smoke
+@pytest.mark.prod_regression
 @pytest.mark.cli_analytics
 @pytest.mark.oss_standalone
 @pytest.mark.api

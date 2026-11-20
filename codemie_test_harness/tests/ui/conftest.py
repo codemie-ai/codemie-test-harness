@@ -38,6 +38,7 @@ from codemie_test_harness.tests.ui.test_data.workspace_download_test_data import
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils import production_safety
 from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
 from codemie_test_harness.tests.utils.logger_util import setup_logger
 
@@ -83,8 +84,20 @@ def screenshot_on_failure(request, page):
             )
 
 
+@pytest.fixture
+def read_only_browser(request, page):
+    """Abort the page's state-changing calls to the stand during a read-only test."""
+    if not production_safety.is_guarded(request.node):
+        yield
+        return
+    blocked = production_safety.guard_browser(page)
+    yield
+    if blocked:
+        logger.info(f"Read-only test: the browser was refused {sorted(set(blocked))}")
+
+
 @pytest.fixture(autouse=True)
-def login(page):
+def login(page, read_only_browser):
     login_page = LoginPage(page)
     user = get_client().users.about_me()
     frontend_url = os.getenv("FRONTEND_URL", "")
@@ -128,9 +141,14 @@ def create_new_conversation():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def cleanup_faq_assistant_conversations():
-    """Delete all conversations for AI/Run FAQ assistant after each test."""
+def cleanup_faq_assistant_conversations(request):
+    """Delete all conversations for AI/Run FAQ assistant after each test.
+
+    A read-only test opens no conversation and deletes none.
+    """
     yield
+    if production_safety.is_guarded(request.node):
+        return
     client = get_client()
     try:
         assistants = client.assistants.list(
@@ -330,6 +348,8 @@ def open_workspace_chat(page, workspace_assistant):
 
 def pytest_sessionfinish(session):
     """Run cleanup code after all tests have finished."""
+    if production_safety.is_read_only_run() or not conversation_ids:
+        return
     clean_up_timeout = 1 if EnvironmentResolver.is_production() else 0
     client = get_client()
     for conversation_id in conversation_ids:

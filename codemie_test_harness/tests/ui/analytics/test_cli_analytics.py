@@ -15,6 +15,7 @@
 """UI coverage for the Analytics > CLI Analytics dashboard (tab opening is smoke)."""
 
 import pytest
+from hamcrest import assert_that, contains_string, equal_to, is_not
 
 from codemie_test_harness.tests.ui.pageobject.analytics.analytics_page import (
     AnalyticsPage,
@@ -29,6 +30,7 @@ from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
 
 @pytest.mark.ui
 @pytest.mark.smoke
+@pytest.mark.prod_regression
 @pytest.mark.cli_analytics
 @pytest.mark.oss_standalone
 def test_cli_analytics_tab_opens_from_analytics_page(page):
@@ -40,6 +42,7 @@ def test_cli_analytics_tab_opens_from_analytics_page(page):
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.cli_analytics
 @pytest.mark.oss_standalone
 def test_cli_analytics_sections_load(page):
@@ -68,6 +71,58 @@ def test_cli_analytics_session_opens_from_sessions_table(page, cli_analytics_ses
     session_modal.should_have_title(cli_analytics_session.prompt)
     session_modal.should_have_session_details()
 
+    session_modal.close()
+    session_modal.should_be_closed()
+
+
+@pytest.mark.ui
+@pytest.mark.cli_analytics
+def test_cli_analytics_session_search_uses_repository_not_run_id(
+    page, cli_analytics_session
+):
+    # @case execute-repeatable-isolated-integration_TC_003
+    """Sessions search excludes Run ID and returns the exact session for its repository."""
+    assert_that(
+        cli_analytics_session.repository,
+        is_not(contains_string(cli_analytics_session.session_id)),
+    )
+    assert_that(
+        cli_analytics_session.prompt,
+        is_not(contains_string(cli_analytics_session.session_id)),
+    )
+
+    cli_analytics = CLIAnalyticsPage(page).navigate_to()
+    cli_analytics.open_section(CLIAnalyticsSection.SESSIONS)
+    cli_analytics.should_have_loaded_section(CLIAnalyticsSection.SESSIONS)
+
+    run_id_result = cli_analytics.search_sessions(cli_analytics_session.session_id)
+    assert_that(
+        run_id_result["data"]["sessions"],
+        equal_to([]),
+        "Sessions search must not treat trace_id/session_id as searchable metadata",
+    )
+    cli_analytics.should_list_no_sessions()
+
+    repository_result = cli_analytics.search_sessions(cli_analytics_session.repository)
+    returned_session_ids = [
+        session["trace_id"] for session in repository_result["data"]["sessions"]
+    ]
+    assert_that(
+        returned_session_ids,
+        equal_to([cli_analytics_session.session_id]),
+        "Repository search should return only the seeded session's actual trace_id",
+    )
+    cli_analytics.should_list_exactly_one_session(cli_analytics_session.repository)
+
+    session_modal = cli_analytics.open_session(
+        cli_analytics_session.repository,
+        expected_session_id=cli_analytics_session.session_id,
+    )
+    session_modal.should_show_session_metadata(
+        model=cli_analytics_session.model,
+        repository=cli_analytics_session.repository,
+        branch=cli_analytics_session.branch,
+    )
     session_modal.close()
     session_modal.should_be_closed()
 

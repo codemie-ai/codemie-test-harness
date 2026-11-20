@@ -44,7 +44,7 @@ from codemie_test_harness.tests.utils.run_attributes_utils import (
 
 @pytest.fixture(scope="session")
 def cli_analytics_session(
-    analytics_utils, admin_utils, project_utils
+    cli_analytics_state_changes_allowed, analytics_utils, admin_utils, project_utils
 ) -> CLIAnalyticsTestSession:
     """A CLI Analytics session of the test user, seeded through the ingest API.
 

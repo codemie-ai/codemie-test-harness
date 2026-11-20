@@ -19,9 +19,12 @@ sessions"). Locators verified against the live UI on 2026-10-12
 and the codemie-ui ``SessionModal`` / ``SessionBody`` components.
 """
 
+import re
+
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.analytics import metric_card_locators
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 
 
@@ -63,6 +66,27 @@ class CLIAnalyticsSessionModal(BasePage):
         """Message shown when the session detail came back empty."""
         return self.root.get_by_text(self.NO_DATA_TEXT, exact=True)
 
+    def metadata_segment(self, value: str) -> Locator:
+        """Dialog subtitle containing `value` as one complete dot-separated segment."""
+        segment = re.compile(rf"(^|·\s*){re.escape(value)}(\s*·|$)")
+        return self.root.get_by_text(segment).first
+
+    def metric_label(self, label: str) -> Locator:
+        """Label paragraph of a metric card (Cost, Input, Turns, ...), by exact text.
+
+        The first match is the card: a timeline step detail rendered later reuses
+        some labels (e.g. Cost) in plain grids.
+        """
+        return metric_card_locators.metric_label(self.root, label)
+
+    def metric_value(self, label: str) -> Locator:
+        """Value paragraph of a metric card: the first <p> after the label's header div."""
+        return metric_card_locators.metric_value(self.root, label)
+
+    def metric_description(self, label: str) -> Locator:
+        """Optional description paragraph of a metric card (e.g. '81.8% ok')."""
+        return metric_card_locators.metric_description(self.root, label)
+
     # ── Actions ──────────────────────────────────────────────────────────────────
 
     @step
@@ -87,6 +111,32 @@ class CLIAnalyticsSessionModal(BasePage):
             self.root.get_by_text(prompt[:80], exact=False).first,
             f"Session dialog title should show the prompt '{prompt}'",
         ).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_show_session_metadata(self, *, model: str, repository: str, branch: str):
+        """Assert the dialog's subtitle shows the session's exact model, repository
+        and branch, each as its own segment of the joined subtitle string (see the
+        `subtitle` locator). Exact per-segment equality, not a substring/contains
+        check, so e.g. a `branch` value cannot pass by matching a longer segment that
+        merely contains it.
+
+        The dialog (SessionModal.tsx / SessionBody.tsx) never renders the session's
+        user/developer anywhere, and neither does the Sessions table row it was opened
+        from (SessionsView.tsx has no such column): developer_name is only ever shown
+        on the separate Users/Cost tabs, aggregated across sessions, not per-session.
+        So it cannot be asserted here or from this flow.
+        """
+        for label, value in (
+            ("model", model),
+            ("repository", repository),
+            ("branch", branch),
+        ):
+            expect(
+                self.metadata_segment(value),
+                f"Session dialog subtitle should show its {label} ({value!r}) "
+                "as a complete segment",
+            ).to_be_visible(timeout=15000)
         return self
 
     @step
