@@ -152,6 +152,7 @@ def created_datasource(project_with_display_name, datasource_utils):
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.oss_standalone
 def test_project_creation_modal_display_name_field(page):
     """TC-021/TC-024/TC-025: Create modal has display_name input, independent Name * field, and validates 150-char limit."""
@@ -177,6 +178,7 @@ def test_project_creation_modal_display_name_field(page):
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.oss_standalone
 def test_project_management_page_and_edit_modal(page, project):
     """TC-020/TC-022/TC-023: Management page shows display_name or technical name; edit modal prefills display_name."""
@@ -213,6 +215,7 @@ def test_project_management_page_and_edit_modal(page, project):
 @pytest.mark.project
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_detail_shows_project_display_name(
     page, project_with_display_name, created_assistant
 ):
@@ -226,6 +229,7 @@ def test_assistant_detail_shows_project_display_name(
 @pytest.mark.project
 @pytest.mark.skill
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_skill_detail_shows_project_display_name(
     page, project_with_display_name, created_skill
 ):
@@ -241,6 +245,7 @@ def test_skill_detail_shows_project_display_name(
 @pytest.mark.project
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.oss_standalone
 def test_datasource_detail_shows_project_display_name(
     page, project_with_display_name, created_datasource
@@ -257,6 +262,7 @@ def test_datasource_detail_shows_project_display_name(
 @pytest.mark.project
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.oss_standalone
 def test_integrations_table_shows_project_display_name(
     page, project_with_display_name, created_integration
@@ -273,6 +279,7 @@ def test_integrations_table_shows_project_display_name(
 @pytest.mark.project
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.oss_standalone
 def test_datasources_table_shows_project_display_name(
     page, project_with_display_name, created_datasource

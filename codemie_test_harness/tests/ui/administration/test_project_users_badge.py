@@ -36,6 +36,7 @@ from codemie_test_harness.tests.ui.pageobject.administration.user_management_pag
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.project
 @pytest.mark.oss_standalone
 def test_users_cell_shows_badge_with_user_count(page, project_utils, project):
@@ -57,6 +58,7 @@ def test_users_cell_shows_badge_with_user_count(page, project_utils, project):
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.project
 @pytest.mark.oss_standalone
 def test_users_badge_opens_user_management_filtered_by_project(
@@ -83,6 +85,7 @@ def test_users_badge_opens_user_management_filtered_by_project(
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.project
 @pytest.mark.oss_standalone
 def test_project_filter_shows_selected_project_after_badge_navigation(page, project):

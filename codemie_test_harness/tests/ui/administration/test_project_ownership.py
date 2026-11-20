@@ -42,6 +42,7 @@ from codemie_test_harness.tests.ui.test_data.project_ownership_ui_test_data impo
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.project
 @pytest.mark.parametrize(
     "acting_credentials, change_ownership_visible",
@@ -65,6 +66,7 @@ def test_change_ownership_menu_item_visibility(
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.project
 @pytest.mark.oss_standalone
 def test_change_project_owner_through_popup(

@@ -41,7 +41,7 @@ from codemie_test_harness.tests.test_data.marketplace_test_data import (
 @pytest.mark.assistant
 @pytest.mark.api
 def test_marketplace_publish_with_valid_data(assistant, assistant_utils):
-    """Test validating and publishing an assistant with all valid data without ignore_recommendations."""
+    """Test validating and publishing an assistant with all valid data, acknowledging optional LLM recommendations."""
     # Create assistant with complete valid configuration
     created_assistant = assistant(**COMPLETE_VALID_CONFIG)
 
@@ -59,10 +59,12 @@ def test_marketplace_publish_with_valid_data(assistant, assistant_utils):
         ),
     )
 
-    # After successful validation, publish to marketplace WITHOUT ignore_recommendations
+    # The publish-time LLM check may return optional suggestions (e.g. drop the random
+    # name suffix) that block with 422 unless acknowledged
     publish_response = assistant_utils.publish_assistant_to_marketplace(
         created_assistant.id,
         categories=COMPLETE_VALID_CONFIG["categories"],
+        ignore_recommendations=True,
     )
 
     # Assert publish response
@@ -243,7 +245,11 @@ def test_marketplace_validation_fields_recommendation(
 
     # Extract validation response from error
     response_data = json.loads(exec_info.value.response.content)
-    assert_that(exec_info.value.response.status_code, equal_to(422))
+    assert_that(
+        exec_info.value.response.status_code,
+        equal_to(422),
+        f"Unexpected publish response: {exec_info.value.response.text}",
+    )
 
     # Check if response has quality_validation in error.details
     assert_that(response_data, has_key("error"))

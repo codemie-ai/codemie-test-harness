@@ -33,6 +33,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 
 @pytest.mark.mcp
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_assistant_form_mcp_picker_stays_usable_on_discovery_failure(
     page, assistant_factory, sonnet_46_llm
 ):

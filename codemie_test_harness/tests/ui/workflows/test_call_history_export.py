@@ -64,6 +64,7 @@ def open_call_history(page, executions):
 # @case enable-export-and-clipboard-copy_TC_001
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_download_call_history_exports_popup_calls_as_json_file(open_call_history):
     """Download saves call-history-<node-slug>-<execution_id>.json holding the popup's calls."""
     execution, popup = open_call_history()
@@ -85,6 +86,7 @@ def test_download_call_history_exports_popup_calls_as_json_file(open_call_histor
 @pytest.mark.usefixtures("clipboard_permissions")
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_copy_call_history_puts_indented_json_on_clipboard(open_call_history):
     """Copy to clipboard puts the popup's calls on the clipboard as JSON indented with 2 spaces."""
     execution, popup = open_call_history()
@@ -105,6 +107,7 @@ def test_copy_call_history_puts_indented_json_on_clipboard(open_call_history):
 @pytest.mark.usefixtures("clipboard_unavailable")
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_copy_call_history_without_clipboard_access_shows_error_toast(
     open_call_history,
 ):
@@ -119,6 +122,7 @@ def test_copy_call_history_without_clipboard_access_shows_error_toast(
 # @case enable-export-and-clipboard-copy_TC_005
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_call_history_popup_shows_title_and_call_list(open_call_history):
     """The popup keeps its 'Calls history for <node>' title and renders the call list."""
     _, popup = open_call_history()

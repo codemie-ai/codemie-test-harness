@@ -74,6 +74,7 @@ def granted_notifications(context, response_ready_tab):
 # @case notify-users-llm-response-completed_TC_001
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_reply_finished_while_hidden_prefixes_title_and_is_cleared_on_return(
     page, response_ready_tab, slow_response_conversation
 ):
@@ -101,6 +102,7 @@ def test_reply_finished_while_hidden_prefixes_title_and_is_cleared_on_return(
 # @case notify-users-llm-response-completed_TC_002
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_granted_permission_shows_one_notification_when_reply_finishes_hidden(
     page,
     response_ready_tab,
@@ -126,6 +128,7 @@ def test_granted_permission_shows_one_notification_when_reply_finishes_hidden(
 # @case notify-users-llm-response-completed_TC_003
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_reply_finished_while_visible_changes_nothing(
     page,
     response_ready_tab,
@@ -150,6 +153,7 @@ def test_reply_finished_while_visible_changes_nothing(
 # @case notify-users-llm-response-completed_TC_004
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize(
     "state", NOTIFICATION_STATES_WITHOUT_GRANT, ids=lambda state: state.id
 )
@@ -178,6 +182,7 @@ def test_title_prefix_is_applied_without_notification_permission(
 # @case notify-users-llm-response-completed_TC_005
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_no_signal_when_generation_is_stopped_while_hidden(
     page, response_ready_tab, granted_notifications, slow_response_conversation
 ):
@@ -206,6 +211,7 @@ def test_no_signal_when_generation_is_stopped_while_hidden(
 # @case notify-users-llm-response-completed_TC_005
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_no_signal_when_generation_request_is_aborted_while_hidden(
     page, response_ready_tab, granted_notifications, slow_response_conversation
 ):
@@ -229,6 +235,7 @@ def test_no_signal_when_generation_request_is_aborted_while_hidden(
 # @case notify-users-llm-response-completed_TC_009
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_reply_finished_hidden_after_mid_generation_reload_still_signals_ready(
     page, response_ready_tab, slow_response_conversation
 ):

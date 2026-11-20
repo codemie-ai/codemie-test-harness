@@ -59,6 +59,7 @@ def _run_code_executor_prompt(page, navigate_to_new_chat_page, assistant, prompt
 # @case long-tool-output-shows-its_TC_002
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_long_tool_output_shows_preview_and_expands_and_collapses(
     page, navigate_to_new_chat_page, assistant
 ):
@@ -85,6 +86,7 @@ def test_long_tool_output_shows_preview_and_expands_and_collapses(
 # @case long-tool-output-shows-its_TC_009
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_tool_output_below_threshold_is_shown_in_full_without_toggle(
     page, navigate_to_new_chat_page, assistant
 ):

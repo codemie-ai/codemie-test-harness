@@ -43,6 +43,7 @@ from codemie_test_harness.tests.utils.constants import FILES_PATH
 @pytest.mark.chat
 @pytest.mark.timeout(600)
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_download_all_archives_generated_script_and_uploaded_file(open_workspace_chat):
     chat_page = open_workspace_chat()
 
@@ -72,6 +73,7 @@ def test_download_all_archives_generated_script_and_uploaded_file(open_workspace
 # @case enable-download-of-all-files_TC_002
 @pytest.mark.chat
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_download_all_archive_entries_are_identical_to_uploaded_files(
     open_workspace_chat,
 ):
@@ -101,6 +103,7 @@ def test_download_all_archive_entries_are_identical_to_uploaded_files(
 @pytest.mark.chat
 @pytest.mark.timeout(600)
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_download_all_archive_excludes_files_of_another_chat(open_workspace_chat):
     first_chat = open_workspace_chat()
     first_chat.attach_file(str(FILES_PATH / OTHER_TEXT_SAMPLE_FILE))

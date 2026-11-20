@@ -58,6 +58,7 @@ def test_submitter_sees_badge_for_each_review_state(
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize("acting_credentials", ["submitter"], indirect=True)
 def test_submitter_sees_verified_badge_on_own_published_assistant(
     page, approved_assistant
@@ -95,6 +96,7 @@ def test_rejected_badge_carries_the_rejection_reason(page, rejected_assistant):
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_verified_badge_shows_on_marketplace_card(page, approved_assistant):
     # @case marketplace-admin-approval-gate_TC_015
     approved = approved_assistant()
@@ -108,6 +110,7 @@ def test_verified_badge_shows_on_marketplace_card(page, approved_assistant):
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_verified_badge_shows_in_assistant_detail_header(page, approved_assistant):
     # @case marketplace-admin-approval-gate_TC_015
     approved = approved_assistant()

@@ -39,6 +39,7 @@ from codemie_test_harness.tests.ui.pageobject.administration.user_management_pag
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.user
 @pytest.mark.smoke
 @pytest.mark.oss_standalone
@@ -68,6 +69,7 @@ def test_admin_sets_default_project_in_user_details(
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.user
 @pytest.mark.parametrize("set_as_default", [True, False], ids=["marked", "unmarked"])
 @pytest.mark.oss_standalone
@@ -97,6 +99,7 @@ def test_add_project_dialog_default_option(
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.user
 @pytest.mark.oss_standalone
 def test_users_list_marks_only_the_default_project(
@@ -166,6 +169,7 @@ def test_auditor_sees_default_project_but_cannot_change_it(
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.user
 @pytest.mark.parametrize("acting_credentials", ["plain_user"], indirect=True)
 @pytest.mark.oss_standalone
@@ -177,6 +181,7 @@ def test_plain_user_cannot_open_user_management(page):
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.user
 @pytest.mark.oss_standalone
 def test_personal_project_is_shown_as_default_when_none_is_stored(
@@ -193,6 +198,7 @@ def test_personal_project_is_shown_as_default_when_none_is_stored(
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.user
 @pytest.mark.oss_standalone
 def test_projects_table_fits_long_project_names_on_one_row(
@@ -209,6 +215,7 @@ def test_projects_table_fits_long_project_names_on_one_row(
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.user
 @pytest.mark.oss_standalone
 def test_unassigning_default_project_falls_back_to_personal_project(
@@ -239,6 +246,7 @@ def test_unassigning_default_project_falls_back_to_personal_project(
 
 
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.user
 def test_user_details_popup_shows_mixed_case_personal_project_as_default(
     page, mixed_case_personal_user
