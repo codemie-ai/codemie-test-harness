@@ -33,6 +33,10 @@ from codemie_test_harness.tests.utils.hosted_application_utils import (
     HostedApplicationUtils,
     HostedUser,
 )
+from codemie_test_harness.tests.utils.hosted_category_utils import (
+    WORLD_BUILDERS,
+    CategoryWorld,
+)
 from codemie_test_harness.tests.utils.hosted_sharing_utils import SharingWorld
 from codemie_test_harness.tests.utils.user_lifecycle_utils import (
     new_logged_in_user,
@@ -158,3 +162,17 @@ def sharing_world(hosted_people):
 def hosted_activity(maintainer_client):
     """Activity log of the platform, read by a maintainer created for the test."""
     return ActivityUtils(maintainer_client)
+
+
+@pytest.fixture
+def category_world(
+    request, hosted_owner, hosted_reader, hosted_project_factory, hosted_categories
+) -> CategoryWorld:
+    """Applications of the owner in the catalog scope named by the test's parameter.
+
+    Parametrize it indirectly with a name from ``CATALOG_SCOPES``. The first two of
+    ``hosted_categories`` tag the applications; see ``CategoryWorld`` for who lists them.
+    """
+    return WORLD_BUILDERS[request.param](
+        hosted_owner, hosted_reader, hosted_project_factory, hosted_categories
+    )
