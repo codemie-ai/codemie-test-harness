@@ -37,6 +37,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 # @case unified-integrations-list_TC_020
 @pytest.mark.integration
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.oss_standalone
 def test_edit_page_shows_scope_read_only_and_save_and_delete_act_on_that_scope_only(
     page,

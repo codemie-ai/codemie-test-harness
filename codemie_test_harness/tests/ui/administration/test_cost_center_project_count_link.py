@@ -69,6 +69,7 @@ def two_linked_cost_centers(cost_center, project):
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize("cost_center_with_projects", PROJECT_COUNTS, indirect=True)
 def test_project_count_badge_links_to_projects_filtered_by_cost_center(
     page, cost_center_with_projects
@@ -91,6 +92,7 @@ def test_project_count_badge_links_to_projects_filtered_by_cost_center(
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_cost_center_filter_set_by_badge_can_be_changed_and_cleared(
     page, two_linked_cost_centers
 ):

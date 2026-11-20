@@ -30,6 +30,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 @pytest.mark.skill
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_virtual_assistant_skill_outside_catalog_not_null(
     page, skill_in_other_project, workflow_with_virtual_assistant
 ):

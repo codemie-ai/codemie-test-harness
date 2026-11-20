@@ -50,6 +50,7 @@ def _open_details(datasource_page, datasource_name):
 
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_code_datasource_full_reindex_updates_last_indexed_to_trigger_time(
     page, datasource_utils, code_datasource
 ):

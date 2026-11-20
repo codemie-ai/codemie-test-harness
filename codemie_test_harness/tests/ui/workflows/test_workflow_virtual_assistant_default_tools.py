@@ -38,6 +38,7 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 @pytest.mark.workflow
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_workflow_virtual_assistant_keeps_deselected_search_kb_after_save(
     page, workflow_with_virtual_assistant, workflow_utils, file_datasource
 ):

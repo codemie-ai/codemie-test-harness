@@ -93,6 +93,7 @@ def clipboard_permissions(context):
 )
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_manager_who_is_not_the_creator_is_offered_share_and_sees_who_has_access(
     page, ui_sharing_world, view
 ):
@@ -122,6 +123,7 @@ def test_manager_who_is_not_the_creator_is_offered_share_and_sees_who_has_access
 )
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_platform_admin_menus_offer_suspend_and_no_revoke_share_link(
     page, ui_sharing_world, view
 ):
@@ -153,6 +155,7 @@ def test_platform_admin_menus_offer_suspend_and_no_revoke_share_link(
 )
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_manager_who_is_not_the_creator_manages_people_and_the_link_in_the_share_dialog(
     page, clipboard_permissions, ui_sharing_world, view
 ):
@@ -203,6 +206,7 @@ def test_manager_who_is_not_the_creator_manages_people_and_the_link_in_the_share
 )
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_non_manager_is_offered_no_share_and_sees_the_signed_in_members_hint(
     page, ui_sharing_world, view
 ):
@@ -226,6 +230,7 @@ def test_non_manager_is_offered_no_share_and_sees_the_signed_in_members_hint(
 )
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_access_hint_of_a_private_unshared_application_follows_the_readers_role(
     page, ui_sharing_world, view
 ):

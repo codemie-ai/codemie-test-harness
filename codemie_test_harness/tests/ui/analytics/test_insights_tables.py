@@ -27,6 +27,7 @@ from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
 
 @pytest.mark.analytics
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_insights_assistants_chats_rows_ordered_by_total_cost(
     insights_activity, analytics_page
 ):
@@ -40,6 +41,7 @@ def test_insights_assistants_chats_rows_ordered_by_total_cost(
 
 @pytest.mark.analytics
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_insights_workflows_rows_ordered_by_total_runs(
     insights_activity, analytics_page
 ):
@@ -58,6 +60,7 @@ def test_insights_workflows_rows_ordered_by_total_runs(
     ids=["assistants_chats", "workflows"],
 )
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_insights_table_footer_shows_labelled_aligned_totals(
     insights_activity, analytics_page, table
 ):

@@ -110,6 +110,7 @@ def open_expanded_yaml(request, page, test_workflow, executions, workflow_utils)
 )
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_expanded_yaml_dialog_has_shared_structure(open_expanded_yaml, yaml_context):
     """Label, Collapse, frame header and editor are the same; Copy/Download only in execution details."""
     dialog = open_expanded_yaml(yaml_context)
@@ -122,6 +123,7 @@ def test_expanded_yaml_dialog_has_shared_structure(open_expanded_yaml, yaml_cont
 # @case workflow-editor-expanded-yaml-configuration_TC_001
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_expanded_yaml_dialog_has_equal_size_in_editor_and_execution_details(
     open_expanded_yaml,
 ):
@@ -139,6 +141,7 @@ def test_expanded_yaml_dialog_has_equal_size_in_editor_and_execution_details(
 # @case workflow-editor-expanded-yaml-configuration_TC_003
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_expanded_yaml_edit_syncs_to_inline_editor_and_persists_on_save(
     page, test_workflow, workflow_utils
 ):
@@ -176,6 +179,7 @@ def test_expanded_yaml_edit_syncs_to_inline_editor_and_persists_on_save(
 # @case workflow-editor-expanded-yaml-configuration_TC_003
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_expanded_yaml_edit_is_discarded_on_cancel(page, test_workflow, workflow_utils):
     """Cancel after an edit in the expanded editor leaves the YAML as it was."""
     edit_suffix = get_random_name()
@@ -205,6 +209,7 @@ def test_expanded_yaml_edit_is_discarded_on_cancel(page, test_workflow, workflow
 # @case workflow-editor-expanded-yaml-configuration_TC_005
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_expanded_yaml_invalid_yaml_shows_error_and_failed_border(open_expanded_yaml):
     """Invalid YAML typed in the expanded editor shows 'YAML Error:' and the failed border."""
     dialog = open_expanded_yaml(EDITOR_CONTEXT)
@@ -221,6 +226,7 @@ def test_expanded_yaml_invalid_yaml_shows_error_and_failed_border(open_expanded_
 @pytest.mark.usefixtures("clipboard_permissions")
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_execution_details_expanded_yaml_is_readonly_with_copy_and_download(
     open_expanded_yaml, test_workflow
 ):
@@ -249,6 +255,7 @@ def test_execution_details_expanded_yaml_is_readonly_with_copy_and_download(
 )
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_expanded_yaml_highlights_scrolls_to_end_and_wraps_long_lines(
     open_expanded_yaml, yaml_context
 ):
