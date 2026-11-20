@@ -24,9 +24,13 @@ from codemie_test_harness.tests.ui.test_data.workflow_graph_test_data import (
     LARGE_WORKFLOW_STATE_COUNT,
     REPEATED_BRANCH_NODE_COUNT,
     REPEATED_BRANCH_STATE_COUNT,
+    SHARED_META_ID_EDGE_COUNT,
+    SHARED_META_ID_NODE_COUNT,
+    SHARED_META_ID_STATE_COUNT,
     SMALL_AND_MEDIUM_WORKFLOW_CASES,
     build_large_workflow_yaml,
     build_repeated_branch_workflow_yaml,
+    build_shared_meta_id_workflow_yaml,
 )
 
 
@@ -98,3 +102,31 @@ def test_small_and_medium_workflows_keep_their_nodes_and_edges(
     edit_page.should_have_canvas_node_count(graph_case.expected_nodes)
     edit_page.should_have_canvas_node_for_each_state(created.state_ids)
     edit_page.should_have_canvas_edge_count(graph_case.expected_edges)
+
+
+# @case workflow-graph-large-workflows_TC_008
+@pytest.mark.workflow
+@pytest.mark.ui
+def test_shared_meta_ids_across_conditional_and_iterator_states_keep_every_node(
+    page, graph_workflow
+):
+    """Conditional and iterated states that repeat a meta id each keep their own node.
+
+    Two pairs of conditionals share a ``meta_next_state_id`` and two pairs of iterated
+    states share a ``meta_iter_state_id``; the canvas still draws a node for every state
+    and every transition.
+    """
+    created = graph_workflow(build_shared_meta_id_workflow_yaml())
+    assert_that(
+        len(created.state_ids),
+        equal_to(SHARED_META_ID_STATE_COUNT),
+        "the stored workflow should list every state of the YAML",
+    )
+
+    edit_page = EditWorkflowPage(page)
+    edit_page.navigate_to(created.workflow.id)
+    edit_page.should_be_on_edit_workflow_page()
+
+    edit_page.should_have_canvas_node_count(SHARED_META_ID_NODE_COUNT)
+    edit_page.should_have_canvas_node_for_each_state(created.state_ids)
+    edit_page.should_have_canvas_edge_count(SHARED_META_ID_EDGE_COUNT)

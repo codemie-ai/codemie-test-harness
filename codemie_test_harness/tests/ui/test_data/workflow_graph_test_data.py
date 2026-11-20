@@ -257,3 +257,87 @@ SMALL_AND_MEDIUM_WORKFLOW_CASES = [
         expected_edges=13,
     ),
 ]
+
+
+# ---------------- shared meta ids ----------------
+
+
+def _canvas_counts(states: list[StateModel]) -> tuple[int, int]:
+    """Nodes and edges the editor draws for ``states``, derived from their ``next`` fields.
+
+    Nodes: the states, ``start``, ``end``, one node per conditional or switch, and one
+    iterator per distinct (``iter_key``, ``meta_iter_state_id`` of the iterated state):
+    iterator parents with the same pair share one iterator (the editor's iterator grouping).
+    Edges: ``start`` to the first state, one per ``state_id`` / ``state_ids`` target, and per
+    branch the edge to the branch node plus one per branch target.
+    """
+    by_id = {state.id: state for state in states}
+    branches = 0
+    iterators = set()
+    edges = 1
+    for state in states:
+        next_fields = state.next
+        edges += int(bool(next_fields.get("state_id")))
+        edges += len(next_fields.get("state_ids", []))
+        if "condition" in next_fields:
+            branches += 1
+            edges += 3
+        if "switch" in next_fields:
+            branches += 1
+            edges += 2 + len(next_fields["switch"]["cases"])
+        if next_fields.get("iter_key"):
+            child = by_id[next_fields["state_id"]]
+            iterators.add(
+                (next_fields["iter_key"], child.next.get("meta_iter_state_id"))
+            )
+    nodes = len(states) + START_AND_END_NODES + branches + len(iterators)
+    return nodes, edges
+
+
+def _iterated(state_id: str, target: str, meta_iter_state_id: str) -> StateModel:
+    """A state an iterator runs over; it names the iterator it belongs to."""
+    return _state(state_id, meta_iter_state_id=meta_iter_state_id, state_id=target)
+
+
+def _loop(state_id: str, target: str) -> StateModel:
+    """An iterator parent: runs ``target`` once per item of ``items``."""
+    return _state(state_id, state_id=target, iter_key="items")
+
+
+# Synthetic, linear-reachable workflow of 17 states in which:
+#  - ``branch-02`` and ``branch-04`` share ``meta_next_state_id: conditional_1``, and
+#    ``branch-10`` and ``branch-12`` share ``conditional_4`` (4 conditionals, 4 branch ids
+#    in the YAML but only 2 distinct values);
+#  - the states ``step-07`` and ``step-09`` share ``meta_iter_state_id: iterator_2``, and
+#    ``step-15`` and ``step-17`` share ``iterator_3``; each is the target of an iterator
+#    parent (``loop-06``, ``loop-08``, ``loop-14``, ``loop-16``) with ``iter_key: items``.
+# Each iterator parent has a single ``state_id`` target.
+_SHARED_META_ID_STATES = [
+    _go("step-01", "branch-02"),
+    _if("branch-02", "step-03", "branch-04", "first_ok", "conditional_1"),
+    _go("step-03", "branch-04"),
+    _if("branch-04", "step-05", "loop-06", "second_ok", "conditional_1"),
+    _go("step-05", "loop-06"),
+    _loop("loop-06", "step-07"),
+    _iterated("step-07", "loop-08", "iterator_2"),
+    _loop("loop-08", "step-09"),
+    _iterated("step-09", "branch-10", "iterator_2"),
+    _if("branch-10", "step-11", "branch-12", "third_ok", "conditional_4"),
+    _go("step-11", "branch-12"),
+    _if("branch-12", "step-13", "loop-14", "fourth_ok", "conditional_4"),
+    _go("step-13", "loop-14"),
+    _loop("loop-14", "step-15"),
+    _iterated("step-15", "loop-16", "iterator_3"),
+    _loop("loop-16", "step-17"),
+    _iterated("step-17", "end", "iterator_3"),
+]
+
+SHARED_META_ID_STATE_COUNT = len(_SHARED_META_ID_STATES)
+SHARED_META_ID_NODE_COUNT, SHARED_META_ID_EDGE_COUNT = _canvas_counts(
+    _SHARED_META_ID_STATES
+)
+
+
+def build_shared_meta_id_workflow_yaml() -> str:
+    """YAML whose conditional and iterated states repeat meta ids."""
+    return _workflow_yaml(_SHARED_META_ID_STATES)
