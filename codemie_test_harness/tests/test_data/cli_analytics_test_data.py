@@ -365,7 +365,10 @@ class CliSessionSeed:
     reported as an OTel ``api_request`` log record, the only form that carries a
     cost.
     ``model`` is the model the request names; a cost-checking seed needs one priced
-    in the platform catalog, since money is tokens × catalog price.
+    in the platform catalog, since money is tokens × catalog price. ``model_raw`` is
+    the model as the API names it, when that differs from ``model``: Claude Code
+    through the LiteLLM proxy reports the route the request ran on as ``model``
+    (``x-litellm-model-name``) and the name it asked for as ``model_raw``.
     """
 
     key: str
@@ -378,6 +381,7 @@ class CliSessionSeed:
     duration: timedelta | None = None
     cost_usd: float | None = None
     model: str = SEED_MODEL
+    model_raw: str | None = None
     skill_name: str | None = None
     session_id: str = field(
         default_factory=lambda: f"autotest-cli-{uuid.uuid4().hex[:12]}"
@@ -445,7 +449,7 @@ class CliSessionSeed:
             "agent_type": "",
             "scope_kind": "main",
             "scope_name": "",
-            "model_raw": self.model,
+            "model_raw": self.model_raw or self.model,
             "model": self.model,
             "speed": "standard",
             "inference_geo": "not_available",
@@ -606,6 +610,88 @@ def get_unpriced_model_seed() -> CliSessionSeed:
     uniquely so no catalog can ever price it."""
     model = f"autotest-unpriced-{uuid.uuid4().hex[:8]}"
     return _seeds(("hooks_unpriced", timedelta(hours=12), {}), model=model)[0]
+
+
+@dataclass(frozen=True)
+class RouteCase:
+    """A request Claude Code made through the LiteLLM proxy: the model it asked for
+    and the route (``x-litellm-model-name``) the request ran on."""
+
+    id: str
+    model_raw: str
+    route: str
+
+
+# Routes of the LiteLLM deployments the CodeMie stands serve; a case whose route the
+# stand's LiteLLM does not serve, or serves at no single price, is skipped.
+ROUTE_PRICED_CASES = [
+    RouteCase(
+        "haiku-4-5-dated-name-on-bedrock",
+        "claude-haiku-4-5-20251001",
+        "bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+    ),
+    RouteCase(
+        "haiku-5-5-on-bedrock",
+        "claude-haiku-5-5",
+        "bedrock/eu.anthropic.claude-haiku-5-5",
+    ),
+    RouteCase(
+        "opus-4-8-on-bedrock",
+        "claude-opus-4-8",
+        "bedrock/eu.anthropic.claude-opus-4-8",
+    ),
+    RouteCase(
+        "opus-4-6-without-plain-name-price",
+        "claude-opus-4-6",
+        "bedrock/eu.anthropic.claude-opus-4-6-v1",
+    ),
+    RouteCase(
+        "fable-5-on-global-bedrock",
+        "claude-fable-5",
+        "bedrock/global.anthropic.claude-fable-5",
+    ),
+    RouteCase(
+        "sonnet-4-5-dated-name-on-vertex",
+        "claude-sonnet-4-5-20250929",
+        "vertex_ai/claude-sonnet-4-5",
+    ),
+    RouteCase(
+        "sonnet-5-on-dial",
+        "claude-sonnet-5",
+        "anthropic/anthropic.claude-sonnet-5",
+    ),
+]
+
+
+def get_route_priced_seeds(cases: list[RouteCase]) -> list[CliSessionSeed]:
+    """One hooks-only session per case: its request names the case's model and ran on
+    the case's route. Token counts differ per session, so a session priced by the
+    wrong route changes the total."""
+    return [
+        CliSessionSeed(
+            key=case.id,
+            started_at=seed_day_start() + timedelta(hours=10, minutes=index),
+            input_tokens=1000 * (index + 1),
+            output_tokens=10 * (index + 1),
+            model=case.route,
+            model_raw=case.model_raw,
+        )
+        for index, case in enumerate(cases)
+    ]
+
+
+def get_unpriced_route_seed() -> CliSessionSeed:
+    """A hooks-only session whose request ran on a route of a model neither the route
+    map nor the catalog prices, named uniquely so none ever can."""
+    model_raw = f"autotest-unpriced-{uuid.uuid4().hex[:8]}"
+    return CliSessionSeed(
+        key="hooks_unpriced_route",
+        started_at=seed_day_start() + timedelta(hours=12),
+        input_tokens=1000,
+        output_tokens=10,
+        model=f"vertex_ai/{model_raw}",
+        model_raw=model_raw,
+    )
 
 
 # Reported costs are summed as floating point numbers.
