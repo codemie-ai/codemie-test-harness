@@ -265,6 +265,7 @@ def test_detach_skill_from_assistant(page):
 @pytest.mark.skill
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_edit_assistant_shows_name_of_skill_missing_from_catalog(
     page, skill_in_other_project, raw_assistant, client
 ):

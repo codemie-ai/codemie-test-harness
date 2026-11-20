@@ -82,6 +82,7 @@ def test_edit_integration_update_credentials(page: Page):
     # Wait for integration to be created
     integrations_page.wait_for_page_load()
     integrations_page.should_see_saved_message(SAVED_TOAST)
+    integrations_page.close_toasts()
 
     # Act - Edit the integration
     integration_row = integrations_page.get_integration_row_by_alias(

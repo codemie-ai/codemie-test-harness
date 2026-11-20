@@ -2102,6 +2102,73 @@ class ChatPage(BasePage):
         self.should_not_show_premium_notice()
         return self
 
+    # ==================== MODEL STATUS IN THE MODEL PICKER ====================
+
+    def model_picker_option(self, model_name: str) -> Locator:
+        """Option of a model in the open model picker, found by its label."""
+        return self.page.get_by_role("option").filter(has_text=model_name)
+
+    @step
+    def open_model_picker(self):
+        """Open the model picker from the default state and wait for its search box."""
+        self.model_selector_button.click()
+        self.page.get_by_role("combobox", name="Search LLM models").wait_for(
+            state="visible", timeout=5000
+        )
+        return self
+
+    @step
+    def search_model_in_picker(self, model_name: str):
+        """Type a model name in the search box of the open model picker."""
+        self.page.get_by_role("combobox", name="Search LLM models").fill(model_name)
+        return self
+
+    @step
+    def click_model_in_picker(self, model_name: str):
+        """Click the option of a model in the open model picker."""
+        option = self.model_picker_option(model_name)
+        option.wait_for(state="visible", timeout=5000)
+        option.click()
+        return self
+
+    @step
+    def try_to_pick_blocked_model_in_picker(self, model_name: str):
+        """Click the option of a blocked model anyway; a disabled option ignores the click."""
+        self.model_picker_option(model_name).click(force=True)
+        return self
+
+    @step
+    def should_block_model_in_picker(self, model_name: str):
+        """Assert the picker option of a model is disabled."""
+        expect(self.model_picker_option(model_name)).to_be_disabled()
+        return self
+
+    @step
+    def should_show_deprecated_meta_in_picker(self, model_name: str):
+        """Assert the picker option of a model carries the 'Deprecated' meta label."""
+        meta = self.model_picker_option(model_name).locator(
+            '[data-testid="llm-option-meta"]'
+        )
+        expect(meta).to_contain_text("Deprecated")
+        return self
+
+    @step
+    def should_not_list_model_in_picker(self, model_name: str):
+        """Assert the open picker lists other models but not this one.
+
+        Waits for the first option first, so an absent model is not mistaken for a
+        picker that has not loaded yet.
+        """
+        expect(self.page.get_by_role("option").first).to_be_visible(timeout=10000)
+        expect(self.model_picker_option(model_name)).to_have_count(0)
+        return self
+
+    @step
+    def should_keep_default_model_selected(self):
+        """Assert the picker trigger still reads 'Default', i.e. no model was picked."""
+        expect(self.model_selector_button).to_be_visible()
+        return self
+
     # ==================== TOOL-CALL CONFIRMATION ELEMENTS ====================
     # Rendered by ChatAiMessage.tsx when thought.interrupted===true
     #

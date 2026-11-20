@@ -33,7 +33,7 @@ a dedicated non-parallel pass.
 - **Selectors:** `get_by_role()` first, then `get_by_label()` / `get_by_text()` / `get_by_placeholder()`, then a scoped `.locator()` with `.filter()`. No `nth-child`, deeply nested CSS, or generated class names.
 - **Abstractions:** page-object model — `tests/ui/pageobject/<area>/<subject>_page.py`, every class derives from `BasePage` (navigation helpers, `self.pop_up`, `self.menu`, common verifications). Elements are `@property` locators with a docstring. Public methods carry `@step` (from `reportportal_client`). Assertions live in page-object `should_*` methods using `expect()`, which retries; never a bare `assert` on a locator. Reusable widgets: `tests/ui/pageobject/components/`.
 - **Run one test:** `poetry run pytest -v <test-file> --ui-headless`
-- **Run suite:** `poetry run pytest -n 4 -m ui --reruns 2 --ui-headless`
+- **Run suite:** `poetry run pytest -n 4 --dist=loadgroup -m ui --reruns 2 --ui-headless`
 
 `--ui-headless` is required explicitly: without it the browser runs headed (`tests/ui/conftest.py`, `browser_type_launch_args` fixture).
 

@@ -26,6 +26,7 @@ CAPABILITY = "features:hostedApplications"
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_legacy_applications_route_lands_on_apps_and_platform_tab_lists_platform_apps(
     page,
 ):

@@ -49,6 +49,7 @@ from codemie_test_harness.tests.ui.test_data.workflow_node_state_settings_test_d
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize(
     "case",
     NON_CUSTOM_NODE_VISIBILITY_CASES,
@@ -75,6 +76,7 @@ def test_non_custom_node_panel_shows_task_and_output_schema_only_where_used(
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize(
     "case",
     CUSTOM_NODE_VISIBILITY_CASES,
@@ -100,6 +102,7 @@ def test_custom_node_panel_hides_output_schema_and_shows_task_only_for_state_pro
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_custom_node_task_field_follows_type_selection_before_save(page, test_workflow):
     # @case workflow-editor-task-output-schema_TC_001
     """A new Custom node hides Task until a type that uses it is chosen; Task then
@@ -136,6 +139,7 @@ def test_custom_node_task_field_follows_type_selection_before_save(page, test_wo
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize(
     "case", HIDDEN_VALUE_CASES, ids=[case.case_id for case in HIDDEN_VALUE_CASES]
 )
@@ -184,6 +188,7 @@ def test_hidden_task_and_output_schema_survive_editing_another_setting(
 
 @pytest.mark.workflow
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_custom_node_save_blocked_when_required_config_is_missing(
     page, create_node_workflow
 ):

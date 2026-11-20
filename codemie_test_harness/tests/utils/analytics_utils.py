@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from codemie_sdk.models.analytics import (
+    AnalyticsDetailResponse,
     AnalyticsQueryParams,
     CliAnalyticsCostResponse,
     CliAnalyticsQueryParams,
@@ -30,6 +31,7 @@ from codemie_sdk.models.analytics import (
     CliAnalyticsSessionsQueryParams,
     CliAnalyticsSessionsResponse,
     CliAnalyticsUsersResponse,
+    CliInsightsUserDetailQueryParams,
     PaginatedAnalyticsQueryParams,
     RunAttributesQueryParams,
     SummariesResponse,
@@ -559,6 +561,20 @@ class AnalyticsUtils(BaseUtils):
         """
         params = AnalyticsQueryParams(**kwargs) if kwargs else None
         return self.client.analytics.get_users(params)
+
+    def get_cli_insights_user_detail(self, **kwargs) -> AnalyticsDetailResponse:
+        """Get the CLI Insights drilldown of one user.
+
+        Args:
+            **kwargs: user_name (required), user_id, time_period, start_date,
+                end_date, users, projects
+
+        Returns:
+            AnalyticsDetailResponse with the user's detail payload
+        """
+        return self.client.analytics.get_cli_insights_user_detail(
+            CliInsightsUserDetailQueryParams(**kwargs)
+        )
 
     def get_leaderboard_summary(self, **kwargs) -> dict:
         return self.client.analytics.get_leaderboard_summary(**kwargs)

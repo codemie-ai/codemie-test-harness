@@ -124,6 +124,9 @@ from codemie_test_harness.tests.utils.jira_seed import (
     resolve_shared,
 )
 from codemie_test_harness.tests.utils.jira_utils import JiraUtils
+from codemie_test_harness.tests.utils.llm_model_status_utils import (
+    LlmModelStatusUtils,
+)
 from codemie_test_harness.tests.utils.cloud_seed import (
     SeedAwsBucket,
     SeedAzureResourceGroup,
@@ -1277,6 +1280,44 @@ def cost_center_budget_projects(
 @pytest.fixture(scope="session")
 def llm_utils(client):
     return LLMUtils(client)
+
+
+@pytest.fixture(scope="session")
+def llm_model_status_utils(client):
+    return LlmModelStatusUtils(client)
+
+
+@pytest.fixture
+def status_test_model(llm_model_status_utils, regular_client):
+    """An Enabled "(Autotest)" chat model whose status the test may change.
+
+    Only the dedicated test models are ever changed, never a regular model. The status
+    is platform-wide, so the model is put back to Enabled on teardown and tests using
+    it must carry ``xdist_group(name="model_status")``.
+    """
+    models = llm_model_status_utils.pick_autotest_models(1, regular_client)
+    if not models:
+        pytest.skip('No Enabled "(Autotest)" chat model on this stand')
+    yield models[0]
+    llm_model_status_utils.restore_enabled([models[0].base_name])
+
+
+@pytest.fixture
+def status_test_models(llm_model_status_utils, regular_client):
+    """Two Enabled "(Autotest)" chat models whose status the test may change (see ``status_test_model``)."""
+    models = llm_model_status_utils.pick_autotest_models(2, regular_client)
+    if len(models) < 2:
+        pytest.skip('Fewer than two Enabled "(Autotest)" chat models on this stand')
+    yield models
+    llm_model_status_utils.restore_enabled([m.base_name for m in models])
+
+
+@pytest.fixture
+def saved_global_default(llm_model_status_utils):
+    """The saved global default model (None when there is none); put back on teardown."""
+    saved = llm_model_status_utils.get_default().saved_base_name
+    yield saved
+    llm_model_status_utils.restore_default(saved)
 
 
 @pytest.fixture(scope="session")
