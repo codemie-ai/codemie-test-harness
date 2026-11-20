@@ -121,8 +121,3 @@ A few legacy tests still contain some of these (`wait_for_timeout`, `pytest.fail
 - Lint, format, licence, scan and hook commands: see [quality-gates.md](../quality-gates.md).
 - UI tests need Playwright browsers (`playwright install`). The full suites (`smoke`, `api`, `ui`) contain integration tests that need their own settings; the `sanity-*` suites need none (`README.md`, "Settings").
 - To run the tests against an unreleased SDK change, install the SDK clone on top of the Poetry environment (`consume.local` of the `sdk` entry in `config.json`); `make install` returns to the pinned release. The tests then follow whatever branch that clone has checked out.
-
-## Known-failure policy
-
-- **Policy:** Leave it failing. A test that reproduces a known bug stays red until the fix ships; no xfail marker and no quarantine.
-- _Recorded by stlc-bug on 2026-11-20._
