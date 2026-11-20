@@ -591,6 +591,23 @@ def get_cost_session_seeds(model: str) -> list[CliSessionSeed]:
     )
 
 
+def get_hooks_only_cost_seeds(model: str) -> list[CliSessionSeed]:
+    """Two users' sessions of a catalog-priced model whose requests come from hooks
+    only: no OTel ``api_request`` record, so no reported cost."""
+    return _seeds(
+        ("hooks_owner", timedelta(hours=10), {}),
+        ("hooks_member", timedelta(hours=11), {"user": MEMBER}),
+        model=model,
+    )
+
+
+def get_unpriced_model_seed() -> CliSessionSeed:
+    """A hooks-only session of a model the platform catalog does not know, named
+    uniquely so no catalog can ever price it."""
+    model = f"autotest-unpriced-{uuid.uuid4().hex[:8]}"
+    return _seeds(("hooks_unpriced", timedelta(hours=12), {}), model=model)[0]
+
+
 # Reported costs are summed as floating point numbers.
 COST_TOLERANCE = 0.000001
 

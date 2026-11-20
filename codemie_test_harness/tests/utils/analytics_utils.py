@@ -747,6 +747,23 @@ class AnalyticsUtils(BaseUtils):
         )
         return response.json().get("data", {}).get("turns")
 
+    def get_cli_session_unpriced_models(self, trace_id: str) -> list[str] | None:
+        """Models of a session the platform catalog has no price for
+        (``metadata.unpriced_models`` of the raw session detail), or None while the
+        session is not rolled up or the detail has no such field. The SDK model does not
+        carry the field, so the raw JSON is read."""
+        response = CliAnalyticsApi(self.client).request(
+            "GET", f"/v1/analytics/cli-analytics/sessions/{trace_id}"
+        )
+        if response.status_code == 404:
+            return None
+        assert_that(
+            response.status_code,
+            equal_to(200),
+            f"session detail of {trace_id}: {response.text[:200]}",
+        )
+        return response.json().get("metadata", {}).get("unpriced_models")
+
     def wait_for_cli_session_turns(
         self,
         trace_id: str,
