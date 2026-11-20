@@ -114,14 +114,26 @@ class InsightsTableWidget(BasePage):
 
     @property
     def table(self) -> Locator:
-        """The widget table, found in its card by its count column header.
+        """The widget table, found in its card by its name and its count column headers.
 
-        The card scope tells apart widgets that share a count column: Invocations heads both
-        Top Assistants Usage and Top Workflow Usage.
+        Matching both headers keeps the locator on this widget's own table. While a lazy widget
+        has not rendered its table, the nearest ancestor of the heading that holds a table is a
+        wider container with the table of another widget: the count column alone is shared (Top
+        Assistants Usage and Top Workflow Usage both have Invocations) and the name column alone
+        is shared (Top Workflow Usage and Workflows both have Workflow Name). Together they match
+        no other widget, so the locator waits for the right table instead of resolving a sibling's.
         """
-        return self.card.get_by_role("table").filter(
-            has=self.page.get_by_role(
-                "columnheader", name=self.widget.count_column, exact=True
+        return (
+            self.card.get_by_role("table")
+            .filter(
+                has=self.page.get_by_role(
+                    "columnheader", name=self.widget.name_column, exact=True
+                )
+            )
+            .filter(
+                has=self.page.get_by_role(
+                    "columnheader", name=self.widget.count_column, exact=True
+                )
             )
         )
 
