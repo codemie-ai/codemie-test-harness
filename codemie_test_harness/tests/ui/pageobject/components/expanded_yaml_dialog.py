@@ -49,6 +49,7 @@ class ExpandedYamlDialog:
 
     def __init__(self, page: Page):
         self.page = page
+        self.toast = Toast(page)
 
     # ====================
     # PROPERTIES
@@ -139,11 +140,6 @@ class ExpandedYamlDialog:
     def yaml_error(self) -> Locator:
         """'YAML Error: <message>' text above the frame."""
         return self.dialog.get_by_text(re.compile(r"^YAML Error:"))
-
-    @property
-    def toast(self) -> Toast:
-        """Toast notifications component instance."""
-        return Toast(self.page)
 
     # ====================
     # ACTIONS

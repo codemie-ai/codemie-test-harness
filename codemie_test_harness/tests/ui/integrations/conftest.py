@@ -53,7 +53,12 @@ def ui_login_user(request):
     marker = request.node.get_closest_marker("ui_login_as")
     if marker is None:
         return None
-    return request.getfixturevalue(UI_LOGIN_USERS[marker.args[0]])
+    role = marker.args[0]
+    if role not in UI_LOGIN_USERS:
+        raise ValueError(
+            f"Unknown ui_login_as role {role!r}; expected one of {sorted(UI_LOGIN_USERS)}"
+        )
+    return request.getfixturevalue(UI_LOGIN_USERS[role])
 
 
 @pytest.fixture(autouse=True)

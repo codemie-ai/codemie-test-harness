@@ -36,6 +36,7 @@ class FavoriteStar:
         """
         self.page = page
         self.card = card_locator
+        self.toast = Toast(page)
 
     @property
     def unfilled_star(self) -> Locator:
@@ -61,7 +62,7 @@ class FavoriteStar:
     def favorite(self):
         """Click the unfilled star and wait until the save toast confirms the save."""
         self.unfilled_star.click()
-        Toast(self.page).should_show("Added to favorites")
+        self.toast.should_show("Added to favorites")
         return self
 
     @step("Remove the item from favorites")

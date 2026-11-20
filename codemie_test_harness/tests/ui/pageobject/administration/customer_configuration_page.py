@@ -110,9 +110,9 @@ class CustomerConfigurationPage(BasePage):
 
     @step
     def click_save(self):
-        """Click the Save button and wait for the success status to appear."""
+        """Click the Save button and wait for the 'Setting saved' toast."""
         self.save_button.click()
-        expect(self.save_success_status).to_be_visible(timeout=10000)
+        self.toast.should_show("Setting saved")
         return self
 
     @step

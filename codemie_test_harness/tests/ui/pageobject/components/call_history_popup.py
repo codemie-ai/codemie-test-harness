@@ -53,6 +53,7 @@ class CallHistoryPopup:
 
     def __init__(self, page: Page):
         self.page = page
+        self.toast = Toast(page)
 
     # ====================
     # PROPERTIES
@@ -88,11 +89,6 @@ class CallHistoryPopup:
     def call_entries(self) -> Locator:
         """Header buttons of the top-level calls; the popup opens them expanded (nested calls stay collapsed)."""
         return self.dialog.get_by_role("button", expanded=True)
-
-    @property
-    def toast(self) -> Toast:
-        """Toast notifications component instance."""
-        return Toast(self.page)
 
     # ====================
     # ACTIONS

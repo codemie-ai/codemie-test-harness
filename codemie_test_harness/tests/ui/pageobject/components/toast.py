@@ -22,30 +22,29 @@ VARIANT_CLASSES = {
     "error": "codemie-toast-err",
 }
 ERROR_TOAST_SELECTOR = f".{VARIANT_CLASSES['error']}"
-ALL_VARIANTS = tuple(VARIANT_CLASSES)
+ALL_VARIANTS = None  # every toast, including variants not listed above
 CONFIRMATION_VARIANTS = ("success", "info")
 
 
 class Toast:
-    """Toast notifications stacked in the app's toast container (codemie-toast markup)."""
+    """Toast notifications (codemie-toast markup).
+
+    Toasts are found by their own classes anywhere on the page, so the screen-reader copy of a
+    toast's text, which has no toast class, is left out.
+    """
 
     def __init__(self, page):
         self.page = page
 
     @property
-    def container(self) -> Locator:
-        """Region the toasts are stacked in."""
-        return self.page.locator("#toast-container")
-
-    @property
     def all_toasts(self) -> Locator:
         """Every open toast, whatever its variant."""
-        return self.container.locator(".codemie-toast")
+        return self.page.locator(".codemie-toast")
 
     @property
     def error(self) -> Locator:
         """The first error toast."""
-        return self.container.locator(ERROR_TOAST_SELECTOR).first
+        return self.page.locator(ERROR_TOAST_SELECTOR).first
 
     @property
     def error_header(self) -> Locator:
@@ -53,7 +52,9 @@ class Toast:
         return self.error.locator(".codemie-toast-header")
 
     def _toasts(self, variants) -> Locator:
-        return self.container.locator(
+        if variants is ALL_VARIANTS:
+            return self.all_toasts
+        return self.page.locator(
             ", ".join(f".{VARIANT_CLASSES[variant]}" for variant in variants)
         )
 
