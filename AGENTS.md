@@ -13,6 +13,7 @@ AGENTS.md has no native import directive. Open the paths below as plain files.
 | Environments | .ai-run/guides/testing/environments.md | Target stands, settings sources, test data, safety |
 | Risk model | .ai-run/guides/testing/risk-model.md | Risk areas and priorities |
 | Test config | .ai-run/guides/testing/config.json | Machine-readable disciplines, adapters, conventions, SDK entry |
+| Harness runtime | .ai-run/guides/development/harness-runtime.md | Settings sources, requirement markers and the capability gate, CLI suite presets, package-root plugin imports |
 | Quality gates | .ai-run/guides/quality-gates.md | Exact checks, CI jobs, pre-commit hook, gaps |
 | Git | .ai-run/guides/standards/git-workflow.md | Branches, commits, PR titles, ticket-key rule |
 | Release | docs/RELEASING.md | Tags, versions, publish workflow |
@@ -23,6 +24,7 @@ AGENTS.md has no native import directive. Open the paths below as plain files.
 |---|---|---|---|---|
 | Test | Add or change a test | "add a budget API test" | .ai-run/guides/testing/strategy.md | .ai-run/guides/testing/environments.md |
 | Environment | Settings, stands, test data | "which stand is safe for destructive tests" | .ai-run/guides/testing/environments.md | .ai-run/guides/testing/risk-model.md |
+| Harness runtime | Add or change a setting, an integration or capability requirement, a CLI suite or a package-root pytest plugin | "why does this test skip with missing setting", "add a CLI suite preset" | .ai-run/guides/development/harness-runtime.md | .ai-run/guides/testing/environments.md |
 | SDK | A test needs a missing SDK call | "add an SDK method for budgets" | .ai-run/guides/testing/strategy.md | .ai-run/guides/testing/config.json |
 | Verification | Run or add checks | "run the checks" | .ai-run/guides/quality-gates.md | .ai-run/guides/testing/strategy.md |
 | Git | Commit, branch, PR | "open a PR" | .ai-run/guides/standards/git-workflow.md | .ai-run/guides/project.md |

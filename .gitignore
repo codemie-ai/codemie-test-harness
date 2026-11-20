@@ -20,3 +20,11 @@ docs/superpowers/runs/
 .claude/settings.local.json
 .superpowers
 .codegraph/
+
+# AI
+.agents/memory/sdlc/daily/
+docs/superpowers/tasks/*/**/*.local.*
+docs/superpowers/tasks/*/**/*.local/
+docs/superpowers/tasks/*/**/task-*-brief.md
+docs/superpowers/tasks/*/**/task-*-report.md
+docs/superpowers/qa-tasks/*/**/*.local.*
