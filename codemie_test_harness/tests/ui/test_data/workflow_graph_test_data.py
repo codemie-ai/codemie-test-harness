@@ -106,7 +106,8 @@ def _workflow_yaml(states: list[StateModel]) -> str:
 # ---------------- 50-state workflow ----------------
 
 # Topology of the frontend's large-workflow fixture: 50 states, 4 conditionals, 2 switches
-# and 1 iterator. It repeats the branch id ``conditional_7`` on two parents and has a state
+# and 1 iterator (``it_fetch``, which takes a single ``state_id`` plus ``iter_key``: the
+# backend rejects ``state_ids`` on an iterator). It repeats the branch id ``conditional_7`` on two parents and has a state
 # named ``conditional_1``, as the failing customer workflow did.
 _LARGE_WORKFLOW_STATES = [
     _go("intake", "parse"),
@@ -139,7 +140,7 @@ _LARGE_WORKFLOW_STATES = [
     _if("review_one", "it_fetch", "manual_review", "needs_items", "conditional_7"),
     _if("review_two", "it_fetch", "manual_review", "has_items", "conditional_7"),
     _go("manual_review", "late_check"),
-    _state("it_fetch", state_ids=["it_a", "it_b", "it_c"], iter_key="items"),
+    _state("it_fetch", state_id="it_a", iter_key="items"),
     _go("it_a", "it_done"),
     _go("it_b", "it_done"),
     _go("it_c", "it_done"),
@@ -170,7 +171,7 @@ LARGE_WORKFLOW_STATE_COUNT = 50
 # 50 states + start + end + 6 branch nodes (4 conditionals, 2 switches) + 1 iterator.
 LARGE_WORKFLOW_NODE_COUNT = 59
 # One edge per transition of the topology above.
-LARGE_WORKFLOW_EDGE_COUNT = 74
+LARGE_WORKFLOW_EDGE_COUNT = 72
 
 
 def build_large_workflow_yaml() -> str:
