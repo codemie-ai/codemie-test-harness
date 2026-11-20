@@ -108,11 +108,32 @@ class InsightsTableWidget(BasePage):
         )
 
     @property
+    def card(self) -> Locator:
+        """The widget card: the nearest ancestor of the heading that holds a table."""
+        return self.heading.locator("xpath=ancestor::*[.//table][1]")
+
+    @property
     def table(self) -> Locator:
-        """The widget table, found by its count column header."""
-        return self.page.get_by_role("table").filter(
-            has=self.page.get_by_role(
-                "columnheader", name=self.widget.count_column, exact=True
+        """The widget table, found in its card by its name and its count column headers.
+
+        Matching both headers keeps the locator on this widget's own table. While a lazy widget
+        has not rendered its table, the nearest ancestor of the heading that holds a table is a
+        wider container with the table of another widget: the count column alone is shared (Top
+        Assistants Usage and Top Workflow Usage both have Invocations) and the name column alone
+        is shared (Top Workflow Usage and Workflows both have Workflow Name). Together they match
+        no other widget, so the locator waits for the right table instead of resolving a sibling's.
+        """
+        return (
+            self.card.get_by_role("table")
+            .filter(
+                has=self.page.get_by_role(
+                    "columnheader", name=self.widget.name_column, exact=True
+                )
+            )
+            .filter(
+                has=self.page.get_by_role(
+                    "columnheader", name=self.widget.count_column, exact=True
+                )
             )
         )
 
