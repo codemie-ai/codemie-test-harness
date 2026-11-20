@@ -57,6 +57,7 @@ def open_row_in_queue(page, assistant_id: str, assistant_name: str):
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_review_queue_search_narrows_rows_and_clear_all_restores_them(
     page, pending_assistant
 ):
@@ -103,6 +104,7 @@ def test_review_queue_selection_swaps_filter_row_for_bulk_actions(
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_approve_from_drawer_removes_assistant_from_queue(
     page, pending_assistant, marketplace_submitter, delete_marketplace_assistant
 ):
@@ -167,6 +169,7 @@ def test_reject_from_drawer_enforces_reason_bound_in_form(
 @pytest.mark.marketplace
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_bulk_reject_applies_one_shared_reason_to_selected_rows(
     page, pending_assistant, marketplace_submitter
 ):

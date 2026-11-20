@@ -26,6 +26,7 @@ from codemie_test_harness.tests.ui.test_data.datasource_test_data import (
 # @case improve-files-filter-placeholder-examples_TC_001
 @pytest.mark.datasource
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize(
     "example",
     GIT_FILES_FILTER_PLACEHOLDER_EXAMPLES,

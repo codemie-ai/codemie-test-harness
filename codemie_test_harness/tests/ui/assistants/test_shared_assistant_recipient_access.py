@@ -65,6 +65,7 @@ def login(page, client):
 
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_shared_recipient_can_chat_but_sees_no_edit_controls(
     assistant_factory, client, regular_client, page
 ):

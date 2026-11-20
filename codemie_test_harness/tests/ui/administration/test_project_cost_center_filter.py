@@ -38,6 +38,7 @@ from codemie_test_harness.tests.utils.cost_center_utils import (
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_cost_center_filter_is_visible_in_project_filter_row(page):
     # @case cost-center-filter-project-management_TC_001
     projects_page = ProjectManagementPage(page).navigate_to()
@@ -48,6 +49,7 @@ def test_cost_center_filter_is_visible_in_project_filter_row(page):
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_typing_narrows_cost_center_options_and_selected_names_are_comma_separated(
     page, cost_center
 ):
@@ -75,6 +77,7 @@ def test_typing_narrows_cost_center_options_and_selected_names_are_comma_separat
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_cost_center_filter_narrows_project_list_and_clearing_restores_it(
     page, cost_center, project
 ):
@@ -103,6 +106,7 @@ def test_cost_center_filter_narrows_project_list_and_clearing_restores_it(
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_cost_center_filter_shows_no_match_message_for_unmatched_search(page):
     # @case cost-center-filter-project-management_TC_007
     projects_page = ProjectManagementPage(page).navigate_to()
@@ -115,6 +119,7 @@ def test_cost_center_filter_shows_no_match_message_for_unmatched_search(page):
 
 @pytest.mark.project
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_cost_center_selection_survives_reload_and_deleted_cost_center_is_pruned(
     page, cost_center, cost_center_utils
 ):

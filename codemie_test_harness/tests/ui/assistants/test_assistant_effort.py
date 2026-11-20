@@ -81,6 +81,7 @@ def _open_edit_page(page, assistant):
 # @case support-effort-parameter-newer-models_TC_004
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_effort_select_lists_model_levels_and_hides_temperature_and_top_p(
     page, assistant_factory, effort_model
 ):
@@ -95,6 +96,7 @@ def test_effort_select_lists_model_levels_and_hides_temperature_and_top_p(
 # @case support-effort-parameter-newer-models_TC_004
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_non_effort_model_shows_temperature_and_no_effort_select(
     page, assistant_factory, non_effort_model
 ):
@@ -109,6 +111,7 @@ def test_non_effort_model_shows_temperature_and_no_effort_select(
 # @case support-effort-parameter-newer-models_TC_004
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_effort_model_with_saved_temperature_keeps_it_until_effort_is_chosen(
     page, assistant_factory, effort_model
 ):
@@ -126,6 +129,7 @@ def test_effort_model_with_saved_temperature_keeps_it_until_effort_is_chosen(
 # @case support-effort-parameter-newer-models_TC_006
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_max_effort_shows_token_warning_and_is_saved_and_shown_in_details(
     page, assistant_factory, assistant_utils, effort_model
 ):
@@ -158,6 +162,7 @@ def test_max_effort_shows_token_warning_and_is_saved_and_shown_in_details(
 # @case support-effort-parameter-newer-models_TC_008
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_switching_max_effort_assistant_to_non_effort_model_clears_effort_and_saves(
     page, assistant_factory, assistant_utils, effort_model, non_effort_model
 ):
@@ -189,6 +194,7 @@ def test_switching_max_effort_assistant_to_non_effort_model_clears_effort_and_sa
 # @case support-effort-parameter-newer-models_TC_015
 @pytest.mark.assistant
 @pytest.mark.ui
+@pytest.mark.prod_regression
 @pytest.mark.parametrize(
     "model",
     [ModelTypes.CLAUDE_4_6_SONNET, ModelTypes.CLAUDE_SONNET_4_6_VERTEX],

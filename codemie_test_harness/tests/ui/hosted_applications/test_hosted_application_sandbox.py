@@ -43,6 +43,7 @@ def management_url():
 @pytest.mark.requires_capability(CAPABILITY)
 @pytest.mark.hosted_applications
 @pytest.mark.ui
+@pytest.mark.prod_regression
 def test_uploaded_script_cannot_reach_the_page_cookies_other_storage_or_the_management_api(
     page, ui_owner_apps, ui_project, management_url
 ):
