@@ -191,6 +191,27 @@ class ChatsSidebar(BasePage):
         """Get specific chat item by partial text content."""
         return self.chat_items.filter(has_text=chat_text)
 
+    def chat_item_by_id(self, chat_id: str) -> Locator:
+        """Sidebar list item of the chat; its name button has the id ``chat-name-<chat id>``
+        (ChatListItem.tsx)."""
+        return self.page.locator("li").filter(
+            has=self.page.locator(f"#chat-name-{chat_id}")
+        )
+
+    @step
+    def should_show_chat_icon(self, chat_id: str, icon_url: str):
+        """Verify the sidebar item of the chat shows the avatar of the uploaded icon file.
+
+        VERIFY: the selector comes from the code (ChatListItem.tsx renders an Avatar, an img with
+        an 'avatar' class and src ``/v1/files/<token>``, next to the name button), not from a
+        browser walk. Whether the section holding the chat is expanded was not observed.
+        """
+        icon = self.chat_item_by_id(chat_id).locator(
+            f'img[class*="avatar"][src$="/v1/files/{icon_url}"]'
+        )
+        expect(icon.first).to_be_visible()
+        return self
+
     # ==================== CHAT ITEM ELEMENTS ====================
 
     @property

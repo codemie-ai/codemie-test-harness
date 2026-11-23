@@ -20,6 +20,7 @@ import pytest
 from codemie_sdk.models.workflow import WorkflowMode
 from hamcrest import assert_that, greater_than
 
+from codemie_test_harness.tests.test_data.workflow_icon_test_data import write_png_icon
 from codemie_test_harness.tests.ui import conversation_ids
 from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
 from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
@@ -658,3 +659,54 @@ def create_node_workflow(workflow_utils, default_llm):
             workflow_utils.delete_workflow(workflow)
         except Exception as e:
             logger.warning(f"Failed to delete workflow {workflow.id}: {e}")
+
+
+@pytest.fixture
+def ui_workflow_name(workflow_utils):
+    """A fresh workflow name for a workflow the test creates through the UI.
+
+    Teardown deletes whatever workflow carries the name, also when the test failed before
+    or after the save.
+    """
+    name = get_random_name()
+    yield name
+    try:
+        for workflow in workflow_utils.client.workflows.list(
+            per_page=200, filter_by_user=True
+        ):
+            if workflow.name == name:
+                workflow_utils.delete_workflow(workflow)
+    except Exception as e:
+        logger.warning(f"Failed to clean up workflow {name}: {e}")
+
+
+@pytest.fixture
+def workflow_with_icon(workflow_utils, default_llm, tmp_path):
+    """A workflow created through the API with an uploaded PNG icon; deleted in teardown."""
+    icon_url = workflow_utils.upload_workflow_icon(write_png_icon(tmp_path))
+    created_workflow = workflow_utils.create_workflow(
+        workflow_name=get_random_name(),
+        workflow_type=WorkflowMode.SEQUENTIAL,
+        shared=True,
+        workflow_yaml=build_simple_assistant_workflow_yaml(default_llm.base_name),
+        icon_url=icon_url,
+    )
+    workflow = workflow_utils.get_workflow(created_workflow.id)
+    yield workflow
+    try:
+        workflow_utils.delete_workflow(workflow)
+    except Exception as e:
+        logger.warning(f"Failed to delete workflow {workflow.id}: {e}")
+
+
+@pytest.fixture
+def workflow_conversation_id(workflow_with_icon, conversation_utils):
+    """Id of a workflow conversation of ``workflow_with_icon``, created through the API.
+
+    Deleting the workflow in the ``workflow_with_icon`` teardown deletes its conversations.
+    """
+    conversation = conversation_utils.create_conversation(
+        initial_assistant_id=workflow_with_icon.id,
+        is_workflow_conversation=True,
+    )
+    return conversation["id"]

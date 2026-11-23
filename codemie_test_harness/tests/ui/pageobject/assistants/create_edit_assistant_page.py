@@ -289,6 +289,11 @@ class CreateEditAssistantPage(BasePage):
         return self.page.locator('input[name="icon_url"]')
 
     @property
+    def logo_hint(self) -> Locator:
+        """Hint under the logo input (LogoUrlInputField), carrying the upload limits."""
+        return self.page.get_by_text("Must be JPEG, PNG, SVG and max size 500kb")
+
+    @property
     def description_textarea(self) -> Locator:
         """Assistant description textarea"""
         return self.page.locator(
@@ -1628,6 +1633,12 @@ class CreateEditAssistantPage(BasePage):
     def should_have_categories_visible(self):
         """Verify categories dropdown is visible.."""
         expect(self.categories_dropdown).to_be_visible()
+        return self
+
+    @step
+    def should_have_logo_upload_hint(self):
+        """Verify the logo input shows the assistant upload limits hint."""
+        expect(self.logo_hint).to_be_visible()
         return self
 
     @step

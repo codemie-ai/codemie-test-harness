@@ -159,6 +159,21 @@ class WorkflowDetailsPage(BasePage):
         expect(self.workflow_name).to_be_visible()
 
     @step
+    def should_show_workflow_icon_in_configuration_sidebar(self, icon_url: str):
+        """Verify the open configuration sidebar shows the avatar of the uploaded icon file.
+
+        VERIFY: the selector comes from the code (WorkflowExecutionConfigDetails.tsx renders an
+        Avatar, an img with an 'avatar' class and src ``/v1/files/<token>``, inside the 'Configure
+        Workflow' sidebar), not from a browser walk. The workflow page header avatar of
+        ViewWorkflowHeader.tsx is not mounted by the workflow route, so it is not asserted.
+        """
+        icon = self.configuration_sidebar.locator(
+            f'img[class*="avatar"][src$="/v1/files/{icon_url}"]'
+        )
+        expect(icon.first).to_be_visible()
+        return self
+
+    @step
     def should_have_workflow_name(self, expected_name: str):
         """Verify the workflow name heading."""
         expect(self.workflow_name).to_have_text(expected_name)
