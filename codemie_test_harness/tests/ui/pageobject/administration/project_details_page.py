@@ -100,6 +100,15 @@ class ProjectDetailsPage(BasePage):
         return self.page.get_by_role("tab", name="Overview", exact=True)
 
     @property
+    def project_heading(self):
+        """Level-1 heading of the details page, the project's name."""
+        return self.page.get_by_role("heading", level=1)
+
+    def member_row(self, email: str):
+        """Row of the Members tab table whose text holds the member's e-mail."""
+        return self.page.get_by_role("row").filter(has_text=email)
+
+    @property
     def users_value(self):
         """Users count rendered in the Project information card."""
         return self.page.get_by_text("Users", exact=True).locator(
@@ -298,6 +307,20 @@ class ProjectDetailsPage(BasePage):
         return self
 
     @step
+    def navigate_to_members(self, project_name: str):
+        """Navigate directly to the Members tab URL of a project."""
+        self.page.goto(f"{self.BASE_PATH}/{quote(project_name, safe='')}/members")
+        self.page.wait_for_load_state("networkidle", timeout=30000)
+        return self
+
+    @step
+    def reload(self):
+        """Reload the page and wait for it to settle."""
+        self.refresh_page()
+        self.page.wait_for_load_state("networkidle", timeout=30000)
+        return self
+
+    @step
     def open_members_tab(self):
         """Switch to the Members tab, which holds the members table."""
         expect(self.members_tab).to_be_visible(timeout=15000)
@@ -386,6 +409,56 @@ class ProjectDetailsPage(BasePage):
         expect(self.page).to_have_url(
             re.compile(re.escape(f"{self.BASE_PATH}/{encoded_name}") + r"/?$"),
             timeout=10000,
+        )
+        return self
+
+    @step
+    def should_be_on_members_tab(self, project_name: str):
+        """Verify the page is the Members tab of this project: the URL ends in
+        `/<project name>/members`, the heading is the project's name and the Members tab
+        is the selected one."""
+        encoded_name = quote(project_name, safe="")
+        expect(self.page).to_have_url(
+            re.compile(re.escape(f"{self.BASE_PATH}/{encoded_name}/members") + r"/?$"),
+            timeout=15000,
+        )
+        expect(self.project_heading).to_have_text(project_name, timeout=15000)
+        expect(self.members_tab).to_have_attribute(
+            "aria-selected", "true", timeout=15000
+        )
+        return self
+
+    @step
+    def should_be_on_overview_tab(self, project_name: str):
+        """Verify the page is the default (Overview) tab of this project: the URL ends in the
+        project name, the Overview tab is selected and the Members tab is not."""
+        self.should_be_on_project_details_page(project_name)
+        expect(self.project_heading).to_have_text(project_name, timeout=15000)
+        expect(self.overview_tab).to_have_attribute(
+            "aria-selected", "true", timeout=15000
+        )
+        expect(self.members_tab).to_have_attribute(
+            "aria-selected", "false", timeout=15000
+        )
+        return self
+
+    @step
+    def should_list_member(self, email: str):
+        """Verify the Members tab table lists a member with this e-mail."""
+        expect(self.member_row(email)).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_not_list_member(self, email: str):
+        """Verify the Members tab table has no member with this e-mail."""
+        expect(self.member_row(email)).to_have_count(0, timeout=15000)
+        return self
+
+    @step
+    def should_not_be_in_user_management(self):
+        """Verify the browser is not on a User Management URL (/settings/administration/users)."""
+        expect(self.page).not_to_have_url(
+            re.compile(r"/settings/administration/users"), timeout=5000
         )
         return self
 
