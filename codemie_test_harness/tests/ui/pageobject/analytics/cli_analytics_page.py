@@ -384,3 +384,12 @@ class CLIAnalyticsPage(BasePage):
             "cell-tool-success should display the em dash when tool_calls = 0",
         ).to_have_text(self.EM_DASH, timeout=15000)
         return self
+
+    @step
+    def should_load_all_sections(self):
+        """Each section answers its real API requests and renders no widget errors."""
+        self.should_have_loaded_section(self.DEFAULT_SECTION)
+        for section in CLIAnalyticsSection:
+            if section != self.DEFAULT_SECTION:
+                self.open_section(section).should_have_loaded_section(section)
+        return self

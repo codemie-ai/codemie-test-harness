@@ -34,15 +34,17 @@ from codemie_test_harness.tests.test_data.projects_test_data import (
 )
 from codemie_test_harness.tests.utils.analytics_utils import AnalyticsUtils
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
+    CT_NDJSON,
     CliAnalyticsApi,
+    IngestClient,
+    assert_accepted,
     assert_project_deleted,
     assert_roles_are_real,
     delete_projects_strict,
     wait_until_accessible,
 )
 from codemie_test_harness.tests.utils.cli_gate_utils import (
-    assert_sent_accepted,
-    send_tracked,
+    make_batch,
     wait_until_ingest_ready,
     wait_until_listed,
 )
@@ -271,14 +273,30 @@ class HistorySession:
 
 @pytest.fixture
 def history_session(project_world, gate_member_client, gate_admin_client):
-    """An accepted hook session of the world's project, waited for until it is listed."""
-    sent = send_tracked(gate_member_client, project_world.project, E7)
-    assert_sent_accepted(sent, "the history session sent to the enabled project")
+    """An owned shared session, positively observed before the project is disabled.
+
+    A legacy request without evidence headers has no owner binding: authentication alone
+    does not make it an own session for a regular viewer. Use the evidence envelope so
+    the sender's authenticated identity is persisted as the session owner.
+    """
+    batch = make_batch(E7)
+    response = IngestClient(gate_member_client).post_signal(
+        "event-hooks",
+        batch.body,
+        CT_NDJSON,
+        project=project_world.project,
+        extra_headers={
+            "X-CodeMie-Session-Id": batch.session_id,
+            "X-CodeMie-Project-Source": "profile",
+            "X-CodeMie-Routed-Via-CodeMie": "true",
+        },
+    )
+    assert_accepted(response, "event-hooks", CT_NDJSON)
     pending = wait_until_listed(
-        CliAnalyticsApi(gate_admin_client), {sent.batch.session_id: sent.batch.repo}
+        CliAnalyticsApi(gate_admin_client), {batch.session_id: batch.repo}
     )
     assert_that(pending, empty(), "the history session never became listed")
-    return HistorySession(project_world, sent.batch.session_id, sent.batch.repo)
+    return HistorySession(project_world, batch.session_id, batch.repo)
 
 
 @pytest.fixture
