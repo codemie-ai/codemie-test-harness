@@ -160,9 +160,9 @@ def test_history_stays_accessible_with_unchanged_permissions_after_disable(
     """TC-007 (AC-9): the session is seeded and waited for until listed. Per role, the starting
     state is asserted explicitly against the existing contract (the sessions, overview and
     repositories status codes and whether the session is listed: global admin, maintainer and the
-    project admin read it with 200; a plain member, an auditor and an unrelated user get 200 from
-    the session list, which holds only their own Personal sessions and so not this project
-    session, and 403 from the aggregate reads), so an unexpected 403 for an authorized reader
+    project admin read it with 200; a plain member, an auditor and an unrelated user get
+    successful empty responses because the legacy project session has no owner binding), so an
+    unexpected response for an authorized reader
     fails before the disable. The project is then disabled, the disable is
     shown to be effective (a new batch is discarded) and the snapshot (the same status codes,
     read with the filter projects=<name>, and the stable fields of the seeded session's row:
