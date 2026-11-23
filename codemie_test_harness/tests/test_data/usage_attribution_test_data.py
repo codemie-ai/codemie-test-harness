@@ -41,7 +41,7 @@ CATEGORIES = (
     "pet_project",
     "unclassified",
 )
-PAYERS = ("charged", "shared", "personal")
+PAYERS = ("charged", "shared", "personal", "unclassified")
 CACHE_STATES = ("hit", "miss", "shared", "stale")
 REUSED_CACHE_STATES = ("hit", "shared")
 
