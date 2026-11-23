@@ -35,6 +35,9 @@ from urllib.parse import quote
 from playwright.sync_api import expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.administration.project_activity_history_modal import (
+    ProjectActivityHistoryModal,
+)
 from codemie_test_harness.tests.ui.pageobject.administration.unified_project_budget_modal_page import (
     UnifiedProjectBudgetModalPage,
 )
@@ -98,6 +101,15 @@ class ProjectDetailsPage(BasePage):
     def overview_tab(self):
         """'Overview' tab in the 'Project sections' tablist."""
         return self.page.get_by_role("tab", name="Overview", exact=True)
+
+    @property
+    def project_heading(self):
+        """Level-1 heading of the details page, the project's name."""
+        return self.page.get_by_role("heading", level=1)
+
+    def member_row(self, email: str):
+        """Row of the Members tab table whose text holds the member's e-mail."""
+        return self.page.get_by_role("row").filter(has_text=email)
 
     @property
     def users_value(self):
@@ -256,6 +268,11 @@ class ProjectDetailsPage(BasePage):
         return self.page.get_by_role("button", name="Edit Project", exact=True)
 
     @property
+    def history_button(self):
+        """'History' button in the page header, next to 'Edit Project' (ProjectDetailsPage.tsx:321)."""
+        return self.page.get_by_role("button", name="History", exact=True)
+
+    @property
     def ai_attribution_label(self):
         """The 'AI Attribution' item label in Overview > Project information."""
         return self.page.locator("div.mb-1.text-xs.text-text-quaternary").filter(
@@ -294,6 +311,20 @@ class ProjectDetailsPage(BasePage):
     def navigate_to(self, project_name: str):
         """Navigate directly to a project's detail page."""
         self.page.goto(f"{self.BASE_PATH}/{project_name}")
+        self.page.wait_for_load_state("networkidle", timeout=30000)
+        return self
+
+    @step
+    def navigate_to_members(self, project_name: str):
+        """Navigate directly to the Members tab URL of a project."""
+        self.page.goto(f"{self.BASE_PATH}/{quote(project_name, safe='')}/members")
+        self.page.wait_for_load_state("networkidle", timeout=30000)
+        return self
+
+    @step
+    def reload(self):
+        """Reload the page and wait for it to settle."""
+        self.refresh_page()
         self.page.wait_for_load_state("networkidle", timeout=30000)
         return self
 
@@ -379,13 +410,69 @@ class ProjectDetailsPage(BasePage):
         Uses a compiled regex (matched against the full absolute URL) rather than a
         glob string: a glob string is resolved relative to `base_url` first, which
         double-counts the leading '/' already present in `BASE_PATH` and never matches.
-        The project name is percent-encoded the way the app does it (a personal project
-        is named after an email, so '@' appears in the URL as '%40').
+        The project name is percent-encoded by the app, but '@' stays literal in the URL
+        (a personal project is named after an email); both forms are accepted.
         """
+        encoded_names = {
+            quote(project_name, safe=""),
+            quote(project_name, safe="@"),
+        }
+        alternatives = "|".join(re.escape(name) for name in sorted(encoded_names))
+        expect(self.page).to_have_url(
+            re.compile(
+                re.escape(f"{self.BASE_PATH}/") + f"(?:{alternatives})" + r"/?$"
+            ),
+            timeout=10000,
+        )
+        return self
+
+    @step
+    def should_be_on_members_tab(self, project_name: str):
+        """Verify the page is the Members tab of this project: the URL ends in
+        `/<project name>/members`, the heading is the project's name and the Members tab
+        is the selected one."""
         encoded_name = quote(project_name, safe="")
         expect(self.page).to_have_url(
-            re.compile(re.escape(f"{self.BASE_PATH}/{encoded_name}") + r"/?$"),
-            timeout=10000,
+            re.compile(re.escape(f"{self.BASE_PATH}/{encoded_name}/members") + r"/?$"),
+            timeout=15000,
+        )
+        expect(self.project_heading).to_have_text(project_name, timeout=15000)
+        expect(self.members_tab).to_have_attribute(
+            "aria-selected", "true", timeout=15000
+        )
+        return self
+
+    @step
+    def should_be_on_overview_tab(self, project_name: str):
+        """Verify the page is the default (Overview) tab of this project: the URL ends in the
+        project name, the Overview tab is selected and the Members tab is not."""
+        self.should_be_on_project_details_page(project_name)
+        expect(self.project_heading).to_have_text(project_name, timeout=15000)
+        expect(self.overview_tab).to_have_attribute(
+            "aria-selected", "true", timeout=15000
+        )
+        expect(self.members_tab).to_have_attribute(
+            "aria-selected", "false", timeout=15000
+        )
+        return self
+
+    @step
+    def should_list_member(self, email: str):
+        """Verify the Members tab table lists a member with this e-mail."""
+        expect(self.member_row(email)).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_not_list_member(self, email: str):
+        """Verify the Members tab table has no member with this e-mail."""
+        expect(self.member_row(email)).to_have_count(0, timeout=15000)
+        return self
+
+    @step
+    def should_not_be_in_user_management(self):
+        """Verify the browser is not on a User Management URL (/settings/administration/users)."""
+        expect(self.page).not_to_have_url(
+            re.compile(r"/settings/administration/users"), timeout=5000
         )
         return self
 
@@ -608,4 +695,37 @@ class ProjectDetailsPage(BasePage):
             timeout=15000
         )
         expect(self.edit_project_button).to_have_count(0)
+        return self
+
+    @step
+    def open_history(self) -> ProjectActivityHistoryModal:
+        """Click 'History' and return the activity history modal."""
+        expect(self.history_button).to_be_visible(timeout=15000)
+        self.history_button.click()
+        return ProjectActivityHistoryModal(self.page)
+
+    @step
+    def should_have_history_button(self):
+        """Verify the page rendered and offers the 'History' button."""
+        expect(self.history_button).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_not_have_history_button(self):
+        """Verify the details page rendered and there is no 'History' button.
+
+        The page is first proven rendered by its own 'Owned by' field. The 'Project not
+        found' message is not accepted: it would also have no 'History' button.
+        """
+        expect(self.owned_by_label).to_be_visible(timeout=15000)
+        expect(self.project_not_found_message).to_have_count(0)
+        expect(self.history_button).to_have_count(0)
+        return self
+
+    @step
+    def should_have_members_tab_selected(self):
+        """Verify the 'Members' tab is the selected tab of the details page."""
+        expect(self.members_tab).to_have_attribute(
+            "aria-selected", "true", timeout=10000
+        )
         return self

@@ -16,6 +16,7 @@
 remove everything afterwards."""
 
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
@@ -54,6 +55,9 @@ VERSION_WAIT_SECONDS = 240
 PURGE_WAIT_SECONDS = 180
 BULK_WORKERS = 8
 CATALOG_PAGE_SIZE = 100
+# A category name made of plain words: a browser picks it by its text, and no other
+# category on the stand has the same text.
+PLAIN_CATEGORY_NAME = re.compile(r"[A-Za-z][A-Za-z ]{2,38}[A-Za-z]")
 
 
 def error_code(error: HTTPError) -> Optional[str]:
@@ -76,6 +80,28 @@ def error_message(error: HTTPError) -> str:
         return ""
 
 
+def error_text(error: HTTPError) -> str:
+    """Everything a failed call says in words: its message and the message of each refused field."""
+    try:
+        details = error.response.json()["error"]["details"]
+    except (AttributeError, KeyError, TypeError, ValueError):
+        details = {}
+    fields = details.get("fields") or []
+    return " | ".join(
+        [error_message(error), *(str(field.get("message", "")) for field in fields)]
+    )
+
+
+def category_pairs(app: HostedApplication) -> list[tuple[str, str]]:
+    """The ``(id, name)`` of each category of an application, in the order the platform lists them."""
+    return [(category.id, category.name) for category in app.categories]
+
+
+def category_ids(app: HostedApplication) -> list[str]:
+    """The ids of the categories of an application, in the order the platform lists them."""
+    return [category.id for category in app.categories]
+
+
 class HostedApplicationUtils(BaseUtils):
     """Hosted-application calls of one user, and the applications that user created."""
 
@@ -91,15 +117,34 @@ class HostedApplicationUtils(BaseUtils):
         shared: bool = False,
         name: Optional[str] = None,
         description: Optional[str] = None,
+        categories: Optional[list[str]] = None,
+        idempotency_key: Optional[str] = None,
     ) -> HostedApplication:
         app = self.service.create_application(
             name or get_random_name(),
             description or "Application created by an automated test",
             project,
             shared=shared,
+            idempotency_key=idempotency_key,
+            categories=categories,
         )
         self._app_ids.append(app.id)
         return app
+
+    def update_categories(
+        self, app_id: str, categories: list[str]
+    ) -> HostedApplication:
+        """Replace the categories of an application; an empty list clears them."""
+        return self.service.update_application(
+            app_id, self.get_app(app_id).etag, categories=categories
+        )
+
+    def adopt(self, name: str) -> list[HostedApplication]:
+        """Applications of this user with this name that were created outside the helper, such as
+        through the browser; ``cleanup`` deletes them too."""
+        found = self.service.list_applications(scope="mine", q=name).items
+        self._app_ids.extend(app.id for app in found if app.id not in self._app_ids)
+        return found
 
     def get_app(self, app_id: str) -> HostedApplication:
         return self.service.get_application(app_id)
@@ -196,12 +241,34 @@ class HostedApplicationUtils(BaseUtils):
             self._category_id = categories[0].id
         return self._category_id
 
-    def publish(self, app_id: str) -> HostedApplication:
-        """Publish an application to the marketplace; publishing needs a category, so it sends one."""
+    def plain_categories(self, count: int) -> list[Any]:
+        """Up to ``count`` categories the platform already has, with distinct plain-word names.
+
+        The tests only read them; fewer are returned when the platform holds fewer.
+        """
+        picked: list[Any] = []
+        names: set[str] = set()
+        for category in self.client.categories.get_categories():
+            if len(picked) == count:
+                break
+            if PLAIN_CATEGORY_NAME.fullmatch(category.name) and (
+                category.name.lower() not in names
+            ):
+                names.add(category.name.lower())
+                picked.append(category)
+        return picked
+
+    def publish(
+        self, app_id: str, categories: Optional[list[str]] = None
+    ) -> HostedApplication:
+        """Publish an application to the marketplace under ``categories``.
+
+        Publishing needs a category, so without ``categories`` it sends one the platform has.
+        """
         return self.service.marketplace_publish(
             app_id,
             self.get_app(app_id).etag,
-            categories=[self.existing_category_id()],
+            categories=categories or [self.existing_category_id()],
         )
 
     def unpublish(self, app_id: str) -> HostedApplication:
@@ -224,18 +291,36 @@ class HostedApplicationUtils(BaseUtils):
         with ThreadPoolExecutor(max_workers=BULK_WORKERS) as pool:
             return list(pool.map(lambda _: self.create_app(project), range(count)))
 
-    def all_app_ids(self, scope: str = "mine", q: str = "") -> list[str]:
-        """Ids of every application the user lists in a scope, over all pages."""
+    def all_app_ids(
+        self, scope: str = "mine", q: str = "", **filters: Any
+    ) -> list[str]:
+        """Ids of every application the user lists in a scope, over all pages.
+
+        ``filters`` are the catalog filters of ``list_applications``, such as ``category=[...]``.
+        """
         ids: list[str] = []
         cursor = None
         while True:
             page = self.service.list_applications(
-                scope=scope, q=q, limit=CATALOG_PAGE_SIZE, cursor=cursor
+                scope=scope, q=q, limit=CATALOG_PAGE_SIZE, cursor=cursor, **filters
             )
             ids.extend(item.id for item in page.items)
             cursor = page.next_cursor
             if cursor is None:
                 return ids
+
+    def pages(self, limit: int, scope: str = "mine", **filters: Any) -> list[list[str]]:
+        """The application ids of each page a list returns at this page size, in order."""
+        pages: list[list[str]] = []
+        cursor = None
+        while True:
+            page = self.service.list_applications(
+                scope=scope, limit=limit, cursor=cursor, **filters
+            )
+            pages.append([item.id for item in page.items])
+            cursor = page.next_cursor
+            if cursor is None:
+                return pages
 
     def reach_application_limit(self, project: str) -> Callable[[], Any]:
         """Create applications up to the per-person limit; return the call that asks for one more."""
