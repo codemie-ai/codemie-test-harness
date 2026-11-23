@@ -161,7 +161,7 @@ def test_gitlab_mr_filter_selection_persists_after_save_and_reload(
 
     create_integration_page.create_integration()
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_saved_message(SAVED_TOAST)
+    integrations_page.toast.should_show_success(SAVED_TOAST)
 
     edit_integration_page = EditIntegrationPage(page)
     edit_integration_page.navigate_to_edit_integration(

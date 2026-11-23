@@ -35,7 +35,13 @@ from codemie_test_harness.tests.ui.pageobject.administration.project_details_pag
 @pytest.mark.ui
 def test_models_tab_lists_every_api_model(page, project_admin_setup, client):
     project_name, _, _, _ = project_admin_setup
-    api_model_count = len(client.llms.list())
+    api_model_count = len(
+        [
+            row
+            for row in client.llms.list(include_all=True)
+            if row.is_router or not row.forbidden_for_web
+        ]
+    )
 
     details_page = ProjectDetailsPage(page)
     details_page.navigate_to(project_name)

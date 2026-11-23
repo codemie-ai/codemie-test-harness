@@ -653,19 +653,6 @@ class CreateIntegrationPage(BasePage):
         return self
 
     @step
-    def should_see_creation_success(self):
-        """Assert the integration creation success toast is visible with success content.
-
-        Checks both visibility and that the toast header contains the expected
-        success text, distinguishing it from an error toast that shares the same
-        CSS selector structure.
-        """
-        toast_header = self.page.locator(".codemie-toast-success, .codemie-toast-info")
-        expect(toast_header).to_be_visible(timeout=10000)
-        expect(toast_header).to_contain_text("Integration saved", ignore_case=True)
-        return self
-
-    @step
     def fill_gitlab_webhook_token(self, token: str):
         """Fill the GitLab Webhook Secret Token field."""
         self.expand_gitlab_settings_accordion()
@@ -826,17 +813,6 @@ class CreateIntegrationPage(BasePage):
     def all_inline_validation_messages(self) -> Locator:
         """All inline validation error messages."""
         return self.page.locator(".input-error-message")
-
-    # Toast notification elements
-    @property
-    def error_toast_header(self) -> Locator:
-        """Error toast notification header."""
-        return self.page.locator(".codemie-toast-err .codemie-toast-header")
-
-    @property
-    def error_toast_content(self) -> Locator:
-        """Error toast notification content message."""
-        return self.page.locator(".codemie-toast-err .codemie-toast-content")
 
     # Navigation methods
     @step
@@ -1666,10 +1642,7 @@ class CreateIntegrationPage(BasePage):
             header (str): Expected toast header text
             content (str): Expected toast content message
         """
-        expect(self.error_toast_header).to_be_visible()
-        expect(self.error_toast_header).to_have_text(header)
-        expect(self.error_toast_content).to_be_visible()
-        expect(self.error_toast_content).to_contain_text(content)
+        self.toast.should_show_error(header, content)
         return self
 
     @step
@@ -1805,18 +1778,13 @@ class CreateIntegrationPage(BasePage):
     @step
     def should_see_test_connection_success(self):
         """Verify that test connection was successful."""
-        # Look for success toast message - success toasts use the generic codemie-toast class
-        # with codemie-toast-header child (similar pattern to assistants_page.py line 120)
-        success_message = self.page.locator(".codemie-toast .codemie-toast-header")
-        expect(success_message).to_be_visible(timeout=15000)
+        self.toast.should_show_any(timeout=15000)
         return self
 
     @step
     def should_see_test_connection_failure(self):
         """Verify that test connection failed with error message."""
-        # Look for error toast message or error indicator
-        error_message = self.page.locator(".codemie-toast-err")
-        expect(error_message).to_be_visible(timeout=15000)
+        expect(self.toast.error).to_be_visible(timeout=15000)
         return self
 
     @step
@@ -1827,7 +1795,7 @@ class CreateIntegrationPage(BasePage):
         Returns:
             str: Error message text
         """
-        error_message = self.page.locator(".codemie-toast-err")
+        error_message = self.toast.error
         error_message.wait_for(state="visible", timeout=15000)
         return error_message.text_content().strip()
 
@@ -1842,7 +1810,7 @@ class CreateIntegrationPage(BasePage):
         Returns:
             self: For method chaining
         """
-        error_message = self.page.locator(".codemie-toast-err")
+        error_message = self.toast.error
         error_message.wait_for(state="visible", timeout=15000)
 
         # Verify error message is not empty

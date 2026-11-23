@@ -134,12 +134,6 @@ class ProjectModal(BasePage):
         """The wrapper carrying the read-only tooltip (present for non-writers only)."""
         return self.modal.locator(f'[data-tooltip-content="{self.READ_ONLY_TOOLTIP}"]')
 
-    def _updated_toast(self, project_name: str) -> Locator:
-        """The 'Project <name> updated successfully' info toast shown after a save."""
-        return self.page.locator(".codemie-toast-info").filter(
-            has_text=f"Project {project_name} updated successfully"
-        )
-
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @step
@@ -304,7 +298,9 @@ class ProjectModal(BasePage):
     @step
     def should_show_project_updated_toast(self, project_name: str):
         """Verify the 'Project <name> updated successfully' toast is shown."""
-        expect(self._updated_toast(project_name)).to_be_visible(timeout=15000)
+        self.toast.should_show(
+            f"Project {project_name} updated successfully", ("info",)
+        )
         return self
 
     @step
