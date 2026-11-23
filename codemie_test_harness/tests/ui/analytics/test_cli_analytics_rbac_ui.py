@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Real browser role regression for the AI Attribution tab and its sections."""
+"""AI Attribution navigation and section loading for each platform role."""
 
 import pytest
+
 from codemie_test_harness.tests.test_data.cli_analytics_rbac_test_data import ROLES
 from codemie_test_harness.tests.ui.pageobject.analytics.analytics_page import (
     AnalyticsPage,
@@ -26,10 +27,13 @@ from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 
 
+pytestmark = pytest.mark.xdist_group("cli_analytics_rbac_ui")
+
+
 @pytest.fixture
-def login(page, cli_rbac_world, role):
-    """Override the default UI login with this exact disposable role."""
-    user = cli_rbac_world.users[role]
+def login(page, cli_rbac_roles, role):
+    """Log in with the role selected by the test."""
+    user = cli_rbac_roles.users[role]
     LoginPage(page).login_suppressing_popups(
         user.email,
         user.password,

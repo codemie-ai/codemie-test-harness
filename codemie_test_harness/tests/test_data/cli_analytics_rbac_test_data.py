@@ -12,31 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Independent AI Attribution role matrix and identifiable ingest data."""
+"""CLI Analytics role matrix and session data."""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+
 from codemie_test_harness.otlp_builder import build_hook_events
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 
 ROLES = ("admin", "maintainer", "auditor", "project_admin", "regular")
 GLOBAL_READERS = frozenset(("admin", "maintainer", "auditor"))
-ENDPOINTS = (
-    "overview",
-    "cost",
-    "users",
-    "user-charts",
-    "repositories",
-    "projects",
-    "tools",
-    "activity",
-    "efficiency",
-    "frameworks",
-)
+SHARED_CASES = ("own_shared", "admin_project", "other_project")
 DETAIL_CASES = (
-    "own_shared",
-    "admin_project",
-    "other_project",
+    *SHARED_CASES,
     "own_private",
     "other_private",
 )

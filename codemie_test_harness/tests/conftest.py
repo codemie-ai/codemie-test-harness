@@ -3306,8 +3306,19 @@ def assistant_in_marketplace_state(
 
 @pytest.fixture(scope="module")
 def cli_rbac_world(client, keycloak_utils, user_utils, project_utils):
-    """Disposable five-role world shared by API and browser regressions."""
+    """Owned CLI sessions and real roles, created once per API module."""
     from codemie_test_harness.tests.utils.cli_analytics_rbac_utils import role_world
 
     with role_world(client, keycloak_utils, user_utils, project_utils) as world:
+        yield world
+
+
+@pytest.fixture(scope="module")
+def cli_rbac_roles(client, keycloak_utils, user_utils, project_utils):
+    """Real browser users and project roles, without session ingest."""
+    from codemie_test_harness.tests.utils.cli_analytics_rbac_utils import role_world
+
+    with role_world(
+        client, keycloak_utils, user_utils, project_utils, with_sessions=False
+    ) as world:
         yield world

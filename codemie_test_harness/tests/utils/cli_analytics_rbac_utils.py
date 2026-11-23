@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Disposable role world using the suite's raw-status and classification-header helpers.
+"""Disposable users, projects and sessions for CLI Analytics access tests."""
 
-Projects and users use the SDK utilities. Raw CLI reads preserve fields missing from
-SDK models, and classification headers use the existing IngestClient transport.
-"""
-
+from collections import Counter
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
+
 from hamcrest import assert_that, equal_to, is_, not_none
+
 from codemie_test_harness.otlp_builder import ndjson_bytes
 from codemie_test_harness.tests.enums.environment import Environment
 from codemie_test_harness.tests.test_data.cli_analytics_rbac_test_data import (
@@ -120,8 +119,7 @@ class RoleWorld:
         return {"projects": ",".join(self.projects)}
 
     def shared(self, role):
-        # Hand-worked contract: global readers see all shared activity; a project admin
-        # additionally sees project A; otherwise only the viewer's own sessions.
+        # Project admins also read their own sessions outside their administered projects.
         return [
             s
             for s in self.sessions.values()
@@ -139,6 +137,16 @@ class RoleWorld:
             for s in self.sessions.values()
             if s.private and (role in GLOBAL_READERS or s.owner == role)
         ]
+
+    def repository(self, seed):
+        return f"{self.prefix}/{seed.trace_id}"
+
+    def project_counts(self, role):
+        return dict(Counter(s.project for s in self.shared(role)))
+
+    def private_rows(self, role, foreign_user_filter):
+        params = {"users": self.users["owner"].email} if foreign_user_filter else {}
+        return self.rows(role, personal=True, **params)
 
     def detail_case(self, role, case):
         return self.sessions[
@@ -166,7 +174,9 @@ class RoleWorld:
 
 
 @contextmanager
-def role_world(client, keycloak_utils, user_utils, project_utils):
+def role_world(
+    client, keycloak_utils, user_utils, project_utils, *, with_sessions=True
+):
     assert_that(
         EnvironmentResolver.get_environment(),
         equal_to(Environment.PREVIEW),
@@ -177,40 +187,41 @@ def role_world(client, keycloak_utils, user_utils, project_utils):
         is_(True),
         "CLI analytics is disabled",
     )
-    api = CliAnalyticsApi(client)
-    r = api.request("GET", f"{INGEST_PREFIX}/classification-policy")
-    assert_that(r.status_code, equal_to(200), "Cannot read classification policy")
-    policy = r.json()
-    assert_that(
-        bool(policy["organizations"]),
-        is_(True),
-        "Private-session checks need a configured organization policy",
-    )
-    other_org = get_random_name()
-    assert_that(
-        other_org.casefold() in {v.strip().casefold() for v in policy["organizations"]},
-        is_(False),
-    )
+    if with_sessions:
+        api = CliAnalyticsApi(client)
+        r = api.request("GET", f"{INGEST_PREFIX}/classification-policy")
+        assert_that(r.status_code, equal_to(200), "Cannot read classification policy")
+        policy = r.json()
+        assert_that(
+            bool(policy["organizations"]),
+            is_(True),
+            "Private-session checks need a configured organization policy",
+        )
+        other_org = get_random_name()
+        assert_that(
+            other_org.casefold()
+            in {v.strip().casefold() for v in policy["organizations"]},
+            is_(False),
+        )
     projects = (get_random_name(), get_random_name())
     users, sessions = {}, {}
     with ExitStack() as cleanup:
-        for role in (*ROLES, "owner"):
+        roles = (*ROLES, "owner") if with_sessions else ROLES
+        for role in roles:
             user = cleanup.enter_context(
                 new_logged_in_user(
                     keycloak_utils, user_email("clirbac"), admin=False, strict=True
                 )
             )
             users[role] = user
-            # Personal destinations are provisioned on login. They intentionally never
-            # enable CLI analytics and cannot be deleted through the projects API.
-            # Private ingest uses ownership, not the shared project's enablement gate.
+            # Personal projects cannot be deleted through the projects API.
             cleanup.callback(user_utils.deactivate_user, user.user_id)
             if role in ROLE_FLAGS:
                 user_utils.update_admin_user(user.user_id, **ROLE_FLAGS[role])
         cleanup.callback(delete_projects_strict, project_utils, list(projects))
         for name in projects:
             project_utils.create_project(name=name, cli_analytics_enabled=True)
-        assert_roles_are_real(users["owner"].client, projects[0])
+        assert_roles_are_real(users["regular"].client, projects[0])
         for role, user in users.items():
             for name in projects:
                 user_utils.assign_user_to_project(
@@ -225,6 +236,10 @@ def role_world(client, keycloak_utils, user_utils, project_utils):
             _wait_role(user, role, projects[0])
         prefix = get_random_name()
         world = RoleWorld(users, projects, sessions, prefix)
+        if not with_sessions:
+            yield world
+            return
+
         specs = [(f"{role}_shared", role, projects[1], False) for role in ROLES]
         specs += [
             ("owner_a", "owner", projects[0], False),
@@ -249,6 +264,8 @@ def role_world(client, keycloak_utils, user_utils, project_utils):
             _send_seed(users[role], seed, prefix, headers)
             sessions[key] = seed
 
+        expected_count = len(world.shared("admin"))
+
         def ready():
             rows = {
                 row["trace_id"]: row
@@ -264,7 +281,7 @@ def role_world(client, keycloak_utils, user_utils, project_utils):
                     for s in sessions.values()
                 )
                 and read_data(api, "cost", **world.filters)["kpis"]["total_sessions"]
-                == 7
+                == expected_count
             )
 
         assert_that(

@@ -15,23 +15,25 @@
 """Live AI Attribution role matrix with positive data and privacy controls."""
 
 import pytest
-from hamcrest import any_of, assert_that, empty, equal_to, has_length, instance_of
+from hamcrest import any_of, assert_that, empty, equal_to, instance_of
+
 from codemie_test_harness.tests.test_data.cli_analytics_rbac_test_data import (
     DETAIL_CASES,
-    ENDPOINTS,
     GLOBAL_READERS,
     ROLES,
+    SHARED_CASES,
 )
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import INGEST_PREFIX
 from codemie_test_harness.tests.utils.cli_analytics_rbac_utils import read_data
 
+pytestmark = pytest.mark.xdist_group("cli_analytics_rbac_api")
+
 
 @pytest.mark.parametrize("role", ROLES)
-@pytest.mark.parametrize("endpoint", ENDPOINTS)
 @pytest.mark.cli_analytics
 @pytest.mark.api
-def test_every_role_reads_every_dashboard_endpoint(cli_rbac_world, role, endpoint):
-    data = read_data(cli_rbac_world.api(role), endpoint, **cli_rbac_world.filters)
+def test_every_role_can_read_frameworks(cli_rbac_world, role):
+    data = read_data(cli_rbac_world.api(role), "frameworks", **cli_rbac_world.filters)
     assert_that(data, any_of(instance_of(dict), instance_of(list)))
 
 
@@ -47,28 +49,31 @@ def test_shared_sessions_follow_the_role_matrix(cli_rbac_world, role):
 
 
 @pytest.mark.parametrize("role", ROLES)
+@pytest.mark.parametrize("endpoint", ("cost", "overview"))
 @pytest.mark.cli_analytics
 @pytest.mark.api
-def test_cost_totals_include_only_authorized_shared_sessions(cli_rbac_world, role):
-    data = read_data(cli_rbac_world.api(role), "cost", **cli_rbac_world.filters)
+def test_dashboard_totals_include_only_authorized_shared_sessions(
+    cli_rbac_world, role, endpoint
+):
+    data = read_data(cli_rbac_world.api(role), endpoint, **cli_rbac_world.filters)
     expected = cli_rbac_world.shared(role)
     assert_that(data["kpis"]["total_sessions"], equal_to(len(expected)))
     assert_that(data["kpis"]["total_tokens"], equal_to(sum(s.tokens for s in expected)))
 
 
 @pytest.mark.parametrize("role", ROLES)
+@pytest.mark.parametrize("endpoint", ("users", "user-charts"))
 @pytest.mark.cli_analytics
 @pytest.mark.api
-def test_user_breakdown_contains_only_authorized_owners(cli_rbac_world, role):
-    data = read_data(cli_rbac_world.api(role), "users", **cli_rbac_world.filters)
+def test_user_breakdown_contains_only_authorized_owners(cli_rbac_world, role, endpoint):
+    data = read_data(cli_rbac_world.api(role), endpoint, **cli_rbac_world.filters)
+    expected = {
+        cli_rbac_world.users[s.owner].email.lower() for s in cli_rbac_world.shared(role)
+    }
+    assert_that(len(data["rows"]), equal_to(len(expected)))
     assert_that(
         {r["developer_name"] for r in data["rows"]},
-        equal_to(
-            {
-                cli_rbac_world.users[s.owner].email.lower()
-                for s in cli_rbac_world.shared(role)
-            }
-        ),
+        equal_to(expected),
     )
 
 
@@ -96,12 +101,16 @@ def test_foreign_project_and_user_filters_do_not_expand_access(cli_rbac_world, r
 
 
 @pytest.mark.parametrize("role", ROLES)
+@pytest.mark.parametrize(
+    "foreign_user_filter", (False, True), ids=("unfiltered", "foreign-user-filter")
+)
 @pytest.mark.cli_analytics
 @pytest.mark.api
 def test_personal_only_lists_exactly_the_permitted_private_sessions(
-    cli_rbac_world, role
+    cli_rbac_world, role, foreign_user_filter
 ):
-    rows = cli_rbac_world.rows(role, personal=True)
+    rows = cli_rbac_world.private_rows(role, foreign_user_filter)
+    assert_that(len(rows), equal_to(len(cli_rbac_world.private(role))))
     assert_that(
         {r["trace_id"] for r in rows},
         equal_to({s.trace_id for s in cli_rbac_world.private(role)}),
@@ -143,17 +152,78 @@ def test_missing_session_is_a_404_without_seeded_prompts(cli_rbac_world, role):
 @pytest.mark.parametrize("role", ROLES)
 @pytest.mark.cli_analytics
 @pytest.mark.api
-def test_an_owner_reads_their_own_private_session(cli_rbac_world, role):
-    rows = cli_rbac_world.rows(
-        role, personal=True, users=cli_rbac_world.users["owner"].email
-    )
-    own = [
-        r
-        for r in rows
-        if r["trace_id"] == cli_rbac_world.sessions[f"{role}_private"].trace_id
-    ]
+def test_repositories_contain_only_authorized_sessions(cli_rbac_world, role):
+    rows = read_data(
+        cli_rbac_world.api(role), "repositories", per_page=100, **cli_rbac_world.filters
+    )["rows"]
+    expected = {cli_rbac_world.repository(s): 1 for s in cli_rbac_world.shared(role)}
+    assert_that(len(rows), equal_to(len(expected)))
+    assert_that({r["repository"]: r["session_count"] for r in rows}, equal_to(expected))
+
+
+@pytest.mark.parametrize("role", ROLES)
+@pytest.mark.cli_analytics
+@pytest.mark.api
+def test_projects_contain_only_authorized_repositories(cli_rbac_world, role):
+    rows = read_data(
+        cli_rbac_world.api(role), "projects", per_page=100, **cli_rbac_world.filters
+    )["rows"]
+    expected = cli_rbac_world.project_counts(role)
+    assert_that(len(rows), equal_to(len(expected)))
     assert_that(
-        own,
-        has_length(1),
-        "A foreign user selector must not hide the viewer's own private session",
+        {r["project_name"]: r["session_count"] for r in rows}, equal_to(expected)
+    )
+    assert_that(
+        {repo["repository"] for row in rows for repo in row["repositories"]},
+        equal_to({cli_rbac_world.repository(s) for s in cli_rbac_world.shared(role)}),
+    )
+
+
+@pytest.mark.parametrize("role", ROLES)
+@pytest.mark.parametrize("case", SHARED_CASES)
+@pytest.mark.cli_analytics
+@pytest.mark.api
+def test_branches_follow_repository_access(cli_rbac_world, role, case):
+    seed = cli_rbac_world.detail_case(role, case)
+    rows = read_data(
+        cli_rbac_world.api(role),
+        "branches",
+        repository=cli_rbac_world.repository(seed),
+        **cli_rbac_world.filters,
+    )["rows"]
+    assert_that(
+        {r["branch"]: r["session_count"] for r in rows},
+        equal_to({"autotest": 1} if cli_rbac_world.may_read(role, seed) else {}),
+    )
+
+
+@pytest.mark.parametrize("role", ROLES)
+@pytest.mark.cli_analytics
+@pytest.mark.api
+def test_activity_counts_only_authorized_sessions(cli_rbac_world, role):
+    data = read_data(cli_rbac_world.api(role), "activity", **cli_rbac_world.filters)
+    expected = len(cli_rbac_world.shared(role))
+    assert_that(sum(data["by_hour"]), equal_to(expected))
+    assert_that(sum(data["by_weekday"]), equal_to(expected))
+
+
+@pytest.mark.parametrize("role", ROLES)
+@pytest.mark.cli_analytics
+@pytest.mark.api
+def test_model_tokens_include_only_authorized_sessions(cli_rbac_world, role):
+    data = read_data(cli_rbac_world.api(role), "tools", **cli_rbac_world.filters)
+    assert_that(
+        sum(row["total_tokens"] for row in data["tokens_by_model"]),
+        equal_to(sum(s.tokens for s in cli_rbac_world.shared(role))),
+    )
+
+
+@pytest.mark.parametrize("role", ROLES)
+@pytest.mark.cli_analytics
+@pytest.mark.api
+def test_session_depth_counts_only_authorized_sessions(cli_rbac_world, role):
+    data = read_data(cli_rbac_world.api(role), "efficiency", **cli_rbac_world.filters)
+    assert_that(
+        sum(row["count"] for row in data["session_depth"]),
+        equal_to(len(cli_rbac_world.shared(role))),
     )

@@ -225,14 +225,8 @@ HOOK_SENDERS = [
     pytest.param("sdk", id="sdk-sender"),
 ]
 
-# What each role reads from the CLI analytics GET endpoints, before and after a project is
-# disabled; disabling must not widen or narrow it. The aggregate reads (overview, repositories)
-# sit behind the router's `_admin_gate` (user.is_admin or user.is_applications_admin). The
-# session list does not: any signed-in user may call it, and a non-admin is scoped to their own
-# Personal sessions only. A maintainer is resolved to is_admin by User.resolve_is_admin, so it
-# reads like a global admin; a project admin passes the gate and sees only its own admin
-# projects. A plain member, an auditor and an unrelated user get 200 from the session list
-# without the seeded project session in it, and 403 from the aggregate reads.
+# Disabling ingestion preserves read permissions: all roles reach the endpoints,
+# while session visibility depends on ownership and project or platform roles.
 # The fields of a session row (LocalAnalyticsSessionRow) fixed once the seeded session is listed:
 # identity, owner, repository, start and the token counts. Excluded as genuinely volatile
 # because the backend derives them in the periodic rollup or from pricing: duration_ms, turns,
