@@ -2850,10 +2850,11 @@ def pytest_sessionfinish(session):
     predicate still requires the session prefix too, not "autotest-"
     alone. Skills are only scoped by created_by (matches every skill this
     TEST_USER created, across sessions — same as before this refactor,
-    not narrowed further here). Providers and cost centers match a
-    structural name pattern, also session-agnostic — except that a cost
-    center still pinned to a project (409 on delete) gets one prefix-scoped
-    retry: see delete_cost_centers' own docstring. Jira/Confluence/ADO
+    not narrowed further here). Providers match a structural name pattern,
+    also session-agnostic. Cost centers are scoped to this session's own
+    name letters (see get_random_cost_center_name), and one still pinned to
+    a project (409 on delete) gets one prefix-scoped retry: see
+    delete_cost_centers' own docstring. Jira/Confluence/ADO
     cleanup is intentionally NOT done here — see test_clean_all_entities
     for that.
 
