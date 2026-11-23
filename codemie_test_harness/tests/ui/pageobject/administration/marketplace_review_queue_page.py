@@ -23,6 +23,7 @@ from playwright.sync_api import expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 
 ROW_TIMEOUT_MS = 15000
 
@@ -132,10 +133,6 @@ class MarketplaceReviewQueuePage(BasePage):
     def column_header(self, name: str):
         """Column header of the table by its label."""
         return self.table.get_by_role("columnheader", name=name)
-
-    def toast(self, text: str):
-        """Toast notification containing the text."""
-        return self.page.locator(".codemie-toast").filter(has_text=text)
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
@@ -300,7 +297,7 @@ class MarketplaceReviewQueuePage(BasePage):
     @step
     def should_see_toast(self, text: str):
         """A toast with the text is shown."""
-        expect(self.toast(text)).to_be_visible(timeout=ROW_TIMEOUT_MS)
+        self.toast.should_show(text, ALL_VARIANTS)
         return self
 
     @step

@@ -20,6 +20,7 @@ from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.components.menu import Menu
 from codemie_test_harness.tests.ui.pageobject.components.pop_up import PopUp
+from codemie_test_harness.tests.ui.pageobject.components.toast import Toast
 
 
 class BasePage:
@@ -54,6 +55,11 @@ class BasePage:
         """Menu component instance."""
         return Menu(self.page)
 
+    @property
+    def toast(self) -> Toast:
+        """Toast notifications component instance."""
+        return Toast(self.page)
+
     # Common page elements
     @property
     def loading_indicator(self):
@@ -69,11 +75,6 @@ class BasePage:
     def success_message(self):
         """Success message element."""
         return self.page.locator(".success-message, .alert-success")
-
-    @property
-    def error_toast(self) -> Locator:
-        """Error toast notification (codemie-toast-err class)."""
-        return self.page.locator(".codemie-toast-err").first
 
     @property
     def page_content(self):

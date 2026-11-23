@@ -38,6 +38,7 @@ from hamcrest import (
 from playwright.sync_api import Locator, Request, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.test_data.export_conversation_test_data import (
     DIALOG_TITLE,
@@ -123,9 +124,6 @@ class ExportConversationDialog(BasePage):
     @property
     def any_menu(self) -> Locator:
         return self.page.get_by_role("menu")
-
-    def success_toast(self, text: str) -> Locator:
-        return self.page.locator(".codemie-toast-header").filter(has_text=text)
 
     # ==================== ACTIONS ====================
 
@@ -320,13 +318,13 @@ class ExportConversationDialog(BasePage):
 
     @step
     def should_show_success_toast(self, text: str):
-        expect(self.success_toast(text)).to_have_text(text)
+        self.toast.should_show(text, ALL_VARIANTS, exact=True)
         return self
 
     @step
     def should_not_show_success_toast(self):
         self._settle()
-        expect(self.success_toast("successfully exported")).to_have_count(0)
+        self.toast.should_not_show("successfully exported")
         return self
 
     @step

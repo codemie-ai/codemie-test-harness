@@ -123,13 +123,6 @@ class UserManagementPage(BasePage):
         """'Deactivated' status badge in the Name cell of the user's row."""
         return self._user_row(email).get_by_text("Deactivated", exact=True)
 
-    def _status_toast(self, action: str):
-        """Info toast shown after a successful status change."""
-        past = "deactivated" if action == "deactivate" else "reactivated"
-        return self.page.locator(".codemie-toast-info").filter(
-            has_text=f"User {past} successfully"
-        )
-
     @property
     def user_details_dialog(self):
         """'User Details' dialog panel."""
@@ -359,13 +352,14 @@ class UserManagementPage(BasePage):
     @step
     def should_see_status_toast(self, action: str):
         """Assert the success toast of the status change is shown."""
-        expect(self._status_toast(action)).to_be_visible(timeout=10000)
+        past = "deactivated" if action == "deactivate" else "reactivated"
+        self.toast.should_show(f"User {past} successfully", ("info",))
         return self
 
     @step
     def should_see_error_toast_with_text(self, text: str):
         """Assert an error toast is shown and its text contains ``text``."""
-        expect(self.error_toast).to_contain_text(text, timeout=10000)
+        self.toast.should_show_error_text(text)
         return self
 
     @step

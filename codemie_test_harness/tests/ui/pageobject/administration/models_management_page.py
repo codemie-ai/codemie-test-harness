@@ -37,6 +37,7 @@ from codemie_test_harness.tests.ui.test_data.model_management_test_data import (
     MODELS_MANAGEMENT_PATH,
     SETTINGS_UPDATED_TOAST,
 )
+from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 
 _LOAD_TIMEOUT_MS = 30000
 
@@ -143,13 +144,6 @@ class ModelsManagementPage(BasePage):
     def _bulk_action_item(self, label: str) -> Locator:
         """Item of the open Bulk Actions menu."""
         return self.page.get_by_role("menuitem", name=label, exact=True)
-
-    @property
-    def settings_updated_toast(self) -> Locator:
-        """Toast that confirms the stored change."""
-        return self.page.locator(".codemie-toast").filter(
-            has_text=SETTINGS_UPDATED_TOAST
-        )
 
     # ── Navigation and actions ────────────────────────────────────────────────
 
@@ -284,7 +278,7 @@ class ModelsManagementPage(BasePage):
     @step
     def should_show_settings_updated_toast(self):
         """Assert the 'Model settings updated' toast is shown."""
-        expect(self.settings_updated_toast.first).to_be_visible(timeout=10000)
+        self.toast.should_show(SETTINGS_UPDATED_TOAST, ALL_VARIANTS)
         return self
 
     @step
