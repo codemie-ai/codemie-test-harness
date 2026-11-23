@@ -37,6 +37,7 @@ from hamcrest import (
     instance_of,
     is_,
     is_not,
+    only_contains,
 )
 
 from codemie_test_harness.tests.test_data.project_activity_test_data import (
@@ -81,10 +82,21 @@ def test_project_admin_reads_own_trail_newest_first_paginated_and_labelled(
         equal_to([event.id for event in populated_trail.events[: 2 * PAGE_SIZE]]),
         "the project admin sees the same newest events as the maintainer",
     )
-    for event in paged:
-        assert_that(event.domain, instance_of(str), event.event_type)
-        assert_that(event.label, instance_of(str), event.event_type)
-        assert_that(event.category, instance_of(str), event.event_type)
+    assert_that(
+        [event.domain for event in paged],
+        only_contains(instance_of(str)),
+        "every event carries its domain",
+    )
+    assert_that(
+        [event.label for event in paged],
+        only_contains(instance_of(str)),
+        "every event carries its label",
+    )
+    assert_that(
+        [event.category for event in paged],
+        only_contains(instance_of(str)),
+        "every event carries its category",
+    )
     known = [event for event in paged if event.event_type in EVENT_TAXONOMY]
     assert_that(
         [(event.label, event.category) for event in known],

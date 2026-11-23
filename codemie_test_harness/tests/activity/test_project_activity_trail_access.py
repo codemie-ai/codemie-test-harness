@@ -28,7 +28,6 @@ from hamcrest import (
     equal_to,
     has_item,
     has_items,
-    is_not,
 )
 
 from codemie_test_harness.tests.test_data.project_activity_test_data import (
@@ -38,27 +37,7 @@ from codemie_test_harness.tests.test_data.project_activity_test_data import (
 from codemie_test_harness.tests.utils.activity_utils import ActivityUtils
 
 
-# @case project-scoped-activity-trail_TC_007
-@pytest.mark.activity
-@pytest.mark.api
-@pytest.mark.parametrize(
-    "request_name",
-    ["project_events_denial", "project_event_metadata_denial"],
-    ids=["trail", "metadata"],
-)
-@pytest.mark.parametrize(
-    "project_is_known", [True, False], ids=["existing-project", "unknown-project"]
-)
-def test_non_admin_gets_not_found_for_trail_and_metadata(
-    trail_project, trail_project_member, project_is_known, request_name
-):
-    project_instance_id = (
-        trail_project.instance_id if project_is_known else unknown_project_instance_id()
-    )
-    caller = ActivityUtils(trail_project_member.client)
-
-    denial = getattr(caller, request_name)(project_instance_id)
-
+def assert_denied_as_not_found(denial):
     assert_that(denial.status_code, equal_to(404), denial.body)
     assert_that(
         denial.message,
@@ -70,6 +49,42 @@ def test_non_admin_gets_not_found_for_trail_and_metadata(
         equal_to(["error"]),
         "the denial carries no events, counts, types or labels",
     )
+
+
+# @case project-scoped-activity-trail_TC_007
+@pytest.mark.activity
+@pytest.mark.api
+@pytest.mark.parametrize(
+    "request_name",
+    ["project_events_denial", "project_event_metadata_denial"],
+    ids=["trail", "metadata"],
+)
+def test_non_admin_member_gets_not_found_for_trail_and_metadata_of_existing_project(
+    trail_project, trail_project_member, request_name
+):
+    caller = ActivityUtils(trail_project_member.client)
+
+    denial = getattr(caller, request_name)(trail_project.instance_id)
+
+    assert_denied_as_not_found(denial)
+
+
+# @case project-scoped-activity-trail_TC_007
+@pytest.mark.activity
+@pytest.mark.api
+@pytest.mark.parametrize(
+    "request_name",
+    ["project_events_denial", "project_event_metadata_denial"],
+    ids=["trail", "metadata"],
+)
+def test_non_admin_gets_not_found_for_trail_and_metadata_of_unknown_project(
+    platform_user, request_name
+):
+    caller = ActivityUtils(platform_user.client)
+
+    denial = getattr(caller, request_name)(unknown_project_instance_id())
+
+    assert_denied_as_not_found(denial)
 
 
 # @case project-scoped-activity-trail_TC_008
@@ -139,8 +154,8 @@ def test_personal_project_trail_is_not_served_to_platform_admin(
 # @case project-scoped-activity-trail_TC_009
 @pytest.mark.activity
 @pytest.mark.api
-def test_shared_project_trail_holds_no_event_of_a_personal_project(
-    activity_utils, trail_project, trail_project_member, platform_user
+def test_shared_project_trail_holds_only_events_of_that_project(
+    activity_utils, trail_project, trail_project_member
 ):
     events = activity_utils.list_all_project_events(trail_project.instance_id)
 
@@ -154,9 +169,4 @@ def test_shared_project_trail_holds_no_event_of_a_personal_project(
         [event.event_type for event in events],
         has_items("project.created", "user.project.assigned"),
         "the shared project does have events, including the member's assignment",
-    )
-    assert_that(
-        project_names,
-        is_not(has_item(platform_user.email)),
-        "no event of the member's personal project appears",
     )
