@@ -449,6 +449,12 @@ class ProjectDetailsPage(BasePage):
         return self
 
     @step
+    def should_not_list_member(self, email: str):
+        """Verify the Members tab table has no member with this e-mail."""
+        expect(self.member_row(email)).to_have_count(0, timeout=15000)
+        return self
+
+    @step
     def should_not_be_in_user_management(self):
         """Verify the browser is not on a User Management URL (/settings/administration/users)."""
         expect(self.page).not_to_have_url(

@@ -27,15 +27,13 @@ back through the SDK. Role accounts of the non-link case come from the module-sc
 
 import pytest
 from hamcrest import assert_that, greater_than
+from playwright.sync_api import expect
 
 from codemie_test_harness.tests.ui.pageobject.administration.project_details_page import (
     ProjectDetailsPage,
 )
 from codemie_test_harness.tests.ui.pageobject.administration.project_management_page import (
     ProjectManagementPage,
-)
-from codemie_test_harness.tests.ui.pageobject.administration.user_management_page import (
-    UserManagementPage,
 )
 
 
@@ -65,11 +63,12 @@ def test_users_cell_shows_badge_with_user_count(page, project_utils, project):
 @pytest.mark.prod_regression
 @pytest.mark.project
 @pytest.mark.oss_standalone
-def test_users_badge_opens_user_management_filtered_by_project(
+def test_users_badge_opens_members_tab_listing_only_assigned_user(
     page, project_utils, platform_user, second_platform_user, project
 ):
-    """Clicking the Users badge opens User Management with
-    ?projects=<project name>; the assigned user is listed and the unassigned one is not."""
+    """Clicking the Users badge opens the Members tab of the same project
+    (.../projects/<project name>/members); the assigned user is listed and the unassigned one
+    is not."""
     assigned_email, assigned_id = platform_user.email, platform_user.user_id
     unassigned_email = second_platform_user.email
     created = project()
@@ -82,54 +81,57 @@ def test_users_badge_opens_user_management_filtered_by_project(
 
     projects_page.click_users_badge(created.name)
 
-    users_page = UserManagementPage(page)
-    users_page.should_be_filtered_by_project_in_url(created.name)
-    users_page.should_list_user(assigned_email)
-    users_page.should_not_list_user(unassigned_email)
+    details_page = ProjectDetailsPage(page)
+    details_page.should_be_on_members_tab(created.name)
+    details_page.should_list_member(assigned_email)
+    details_page.should_not_list_member(unassigned_email)
 
 
 @pytest.mark.ui
 @pytest.mark.prod_regression
 @pytest.mark.project
 @pytest.mark.oss_standalone
-def test_project_filter_shows_selected_project_after_badge_navigation(page, project):
-    """After navigating through the Users badge the project is
-    shown as selected in the User Management project filter, not only present in the URL."""
+def test_members_tab_shows_selected_project_after_badge_navigation(page, project):
+    """After navigating through the Users badge the project is shown as selected on the page
+    (heading is the project's name, Members tab is the selected tab), not only present in the
+    URL; the Overview tab is not selected."""
     created = project()
     projects_page = ProjectManagementPage(page).navigate_to()
     projects_page.should_list_project(created.name)
 
     projects_page.click_users_badge(created.name)
 
-    users_page = UserManagementPage(page)
-    users_page.should_be_filtered_by_project_in_url(created.name)
-    users_page.should_show_project_selected_in_filter(created.name)
+    details_page = ProjectDetailsPage(page)
+    details_page.should_be_on_members_tab(created.name)
+    expect(details_page.overview_tab).to_have_attribute(
+        "aria-selected", "false", timeout=15000
+    )
 
 
 @pytest.mark.ui
 @pytest.mark.project
 @pytest.mark.parametrize(
-    "acting_credentials, badge_is_link",
+    "acting_credentials",
     [
-        pytest.param("cli_project_admin", False, id="project admin - no link"),
-        pytest.param("cli_maintainer", True, id="maintainer - link"),
+        pytest.param("cli_project_admin", id="project admin - link"),
+        pytest.param("cli_maintainer", id="maintainer - link"),
     ],
-    indirect=["acting_credentials"],
+    indirect=True,
 )
 @pytest.mark.oss_standalone
-def test_users_badge_is_a_link_only_for_platform_roles(
-    page, project_utils, cli_ui_world, acting_credentials, badge_is_link
+def test_users_badge_is_a_link_to_members_tab_for_every_role(
+    page, project_utils, cli_ui_world, acting_credentials
 ):
-    """The Users badge always shows the count; it is a link to
-    User Management for a maintainer and a plain, non-clickable badge for a project admin
-    without a platform role."""
+    """The Users badge shows the count and is a link to the project's Members tab for a
+    maintainer and for a project admin without a platform role."""
     target = cli_ui_world.target
     expected_count = project_utils.get_project_detail(target).user_count
     projects_page = ProjectManagementPage(page).navigate_to()
 
     projects_page.should_list_project(target)
 
-    projects_page.should_see_users_badge(target, expected_count, as_link=badge_is_link)
+    projects_page.should_see_users_badge(target, expected_count, as_link=True)
+    projects_page.should_link_users_badge_to_members_tab(target)
 
 
 # @case project-management-open-project-members_TC_001
