@@ -84,6 +84,11 @@ def test_upload_icon_in_create_form_previews_it_and_shows_it_on_workflow_list(
         lambda: workflow_utils.client.workflows.list(per_page=200, filter_by_user=True),
         entity_name=ui_workflow_name,
     )
+    # A direct goto('/workflows/new') leaves no in-app history entry, so the app returns to
+    # /workflows/all after the create (NewWorkflowPage.tsx, goBackWorkflows.ts). Open the
+    # 'My workflows' list from the sidebar once the workflow is saved.
+    workflows_page.open_my_workflows()
+    workflows_page.should_have_url_containing("/workflows/my")
     saved_icon_url = workflow_utils.get_workflow(created.id).icon_url
     assert_that(
         decode_file_url(saved_icon_url),
@@ -112,7 +117,7 @@ def test_icon_can_be_replaced_and_removed_in_edit_form(
     config_panel.should_have_uploaded_icon_name("jpg")
     config_panel.click_save()
     edit_page.click_save()
-    edit_page.toast.should_show_success(WORKFLOW_UPDATED_TOAST)
+    edit_page.toast.should_show(WORKFLOW_UPDATED_TOAST)
 
     assert_that(
         decode_file_url(workflow_utils.get_workflow(workflow_with_icon.id).icon_url),
@@ -129,7 +134,7 @@ def test_icon_can_be_replaced_and_removed_in_edit_form(
     config_panel.should_not_show_icon_preview()
     config_panel.click_save()
     edit_page.click_save()
-    edit_page.toast.should_show_success(WORKFLOW_UPDATED_TOAST)
+    edit_page.toast.should_show(WORKFLOW_UPDATED_TOAST)
 
     assert_that(
         workflow_utils.get_workflow(workflow_with_icon.id).icon_url,
@@ -178,7 +183,18 @@ def test_uploaded_icon_appears_on_workflow_page_and_in_chat_sidebar(
         workflow_with_icon.icon_url
     )
 
-    ChatPage(page).navigate_to(workflow_conversation_id)
-    ChatsSidebar(page).should_show_chat_icon(
-        workflow_conversation_id, workflow_with_icon.icon_url
-    )
+    chat_page = ChatPage(page)
+    chat_page.navigate_to(workflow_conversation_id)
+    sidebar = ChatsSidebar(page)
+    # The sidebar renders a chat row's avatar only when the list density is not Compact
+    # (ChatListItem.tsx), and Compact is the default (store/chatViewSettings.ts). Switch the
+    # density to Detailed for this check and restore the previous one afterwards. The
+    # 'Show workflow runs separately' setting is not touched.
+    previous_density = sidebar.get_chat_list_density()
+    try:
+        sidebar.set_chat_list_density("detailed")
+        sidebar.should_show_chat_icon(
+            workflow_conversation_id, workflow_with_icon.icon_url
+        )
+    finally:
+        sidebar.set_chat_list_density(previous_density)

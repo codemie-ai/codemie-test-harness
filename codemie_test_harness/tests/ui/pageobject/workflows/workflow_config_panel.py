@@ -116,10 +116,12 @@ class WorkflowConfigPanel:
     # ------ Icon Upload Elements (in Basic Tab) ------
     @property
     def icon_upload_button(self) -> Locator:
-        """Opens the icon file chooser: 'Upload image' while empty, 'Upload logo' once set."""
-        return self.config_panel.get_by_role(
-            "button", name=re.compile(r"^Upload (image|logo)$")
-        )
+        """The 'Upload logo' button that opens the icon file chooser.
+
+        The round avatar next to it is a second control labelled 'Upload image' while the icon is
+        empty; the text button is the one present in both states, so it is the one targeted.
+        """
+        return self.config_panel.get_by_role("button", name="Upload logo", exact=True)
 
     @property
     def icon_delete_button(self) -> Locator:

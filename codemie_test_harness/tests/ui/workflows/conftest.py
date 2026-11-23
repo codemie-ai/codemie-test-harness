@@ -700,13 +700,28 @@ def workflow_with_icon(workflow_utils, default_llm, tmp_path):
 
 
 @pytest.fixture
-def workflow_conversation_id(workflow_with_icon, conversation_utils):
-    """Id of a workflow conversation of ``workflow_with_icon``, created through the API.
+def workflow_conversation_id(workflow_with_icon, conversation_utils, workflow_utils):
+    """Id of a workflow conversation of ``workflow_with_icon`` that has a started chat.
 
-    Deleting the workflow in the ``workflow_with_icon`` teardown deletes its conversations.
+    The sidebar lists a workflow conversation only after a message was sent in it: a
+    conversation created with no message carries no workflow flag. The conversation is
+    created through the API and one execution is run in it, the way the API chat-mode tests
+    do (``test_workflow_execution_deletion.py``). The workflow is a single-assistant one, so
+    the run is one LLM call. Deleting the workflow in the ``workflow_with_icon`` teardown
+    deletes its conversations; the conversation is also deleted here, best effort.
     """
     conversation = conversation_utils.create_conversation(
         initial_assistant_id=workflow_with_icon.id,
         is_workflow_conversation=True,
     )
-    return conversation["id"]
+    conversation_id = conversation["id"]
+    workflow_utils.create_workflow_execution(
+        workflow_id=workflow_with_icon.id,
+        user_input="Say hello",
+        conversation_id=conversation_id,
+    )
+    yield conversation_id
+    try:
+        conversation_utils.delete_conversation(conversation_id)
+    except Exception as e:
+        logger.warning(f"Failed to delete conversation {conversation_id}: {e}")
