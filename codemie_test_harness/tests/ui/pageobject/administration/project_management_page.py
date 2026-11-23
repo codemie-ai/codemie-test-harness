@@ -19,7 +19,7 @@ URL: /settings/administration/projects
 
 import re
 from itertools import permutations
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from playwright.sync_api import expect
 from reportportal_client import step
@@ -302,7 +302,9 @@ class ProjectManagementPage(BasePage):
     # FE: src/pages/settings/administration/projectsManagement/ProjectsManagementFull.tsx:161,195,521
     #     src/pages/settings/administration/projectsManagement/ResourceCounterBadge.tsx:35,42
     # The 'Users' column stays; its cell holds a badge (aria-label 'Users', svg icon, count).
-    # The badge is a link to User Management only for admin / maintainer / auditor.
+    # The badge of a shared project is a link to the project's Members tab (route
+    # 'projects-management-members', ProjectsManagementFull.tsx:buildUsersLink) for every role that can
+    # see the list; the badge of a personal project is shown without a link.
 
     @property
     def users_column_header(self):
@@ -337,7 +339,7 @@ class ProjectManagementPage(BasePage):
 
     @step
     def click_users_badge(self, project_name: str):
-        """Click the Users badge of a project row (navigates to User Management)."""
+        """Click the Users badge of a project row (navigates to the project's Members tab)."""
         badge = self._users_badge_links(project_name)
         expect(badge).to_be_visible(timeout=15000)
         badge.click()
@@ -358,6 +360,28 @@ class ProjectManagementPage(BasePage):
         expect(badge.locator("svg")).to_be_visible()
         expect(badge).to_have_text(str(count), timeout=15000)
         expect(self._users_badge_links(project_name)).to_have_count(1 if as_link else 0)
+        return self
+
+    @step
+    def should_link_users_badge_to_members_tab(self, project_name: str):
+        """Verify the row's Users badge is a link whose target is the Members tab of the
+        same project (`<PATH>/<project name>/members`)."""
+        encoded_name = quote(project_name, safe="")
+        expect(self._users_badge_links(project_name)).to_have_attribute(
+            "href",
+            re.compile(re.escape(f"{self.PATH}/{encoded_name}/members") + r"/?$"),
+            timeout=15000,
+        )
+        return self
+
+    @step
+    def should_see_users_badge_without_link(self, project_name: str):
+        """Verify the row's Users cell holds the badge (aria-label 'Users', svg icon) and that
+        it is not a link."""
+        badge = self._users_badge(project_name)
+        expect(badge).to_have_count(1, timeout=15000)
+        expect(badge.locator("svg")).to_be_visible()
+        expect(self._users_badge_links(project_name)).to_have_count(0)
         return self
 
     # ── Cost center filter ────────────────────────────────────────────────────
