@@ -490,13 +490,7 @@ class McpManagementPage(BasePage):
         return self
 
     @step
-    def should_see_error_toast(self):
-        """Assert an error toast is shown."""
-        expect(self.error_toast).to_be_visible(timeout=10000)
-        return self
-
-    @step
     def should_see_error_toast_with_text(self, text: str):
         """Assert an error toast is shown and its text contains ``text``."""
-        expect(self.error_toast).to_contain_text(text, timeout=10000)
+        self.toast.should_show_error_text(text)
         return self

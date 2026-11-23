@@ -33,6 +33,7 @@ from codemie_test_harness.tests.ui.test_data.hosted_application_ui_test_data imp
     SHARING_UPDATED_TOAST,
     USER_REMOVED_TOAST,
 )
+from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 
 
 class HostedShareDialog(BasePage):
@@ -157,14 +158,6 @@ class HostedShareDialog(BasePage):
             has_text=re.compile(rf"^{re.escape(message)}$")
         )
 
-    def toast(self, text: str) -> Locator:
-        """The visible notification with this text, in the notification area.
-
-        The screen-reader copy of the same text lives elsewhere (in the open dialog, or at the
-        end of the page) and is left out.
-        """
-        return self.page.locator("#toast-container").get_by_text(text, exact=True)
-
     # ------------------------------------------------------------------
     # Actions
     # ------------------------------------------------------------------
@@ -223,7 +216,7 @@ class HostedShareDialog(BasePage):
     def copy_link(self):
         """Press Copy share link and wait for the copy to be confirmed."""
         self.copy_link_button.click()
-        expect(self.toast(LINK_COPIED_TOAST)).to_be_visible()
+        self.toast.should_show(LINK_COPIED_TOAST, ALL_VARIANTS, exact=True)
         return self
 
     @step
@@ -283,13 +276,13 @@ class HostedShareDialog(BasePage):
     @step
     def should_be_closed_after_sharing(self):
         """Save closed the dialog and said the sharing was updated."""
-        expect(self.toast(SHARING_UPDATED_TOAST)).to_be_visible()
+        self.toast.should_show(SHARING_UPDATED_TOAST, ALL_VARIANTS, exact=True)
         expect(self.heading).to_be_hidden()
         return self
 
     @step
     def should_confirm_removal(self):
-        expect(self.toast(USER_REMOVED_TOAST)).to_be_visible()
+        self.toast.should_show(USER_REMOVED_TOAST, ALL_VARIANTS, exact=True)
         return self
 
     @step
@@ -301,7 +294,7 @@ class HostedShareDialog(BasePage):
     @step
     def should_have_no_link(self):
         """The link is revoked: the dialog says so and no longer offers to revoke it."""
-        expect(self.toast(LINK_REVOKED_TOAST)).to_be_visible()
+        self.toast.should_show(LINK_REVOKED_TOAST, ALL_VARIANTS, exact=True)
         expect(self.revoke_link_button).to_have_count(0)
         return self
 
@@ -320,5 +313,5 @@ class HostedShareDialog(BasePage):
         """The dialog stays open and shows the refusal message, also as a notification."""
         expect(self.heading).to_be_visible()
         expect(self.error_text(message)).to_be_visible()
-        expect(self.toast(message)).to_be_visible()
+        self.toast.should_show(message, ALL_VARIANTS, exact=True)
         return self

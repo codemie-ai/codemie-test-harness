@@ -99,10 +99,6 @@ class ProjectManagementPage(BasePage):
         """The 'Change ownership' item of the currently open 3-dot action menu."""
         return self._action_menu.locator("button").filter(has_text="Change ownership")
 
-    def _info_toast(self, text: str):
-        """An info toast (codemie-toast-info) containing the given text."""
-        return self.page.locator(".codemie-toast-info").filter(has_text=text)
-
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @step
@@ -299,9 +295,7 @@ class ProjectManagementPage(BasePage):
     @step
     def should_see_ownership_transferred_toast(self, new_owner_name: str):
         """Verify the 'Ownership transferred to <name>' toast is shown."""
-        expect(
-            self._info_toast(f"Ownership transferred to {new_owner_name}")
-        ).to_be_visible(timeout=10000)
+        self.toast.should_show(f"Ownership transferred to {new_owner_name}", ("info",))
         return self
 
     # ── Users badge ───────────────────────────────────────────────────────────

@@ -1399,10 +1399,7 @@ class CreateEditDatasourcePage(BasePage):
         error_dialog = self.page.locator('dialog:has-text("Repository not found")')
         expect(error_dialog).not_to_be_visible()
         # Also check for error toast notifications
-        error_toast = self.page.locator(
-            '.codemie-toast:has-text("Repository not found")'
-        )
-        expect(error_toast).not_to_be_visible()
+        self.toast.should_not_show("Repository not found")
         return self
 
     @step

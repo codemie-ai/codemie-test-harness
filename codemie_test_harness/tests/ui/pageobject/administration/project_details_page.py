@@ -338,10 +338,8 @@ class ProjectDetailsPage(BasePage):
 
     @step
     def should_show_toast(self, text: str):
-        """A toast in the status region shows the text."""
-        expect(
-            self.page.get_by_role("status").filter(has_text=text).first
-        ).to_be_visible()
+        """A toast shows the text."""
+        self.toast.should_show(text)
         return self
 
     @step
