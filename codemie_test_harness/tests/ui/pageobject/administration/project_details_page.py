@@ -35,6 +35,9 @@ from urllib.parse import quote
 from playwright.sync_api import expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.administration.project_activity_history_modal import (
+    ProjectActivityHistoryModal,
+)
 from codemie_test_harness.tests.ui.pageobject.administration.unified_project_budget_modal_page import (
     UnifiedProjectBudgetModalPage,
 )
@@ -254,6 +257,11 @@ class ProjectDetailsPage(BasePage):
     def edit_project_button(self):
         """'Edit Project' button in the page header (ProjectDetailsPage.tsx:253-258)."""
         return self.page.get_by_role("button", name="Edit Project", exact=True)
+
+    @property
+    def history_button(self):
+        """'History' button in the page header, next to 'Edit Project' (ProjectDetailsPage.tsx:321)."""
+        return self.page.get_by_role("button", name="History", exact=True)
 
     @property
     def ai_attribution_label(self):
@@ -608,4 +616,38 @@ class ProjectDetailsPage(BasePage):
             timeout=15000
         )
         expect(self.edit_project_button).to_have_count(0)
+        return self
+
+    @step
+    def open_history(self) -> ProjectActivityHistoryModal:
+        """Click 'History' and return the activity history modal."""
+        expect(self.history_button).to_be_visible(timeout=15000)
+        self.history_button.click()
+        return ProjectActivityHistoryModal(self.page)
+
+    @step
+    def should_have_history_button(self):
+        """Verify the page rendered and offers the 'History' button."""
+        expect(self.history_button).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_not_have_history_button(self):
+        """Verify the page rendered and there is no 'History' button.
+
+        The page is first proven loaded (the 'Owned by' field is visible), so the absence
+        check cannot pass merely because the page has not rendered yet.
+        """
+        expect(self.owned_by_label.or_(self.project_not_found_message)).to_be_visible(
+            timeout=15000
+        )
+        expect(self.history_button).to_have_count(0)
+        return self
+
+    @step
+    def should_have_members_tab_selected(self):
+        """Verify the 'Members' tab is the selected tab of the details page."""
+        expect(self.members_tab).to_have_attribute(
+            "aria-selected", "true", timeout=10000
+        )
         return self
