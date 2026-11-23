@@ -36,6 +36,7 @@ class ModelTypes(str, Enum):
     GPT_6_SOL = "gpt-6-sol"
     GPT_6_1_SOL = "gpt-6.1-sol"
     GPT_6_1_TERRA = "gpt-6.1-terra-2026-10-26"
+    GPT_6_2_SOL = "gpt-6.2-sol"
 
     # GCP
     CLAUDE_SONNET_4_5_VERTEX = "claude-4-5-sonnet-vertex"
