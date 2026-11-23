@@ -227,9 +227,9 @@ HOOK_SENDERS = [
 
 # What each role reads from the CLI analytics GET endpoints, before and after a project is
 # disabled; disabling must not widen or narrow it. All roles can call the read endpoints. A
-# maintainer reads like a global admin, and a project admin sees its own admin projects. An
-# auditor reads shared history, while a plain member and an unrelated user get successful empty
-# responses for the legacy session, which has no owner binding.
+# maintainer reads like a global admin, and a project admin sees its own admin projects. A plain
+# member, an auditor and an unrelated user get successful empty responses for the legacy session,
+# which has no owner binding.
 # The fields of a session row (LocalAnalyticsSessionRow) fixed once the seeded session is listed:
 # identity, owner, repository, start and the token counts. Excluded as genuinely volatile
 # because the backend derives them in the periodic rollup or from pricing: duration_ms, turns,
@@ -272,7 +272,9 @@ HISTORY_ROLES = [
     pytest.param(
         "member", HISTORY_READ_OWN_PERSONAL_ONLY, id="plain-member-own-personal-only"
     ),
-    pytest.param("auditor", HISTORY_READ_ALLOWED, id="auditor-reads-shared-history"),
+    pytest.param(
+        "auditor", HISTORY_READ_OWN_PERSONAL_ONLY, id="auditor-own-personal-only"
+    ),
     pytest.param(
         "unrelated",
         HISTORY_READ_OWN_PERSONAL_ONLY,
