@@ -1297,7 +1297,7 @@ class ChatPage(BasePage):
     def should_not_have_error_toast(self):
         """Assert no error toast visible — regression guard.
         Must be called during the action (inside capture_requests_during lambda) to catch transient toasts."""
-        expect(self.error_toast).to_be_hidden()
+        self.toast.should_not_show(variants=("error",))
         return self
 
     @step

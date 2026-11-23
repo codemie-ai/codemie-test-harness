@@ -19,6 +19,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect, Locator
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 from codemie_test_harness.tests.ui.pageobject.assistants.generate_with_ai_modal import (
     AIAssistantGeneratorPage,
 )
@@ -1880,7 +1881,7 @@ class CreateEditAssistantPage(BasePage):
         Returns:
             self: Returns the page object for method chaining
         """
-        expect(self.page.locator(".codemie-toast")).not_to_be_visible(timeout=3000)
+        self.toast.should_not_show()
         return self
 
     # ==================== HIDE TOOL OUTPUTS ====================
@@ -1912,9 +1913,7 @@ class CreateEditAssistantPage(BasePage):
     @step
     def should_see_toast_message(self, text: str):
         """Verify a toast notification with the given header text is shown."""
-        toast_header = self.page.locator(".codemie-toast .codemie-toast-header")
-        expect(toast_header).to_be_visible()
-        expect(toast_header).to_have_text(text)
+        self.toast.should_show(text, ALL_VARIANTS, exact=True)
         return self
 
     @step

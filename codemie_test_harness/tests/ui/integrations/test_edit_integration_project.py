@@ -32,8 +32,8 @@ from codemie_test_harness.tests.ui.pageobject.integrations.edit_integration_page
 from codemie_test_harness.tests.ui.pageobject.integrations.integrations_page import (
     IntegrationsPage,
 )
-from codemie_test_harness.tests.ui.test_data.integration_test_data import (
-    IntegrationTestDataFactory,
+from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    UPDATED_TOAST,
 )
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 
@@ -89,9 +89,7 @@ def test_edit_integration_change_project_after_confirmation(
     edit_integration_page.confirm_project_change()
 
     integrations_page = IntegrationsPage(page)
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_updated"]
-    )
+    integrations_page.toast.should_show(UPDATED_TOAST)
 
     moved = integration_utils.get_integration_by_id(
         integration.id, IntegrationType.PROJECT
