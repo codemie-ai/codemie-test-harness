@@ -113,6 +113,33 @@ class WorkflowConfigPanel:
         """Icon URL input field."""
         return self.page.get_by_role("textbox", name="Icon URL")
 
+    # ------ Icon Upload Elements (in Basic Tab) ------
+    @property
+    def icon_upload_button(self) -> Locator:
+        """The 'Upload logo' button that opens the icon file chooser.
+
+        The round avatar next to it is a second control labelled 'Upload image' while the icon is
+        empty; the text button is the one present in both states, so it is the one targeted.
+        """
+        return self.config_panel.get_by_role("button", name="Upload logo", exact=True)
+
+    @property
+    def icon_delete_button(self) -> Locator:
+        """Removes the icon from the field."""
+        return self.config_panel.get_by_role("button", name="Delete logo")
+
+    @property
+    def icon_preview(self) -> Locator:
+        """Preview image of the chosen icon."""
+        return self.config_panel.get_by_alt_text("Preview", exact=True)
+
+    @property
+    def icon_hint(self) -> Locator:
+        """Upload limits hint under the icon input."""
+        return self.config_panel.get_by_text(
+            "Must be PNG, JPEG or SVG and max size 512kb"
+        )
+
     # ------ Categories Field Elements (in Basic Tab) ------
     @property
     def categories_dropdown(self) -> Locator:
@@ -335,6 +362,18 @@ class WorkflowConfigPanel:
         """Fill the icon URL field."""
         self.icon_url_input.fill(icon_url)
 
+    @step
+    def upload_icon(self, file_path):
+        """Choose an icon file through the file chooser of the icon upload button."""
+        with self.page.expect_file_chooser() as chooser_info:
+            self.icon_upload_button.click()
+        chooser_info.value.set_files(str(file_path))
+
+    @step
+    def remove_icon(self):
+        """Remove the icon with the 'Delete logo' button."""
+        self.icon_delete_button.click()
+
     # ------ Categories Actions ------
     @step
     def select_categories(self, names: list[str]):
@@ -556,6 +595,33 @@ class WorkflowConfigPanel:
     def should_have_icon_url_field_value(self, expected_value: str):
         """Verify that the icon URL field has the expected value."""
         expect(self.icon_url_input).to_have_value(expected_value)
+
+    @step
+    def should_show_icon_preview(self):
+        """Verify the chosen icon is previewed."""
+        expect(self.icon_preview).to_be_visible()
+
+    @step
+    def should_not_show_icon_preview(self):
+        """Verify no icon preview is shown."""
+        expect(self.icon_preview).to_have_count(0)
+
+    @step
+    def should_have_uploaded_icon_name(self, extension: str):
+        """Verify the icon field holds the server-generated file name with the extension."""
+        expect(self.icon_url_input).to_have_value(
+            re.compile(rf"^[0-9a-f]{{32}}\.{extension}$")
+        )
+
+    @step
+    def should_have_icon_hint(self):
+        """Verify the icon input shows the PNG, JPEG, SVG and 512 KB limits."""
+        expect(self.icon_hint).to_be_visible()
+
+    @step
+    def should_show_icon_error(self, message: str):
+        """Verify an icon upload error message is shown (inline or in a toast)."""
+        expect(self.page.get_by_text(message).first).to_be_visible()
 
     @step
     def should_have_empty_icon_url_field(self):

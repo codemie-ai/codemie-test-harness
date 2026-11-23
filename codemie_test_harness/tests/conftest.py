@@ -112,6 +112,9 @@ from codemie_test_harness.tests.utils.github_seed import (
 from codemie_test_harness.tests.utils.github_utils import GitHubUtils
 from codemie_test_harness.tests.utils.azure_devops_seed import SeedPullRequest
 from codemie_test_harness.tests.utils.azure_devops_utils import AzureDevOpsUtils
+from codemie_test_harness.tests.utils.hosted_application_utils import (
+    HostedApplicationUtils,
+)
 from codemie_test_harness.tests.utils.hosted_sharing_utils import HostedPeople
 from codemie_test_harness.tests.utils.http_utils import RequestHandler
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
@@ -837,6 +840,45 @@ def hosted_people(keycloak_utils, admin_utils, user_utils, project_utils):
         yield HostedPeople(
             cleanup, keycloak_utils, admin_utils, user_utils, project_utils
         )
+
+
+HOSTED_CATEGORY_COUNT = 3
+
+
+@pytest.fixture
+def hosted_categories(client):
+    """Three categories the platform already has, with plain names; the tests never change them.
+
+    Skips the test when the platform holds fewer than three such categories.
+    """
+    categories = HostedApplicationUtils(client).plain_categories(HOSTED_CATEGORY_COUNT)
+    if len(categories) < HOSTED_CATEGORY_COUNT:
+        pytest.skip(
+            f"the platform has fewer than {HOSTED_CATEGORY_COUNT} categories with plain names"
+        )
+    return categories
+
+
+@pytest.fixture
+def hosted_temp_category(categories_utils):
+    """Factory: create a category for the test; it is deleted after the test.
+
+    Category creation and deletion need an administrator, which the session client is. A category
+    an application still carries cannot be deleted, so the test removes those applications first.
+    """
+    created = []
+
+    def create():
+        category = categories_utils.create_category()
+        created.append(category.id)
+        return category
+
+    yield create
+    for category_id in created:
+        try:
+            categories_utils.delete_category(category_id)
+        except Exception as error:
+            logger.warning(f"Failed to delete category {category_id}: {error}")
 
 
 # Role fixtures. Each yields a LoggedInUser (email, password, user_id, client) of a fresh

@@ -21,6 +21,8 @@ from codemie_test_harness.tests.ui.pageobject.analytics.insights_table_widget im
 )
 from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
     ASSISTANTS_CHATS_TABLE,
+    TOP_ASSISTANTS_USAGE_TABLE,
+    TOP_WORKFLOW_USAGE_TABLE,
     WORKFLOWS_TABLE,
 )
 
@@ -42,12 +44,31 @@ def test_insights_assistants_chats_rows_ordered_by_total_cost(
 @pytest.mark.analytics
 @pytest.mark.ui
 @pytest.mark.prod_regression
-def test_insights_workflows_rows_ordered_by_total_runs(
+def test_insights_workflows_rows_ordered_by_total_cost(
     insights_activity, analytics_page
 ):
-    """Workflows rows are ordered by Total Runs descending, then Workflow Name ascending."""
-    # @case insights-page-fix-sorting-and_TC_002
+    """Workflows rows are ordered by Total Cost ($) descending, rows without a cost left out."""
+    # @case insights-page-change-sorting_TC_002
     widget = InsightsTableWidget(analytics_page.page, WORKFLOWS_TABLE).open()
+
+    widget.should_list_rows_with_different_costs()
+    widget.should_order_rows_by_cost_descending()
+
+
+@pytest.mark.analytics
+@pytest.mark.parametrize(
+    "table",
+    [TOP_ASSISTANTS_USAGE_TABLE, TOP_WORKFLOW_USAGE_TABLE],
+    ids=["top_assistants_usage", "top_workflow_usage"],
+)
+@pytest.mark.ui
+@pytest.mark.prod_regression
+def test_insights_top_usage_rows_ordered_by_invocations_then_name(
+    insights_activity, analytics_page, table
+):
+    """Top usage rows are ordered by Invocations descending, then by name ascending."""
+    # @case insights-page-change-sorting_TC_001
+    widget = InsightsTableWidget(analytics_page.page, table).open()
 
     widget.should_list_rows_with_different_counts()
     widget.should_order_rows_by_count_then_name()
