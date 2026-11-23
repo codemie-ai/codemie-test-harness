@@ -51,9 +51,13 @@ OLDEST_FIRST = "Oldest first"
 SETTINGS_CATEGORY = "Settings"
 BUDGET_CATEGORY = "Budget"
 
-# Updates the maintainer makes so that the trail outgrows the smallest page size (10).
-PAGED_UPDATES = 12
+# The modal lists 50 events per page until a size is chosen; the per-page selector renders
+# only while the list spans several pages, so the trail must outgrow the default size.
 SMALLEST_PAGE_SIZE = 10
+DEFAULT_PAGE_SIZE = 50
+# Events by which the trail exceeds the default page size, so a stray extra event
+# or two cannot bring it back to a single page.
+PAGE_OVERFLOW_MARGIN = 5
 
 # Budget limits the project budget is raised to (it is created with 100.00 / 50.00).
 RAISED_MAX_BUDGET = 1234.56

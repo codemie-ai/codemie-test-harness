@@ -38,7 +38,8 @@ from codemie_test_harness.tests.test_data.project_activity_test_data import (
 )
 from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
 from codemie_test_harness.tests.ui.test_data.project_history_test_data import (
-    PAGED_UPDATES,
+    DEFAULT_PAGE_SIZE,
+    PAGE_OVERFLOW_MARGIN,
     RAISED_MAX_BUDGET,
     RAISED_SOFT_BUDGET,
     role_credential_keys,
@@ -169,7 +170,9 @@ def read_trail(activity_utils, project, admin_user_id) -> HistoryTrail:
     return HistoryTrail(
         project=project,
         admin_user_id=admin_user_id,
-        events=activity_utils.list_all_project_events(project.instance_id),
+        events=activity_utils.list_all_project_events(
+            project.instance_id, sort_dir="desc"
+        ),
     )
 
 
@@ -195,9 +198,14 @@ def history_trail(
 
 @pytest.fixture
 def long_history_trail(history_trail, project_utils, activity_utils):
-    """history_trail plus PAGED_UPDATES description updates: more Settings events than
-    the smallest page size (10)."""
-    for number in range(1, PAGED_UPDATES + 1):
+    """history_trail plus description updates (one event each) until the whole trail
+    exceeds the default page size (50) by PAGE_OVERFLOW_MARGIN events, so the modal
+    spans several pages and renders its per-page selector; the extra events are
+    Settings events, far more than the smallest page size (10)."""
+    paged_updates = (
+        DEFAULT_PAGE_SIZE + PAGE_OVERFLOW_MARGIN + 1 - len(history_trail.events)
+    )
+    for number in range(1, paged_updates + 1):
         project_utils.update_project(
             history_trail.project.name, description=f"Paged update {number}"
         )
@@ -233,22 +241,26 @@ def raised_budget_trail(
 
 @pytest.fixture
 def trail_outside_maintainer_membership(
-    history_trail, project_utils, client, activity_utils
+    history_trail, platform_user, project_utils, client, activity_utils
 ):
     """history_trail of a project the maintainer is not a member of (a creator is a member
-    of the project they create; reading the history must not depend on it)."""
+    of the project they create; reading the history must not depend on it).
+
+    The platform rejects removing the owner, so ownership moves to a fixture user first and
+    the maintainer is unassigned afterwards. Ownership goes back to the maintainer on teardown,
+    which the project cascade delete of `history_project` needs.
+    """
+    name = history_trail.project.name
     maintainer_id = client.users.about_me().user_id
+    project_utils.transfer_ownership(name, platform_user.user_id)
     member_ids = {
-        member.user_id
-        for member in project_utils.get_project_detail(
-            history_trail.project.name
-        ).members
+        member.user_id for member in project_utils.get_project_detail(name).members
     }
     if maintainer_id in member_ids:
-        project_utils.remove_user_from_project(
-            history_trail.project.name, maintainer_id
-        )
-    return history_trail
+        project_utils.remove_user_from_project(name, maintainer_id)
+    yield history_trail
+    with contextlib.suppress(Exception):
+        project_utils.transfer_ownership(name, maintainer_id)
 
 
 @pytest.fixture

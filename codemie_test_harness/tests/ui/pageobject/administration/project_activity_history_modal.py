@@ -118,9 +118,25 @@ class ProjectActivityHistoryModal(BasePage):
         return self.dialog.get_by_role("combobox", name="Show: items per page")
 
     @property
+    def per_page_trigger(self):
+        """Clickable PrimeReact dropdown root that wraps the readonly per-page combobox.
+
+        The readonly input is covered by its dropdown root, which takes the pointer events,
+        so the click goes to the root that contains the combobox.
+        """
+        return self.dialog.locator("div.p-dropdown").filter(
+            has=self.page.get_by_role("combobox", name="Show: items per page")
+        )
+
+    @property
     def options(self):
         """Options of the dropdown panel that is open."""
         return self.page.get_by_role("listbox").get_by_role("option")
+
+    @property
+    def category_control(self):
+        """The Category multiselect combobox; its accessible text is the selected values."""
+        return self.dialog.get_by_role("combobox", name="Category", exact=True)
 
     def filter_control(self, label: str):
         """Filter control by its label: Category, From, To, Domain, Event type, Actor, Sort."""
@@ -197,8 +213,8 @@ class ProjectActivityHistoryModal(BasePage):
     @step
     def show_per_page(self, size: int):
         """Choose '<size> items' in the page-size selector."""
-        self.per_page_select.click()
-        self.page.get_by_role("option", name=f"{size} items", exact=True).click()
+        self.per_page_trigger.click()
+        self.options.filter(has_text=re.compile(rf"^\s*{size} items\s*$")).first.click()
         return self
 
     @step
@@ -279,9 +295,10 @@ class ProjectActivityHistoryModal(BasePage):
             ACTOR_FILTER_PLACEHOLDER,
             NEWEST_FIRST,
         ):
-            expect(self.dialog.get_by_text(placeholder, exact=True)).to_be_visible(
-                timeout=15000
-            )
+            # visible only: a native <option> with the same text can sit hidden in a <select>
+            expect(
+                self.dialog.get_by_text(placeholder, exact=True).locator("visible=true")
+            ).to_be_visible(timeout=15000)
         expect(self.filter_control("From")).to_have_value("")
         expect(self.filter_control("To")).to_have_value("")
         expect(self.clear_filters_button).to_have_count(0)
@@ -315,8 +332,18 @@ class ProjectActivityHistoryModal(BasePage):
 
     @step
     def should_show_category_selected(self, category: str):
-        """The Category filter still shows `category` as selected."""
-        expect(self.dialog.get_by_text(category, exact=True).first).to_be_visible()
+        """The Category filter control itself shows `category` as its selection.
+
+        The combobox is a readonly input, so the selection is its value, not its text.
+        The value must contain `category` and no longer be the 'All categories'
+        placeholder, and the modal must offer 'Clear filters'.
+        """
+        control = self.category_control
+        expect(control).to_have_value(re.compile(re.escape(category)), timeout=10000)
+        expect(control).not_to_have_value(
+            re.compile(re.escape(ALL_CATEGORIES_PLACEHOLDER))
+        )
+        expect(self.clear_filters_button).to_be_visible()
         return self
 
     @step

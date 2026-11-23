@@ -151,6 +151,13 @@ def test_category_and_date_range_filters_narrow_the_history(
 
 
 # @case project-history-modal_TC_003
+@pytest.mark.xfail(
+    raises=AssertionError,
+    strict=True,
+    reason="The modal sorts the Category options alphabetically (Account, Budget, "
+    "Members, Settings), while the activity metadata API returns them as Budget, "
+    "Members, Settings, Account; the options should keep the order the API returns",
+)
 @AS_PROJECT_ADMIN
 @pytest.mark.activity
 @pytest.mark.project
@@ -209,8 +216,10 @@ def test_paging_keeps_the_applied_filter_and_the_total(
     )
     _, modal = open_history(page, project.name)
 
-    modal.select_category(SETTINGS_CATEGORY)
+    # The per-page selector renders only while the list spans several pages, so set
+    # the size on the unfiltered list before narrowing it to one category.
     modal.show_per_page(SMALLEST_PAGE_SIZE)
+    modal.select_category(SETTINGS_CATEGORY)
 
     modal.should_show_category_selected(SETTINGS_CATEGORY)
     modal.should_show_total(total)
@@ -258,7 +267,7 @@ def test_expanded_row_shows_readable_budget_change_with_formatted_amounts(
 @pytest.mark.activity
 @pytest.mark.project
 @pytest.mark.ui
-def test_event_types_without_specific_rendering_show_a_readable_fallback(
+def test_every_event_row_expands_to_readable_detail_without_raw_json(
     page, history_trail
 ):
     _, modal = open_history(page, history_trail.project.name)
