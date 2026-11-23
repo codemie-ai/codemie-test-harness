@@ -246,7 +246,7 @@ class ProjectMembersBudgetSection(BasePage):
     @step
     def should_not_show_error_notification(self):
         """Verify no error toast is displayed."""
-        expect(self.error_toast).not_to_be_visible()
+        self.toast.should_not_show(variants=("error",))
         return self
 
     @step

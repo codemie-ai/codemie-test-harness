@@ -55,11 +55,7 @@ from codemie_test_harness.tests.utils.base_utils import (
 )
 
 
-@pytest.mark.smoke
 @pytest.mark.workflow
-@pytest.mark.ui
-@pytest.mark.not_for_parallel_run
-@pytest.mark.prod_regression
 def test_generate_workflow_renders_in_visual_editor(page, clear_workflow_ai_popup):
     """TC-01: submitting a NL description renders the workflow in the visual editor."""
     create_page = CreateWorkflowPage(page)
@@ -76,9 +72,6 @@ def test_generate_workflow_renders_in_visual_editor(page, clear_workflow_ai_popu
 
 
 @pytest.mark.workflow
-@pytest.mark.ui
-@pytest.mark.not_for_parallel_run
-@pytest.mark.prod_regression
 def test_edit_generated_node_field_saves_successfully(
     page, clear_workflow_ai_popup, cleanup_generated_workflow
 ):
@@ -119,9 +112,6 @@ def test_edit_generated_node_field_saves_successfully(
 
 
 @pytest.mark.workflow
-@pytest.mark.ui
-@pytest.mark.not_for_parallel_run
-@pytest.mark.prod_regression
 def test_drag_generated_node_repositions_on_canvas(page, clear_workflow_ai_popup):
     """TC-03: a generated node can be drag-and-drop repositioned on the canvas."""
     create_page = CreateWorkflowPage(page)
@@ -137,9 +127,6 @@ def test_drag_generated_node_repositions_on_canvas(page, clear_workflow_ai_popup
 
 
 @pytest.mark.workflow
-@pytest.mark.ui
-@pytest.mark.not_for_parallel_run
-@pytest.mark.prod_regression
 def test_generate_and_run_workflow_via_ui(
     page, client, clear_workflow_ai_popup, cleanup_generated_workflow
 ):

@@ -122,8 +122,8 @@ class IntegrationsListPage(BasePage):
         return self.page.get_by_role("option")
 
     @property
-    def toast(self) -> Locator:
-        """Status region the save and delete toasts appear in."""
+    def filter_note(self) -> Locator:
+        """Status note under the filters, e.g. the one telling a type was removed."""
         return self.page.get_by_role("status")
 
     @property
@@ -445,19 +445,13 @@ class IntegrationsListPage(BasePage):
     @step
     def should_show_filter_note(self, text: str):
         """A note under the filters carries the text."""
-        expect(self.toast.filter(has_text=text)).to_be_visible()
+        expect(self.filter_note.filter(has_text=text)).to_be_visible()
         return self
 
     @step
     def should_not_filter_by_type_in_url(self, type_name: str):
         """The address carries no 'type=<type_name>' filter."""
         expect(self.page).not_to_have_url(re.compile(rf"[?&]type={type_name}(&|$)"))
-        return self
-
-    @step
-    def should_show_toast(self, text: str):
-        """A toast shows the text."""
-        expect(self.toast.filter(has_text=text).first).to_be_visible()
         return self
 
     @step

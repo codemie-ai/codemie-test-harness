@@ -19,6 +19,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect, Locator
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 from codemie_test_harness.tests.ui.pageobject.assistants.generate_with_ai_modal import (
     AIAssistantGeneratorPage,
 )
@@ -286,6 +287,11 @@ class CreateEditAssistantPage(BasePage):
         to 'https://example.com/logo.jpg'. Identified by name attribute.
         """
         return self.page.locator('input[name="icon_url"]')
+
+    @property
+    def logo_hint(self) -> Locator:
+        """Hint under the logo input (LogoUrlInputField), carrying the upload limits."""
+        return self.page.get_by_text("Must be JPEG, PNG, SVG and max size 500kb")
 
     @property
     def description_textarea(self) -> Locator:
@@ -1630,6 +1636,12 @@ class CreateEditAssistantPage(BasePage):
         return self
 
     @step
+    def should_have_logo_upload_hint(self):
+        """Verify the logo input shows the assistant upload limits hint."""
+        expect(self.logo_hint).to_be_visible()
+        return self
+
+    @step
     def should_have_icon_url_value(self, expected_url: str):
         """Verify icon URL field has expected value."""
         expect(self.icon_url_input).to_have_value(expected_url)
@@ -1880,7 +1892,7 @@ class CreateEditAssistantPage(BasePage):
         Returns:
             self: Returns the page object for method chaining
         """
-        expect(self.page.locator(".codemie-toast")).not_to_be_visible(timeout=3000)
+        self.toast.should_not_show()
         return self
 
     # ==================== HIDE TOOL OUTPUTS ====================
@@ -1912,9 +1924,7 @@ class CreateEditAssistantPage(BasePage):
     @step
     def should_see_toast_message(self, text: str):
         """Verify a toast notification with the given header text is shown."""
-        toast_header = self.page.locator(".codemie-toast .codemie-toast-header")
-        expect(toast_header).to_be_visible()
-        expect(toast_header).to_have_text(text)
+        self.toast.should_show(text, ALL_VARIANTS, exact=True)
         return self
 
     @step

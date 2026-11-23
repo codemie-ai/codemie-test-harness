@@ -15,6 +15,7 @@
 from playwright.sync_api import expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 
 
@@ -66,11 +67,6 @@ class ShareAssistantPopup(BasePage):
     def cancel_button(self):
         """Dialog 'Cancel' button."""
         return self.dialog.get_by_role("button", name="Cancel")
-
-    @property
-    def status_toast(self):
-        """Status toast shown after Save: 'Assistant sharing updated.'."""
-        return self.page.get_by_text("Assistant sharing updated.")
 
     # --------------------------
     # --- ACTIONS ---
@@ -144,5 +140,5 @@ class ShareAssistantPopup(BasePage):
     @step
     def should_show_update_status(self):
         """Verify the 'Assistant sharing updated.' status toast appeared."""
-        expect(self.status_toast).to_be_visible()
+        self.toast.should_show("Assistant sharing updated.", ALL_VARIANTS)
         return self

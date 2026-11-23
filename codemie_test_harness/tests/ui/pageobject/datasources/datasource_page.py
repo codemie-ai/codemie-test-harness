@@ -18,6 +18,7 @@ from hamcrest import has_length, assert_that, greater_than_or_equal_to
 from playwright.sync_api import Error as PlaywrightError, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.pageobject.datasources.datasource_sidebar import (
     DataSourceSidebar,
@@ -97,10 +98,6 @@ class DataSourcePage(BasePage):
         return self.page.locator("span.text-left.grow").filter(
             has_text="Incremental Index"
         )
-
-    @property
-    def pop_up_message(self):
-        return self.page.locator(".codemie-toast-header")
 
     @property
     def search_input(self):
@@ -383,8 +380,7 @@ class DataSourcePage(BasePage):
 
     @step
     def should_see_pop_up_message(self, message):
-        expect(self.pop_up_message).to_be_visible()
-        expect(self.pop_up_message).to_have_text(message)
+        self.toast.should_show(message, ALL_VARIANTS, exact=True)
         return self
 
     # -----------------
