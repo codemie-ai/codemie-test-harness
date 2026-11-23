@@ -325,10 +325,9 @@ class WorkflowConfigPanel:
         self.project_dropdown.press("Enter")
         self.page.get_by_role("listbox").wait_for(state="visible")
         self.page.keyboard.type(project_name)
-        self.page.get_by_role("option").filter(has_text=project_name).first.wait_for(
-            state="visible"
-        )
-        self.page.get_by_role("option").filter(has_text=project_name).first.click()
+        option = self.page.get_by_role("option", name=project_name, exact=True)
+        option.wait_for(state="visible")
+        option.click()
 
     # ------ Shared Switch Actions ------
     @step

@@ -1428,7 +1428,9 @@ class CreateEditAssistantPage(BasePage):
 
         # Find the specific option role element for this skill in the dropdown
         # After filtering/typing, the skill should be visible in the dropdown
-        skill_option = self.page.get_by_role("option").filter(has_text=skill_name)
+        skill_option = self.page.get_by_role("option").filter(
+            has=self.page.get_by_text(skill_name, exact=True)
+        )
 
         if skill_option.count() > 0:
             skill_option.first.click()
@@ -1472,7 +1474,9 @@ class CreateEditAssistantPage(BasePage):
 
         # Find the skill option (which should be selected) and click it to deselect
         # Use role="option" to target the actual dropdown options
-        skill_option = self.page.get_by_role("option").filter(has_text=skill_name)
+        skill_option = self.page.get_by_role("option").filter(
+            has=self.page.get_by_text(skill_name, exact=True)
+        )
 
         if skill_option.count() > 0:
             skill_option.first.click()
@@ -1842,8 +1846,8 @@ class CreateEditAssistantPage(BasePage):
         filter_input.fill(datasource_name)
         self.page.wait_for_timeout(300)
 
-        datasource_option = (
-            self.page.get_by_role("option").filter(has_text=datasource_name).first
+        datasource_option = self.page.get_by_role("option").filter(
+            has=self.page.get_by_text(datasource_name, exact=True)
         )
         datasource_option.wait_for(state="visible", timeout=10000)
         if datasource_option.get_attribute("aria-selected") != "true":
@@ -1863,8 +1867,8 @@ class CreateEditAssistantPage(BasePage):
             self.datasource_context_dropdown.click()
 
         # Wait for options to load, then click if currently selected
-        datasource_option = (
-            self.page.get_by_role("option").filter(has_text=datasource_name).first
+        datasource_option = self.page.get_by_role("option").filter(
+            has=self.page.get_by_text(datasource_name, exact=True)
         )
         datasource_option.wait_for(state="visible", timeout=10000)
         if datasource_option.get_attribute("aria-selected") == "true":
