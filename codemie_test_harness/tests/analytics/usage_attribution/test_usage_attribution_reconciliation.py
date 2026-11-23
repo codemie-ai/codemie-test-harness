@@ -97,14 +97,15 @@ def test_production_experiments_and_unclassified_sum_to_cli_spend(cli_summary):
 @pytest.mark.parametrize("channel", CHANNELS)
 @pytest.mark.analytics
 @pytest.mark.api
-def test_who_pays_split_sums_to_its_amount(cli_summary, channel):
+def test_summary_who_pays_split_is_a_part_of_its_amount(cli_summary, channel):
     # @case usage-attribution-analytics-who-pays_TC_008
     split = cli_summary.data["who_pays"][channel]
 
     assert_that(
         sum(split.values()),
-        close_to(cli_summary.data["tiles"][channel], MONEY_TOLERANCE),
-        f"charged back + shared + personal = {channel} spend",
+        less_than_or_equal_to(cli_summary.data["tiles"][channel] + MONEY_TOLERANCE),
+        f"charged back + shared + personal is a part of {channel} spend; "
+        "the unclassified rest is only in the totals",
     )
 
 
@@ -171,7 +172,7 @@ def test_totals_who_pays_split_sums_to_its_amount(totals, channel):
     assert_that(
         sum(totals["who_pays"][channel].values()),
         close_to(totals[channel]["total"], MONEY_TOLERANCE),
-        f"charged back + shared + personal = {channel} total",
+        f"charged back + shared + personal + unclassified = {channel} total",
     )
 
 

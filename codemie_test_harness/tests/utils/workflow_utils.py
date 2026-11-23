@@ -115,6 +115,7 @@ class WorkflowUtils(BaseUtils):
         shared=False,
         project=None,
         categories=None,
+        icon_url=None,
     ):
         workflow_name = get_random_name() if not workflow_name else workflow_name
 
@@ -126,6 +127,7 @@ class WorkflowUtils(BaseUtils):
             yaml_config=workflow_yaml,
             shared=shared,
             categories=categories or [],
+            icon_url=icon_url,
         )
 
         response = self.client.workflows.create_workflow(request)
@@ -141,6 +143,7 @@ class WorkflowUtils(BaseUtils):
         shared=False,
         project_name=None,
         categories=None,
+        icon_url=None,
     ):
         """
         Sends request to workflow creation endpoint and waits for workflow created.
@@ -153,6 +156,7 @@ class WorkflowUtils(BaseUtils):
             shared,
             project_name,
             categories,
+            icon_url,
         )
 
         return wait_for_entity(
@@ -459,6 +463,13 @@ class WorkflowUtils(BaseUtils):
     def get_workflow(self, workflow_id):
         return self.client.workflows.get(workflow_id)
 
+    def upload_workflow_icon(self, file_path: Path, content_type: Optional[str] = None):
+        """Upload an icon image and return the ``file_url`` to use as a workflow ``icon_url``.
+
+        Raises requests.HTTPError when the server rejects the file (400).
+        """
+        return self.client.workflows.upload_icon(file_path, content_type)["file_url"]
+
     def get_workflow_execution(self, test_workflow_id, execution_id):
         return self.client.workflows.executions(test_workflow_id).get(execution_id)
 
@@ -492,8 +503,12 @@ class WorkflowUtils(BaseUtils):
         shared=None,
         categories=None,
         wait=True,
+        icon_url=None,
     ):
         """Update a workflow; ``categories=None`` leaves the stored categories untouched.
+
+        ``icon_url=None`` omits the field from the request and ``icon_url=""`` clears the
+        icon; a test that keeps an icon passes the stored ``icon_url`` again.
 
         With ``wait=False`` it returns the update response at once, without waiting for
         the workflow list to show the change.
@@ -507,6 +522,7 @@ class WorkflowUtils(BaseUtils):
             mode=mode if mode else workflow.mode,
             shared=shared if shared else workflow.shared,
             categories=categories,
+            icon_url=icon_url,
         )
         response = self.send_update_workflow_request(workflow.id, request=request)
         if not wait:

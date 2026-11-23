@@ -15,13 +15,22 @@
 """Page object for the Activity Events admin page.
 
 Locators derived from playwright-cli inspection of the
-/settings/administration/activity-events page.
+/settings/administration/activity-events page. A row is expanded through its
+'Expand row' control (shared Table component); the expanded detail is a list of
+'<Label>: <value>' lines.
 """
+
+import re
 
 from playwright.sync_api import expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+
+# A humanized attribute label of the expanded detail: 'Project name: ', never 'project_name: '
+HUMANIZED_LABEL = re.compile(r"[A-Z][A-Za-z]*( [A-Za-z]+)*: ")
+RAW_KEY_LABEL = re.compile(r"[a-z]+_[a-z_]+: ")
+JSON_BRACES = re.compile(r"[{}]")
 
 
 class ActivityEventsPage(BasePage):
@@ -70,9 +79,14 @@ class ActivityEventsPage(BasePage):
         return self.page.get_by_role("option", name=domain)
 
     @property
-    def event_detail_popup(self):
-        """Event detail dialog opened when a row Details button is clicked."""
-        return self.page.get_by_role("dialog")
+    def first_row(self):
+        """First event row of the table."""
+        return self.table_rows.first
+
+    @property
+    def first_row_detail(self):
+        """Expanded detail of the first event row: the row right after it."""
+        return self.first_row.locator("xpath=following-sibling::tr[1]")
 
     # ------------------------------------------------------------------
     # Navigation
@@ -107,14 +121,9 @@ class ActivityEventsPage(BasePage):
         return self
 
     @step
-    def click_event_row(self, index: int = 0):
-        """Click the Details button in the row at the given zero-based index.
-
-        Args:
-            index: Zero-based row index.  Defaults to first row.
-        """
-        row = self.table_rows.nth(index)
-        row.get_by_role("button").click()
+    def expand_first_row(self):
+        """Expand the first event row through its 'Expand row' control."""
+        self.first_row.get_by_role("button", name="Expand row").click()
         return self
 
     def get_first_row_identifier(self) -> str:
@@ -153,22 +162,13 @@ class ActivityEventsPage(BasePage):
         return self
 
     @step
-    def should_show_event_detail_popup(self):
-        """Assert the event detail dialog is visible."""
-        expect(self.event_detail_popup).to_be_visible(timeout=10000)
-        return self
-
-    @step
-    def should_popup_contain_fields(self, fields: list[str]):
-        """Assert each field label is visible inside the event detail dialog.
-
-        Args:
-            fields: List of label texts expected in the popup.
-        """
-        for field in fields:
-            expect(
-                self.event_detail_popup.get_by_text(field, exact=False)
-            ).to_be_visible(timeout=5000)
+    def should_show_readable_first_row_detail(self):
+        """Assert the expanded first row lists humanized, labelled attributes, with no raw
+        JSON and no raw attribute keys."""
+        expect(self.first_row_detail).to_be_visible(timeout=10000)
+        expect(self.first_row_detail).to_contain_text(HUMANIZED_LABEL)
+        expect(self.first_row_detail).not_to_contain_text(RAW_KEY_LABEL)
+        expect(self.first_row_detail).not_to_contain_text(JSON_BRACES)
         return self
 
     @step
