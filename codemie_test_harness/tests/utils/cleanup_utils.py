@@ -411,27 +411,37 @@ def delete_cost_centers(client, prefix: str | None = None) -> int:
     format produced by get_random_cost_center_name() (e.g. 'xju-nxherepeao').
     No created_by-based filtering is possible here (list_cost_centers'
     created_by is a user id, not comparable to TEST_USER's display name),
-    so this relies entirely on the distinctive name pattern, same as
-    delete_providers above. A cost center still assigned to a project 409s
-    on delete; that failure is logged and skipped, not raised — unless
-    `prefix` resolves it (see below).
+    so this relies entirely on the name pattern, same as delete_providers
+    above. A cost center still assigned to a project 409s on delete; that
+    failure is logged and skipped, not raised — unless `prefix` resolves it
+    (see below).
 
-    `prefix`, when given (this session's own autotest_entity_prefix), is used
-    to retry a 409 once: a prefix-scoped project search (same substring
-    search the project sweep above already does, so this never looks at, or
-    touches, another session's projects on the shared preview stand) finds
-    out whether the project still pinning the cost center is one of THIS
-    session's own autotest-* projects that survived that sweep (e.g. its own
-    delete_project_cascade call failed). If so, that project is
-    cascade-deleted here and the cost center delete is retried once. A cost
-    center pinned to a project from another session — or to nothing, when
-    `prefix` is omitted — is logged and skipped as before.
+    `prefix`, when given (this session's own autotest_entity_prefix), scopes
+    the sweep to this session: only cost centers whose 3 leading letters are
+    the prefix letters (get_random_cost_center_name() generates them that
+    way) are touched, so another concurrently-running session's cost centers
+    on the shared stand are left alone. Without `prefix` (the standalone
+    cleanup script) every name matching the pattern is deleted.
+
+    `prefix` is also used to retry a 409 once: a prefix-scoped project search
+    (same substring search the project sweep above already does, so this
+    never looks at, or touches, another session's projects on the shared
+    preview stand) finds out whether the project still pinning the cost
+    center is one of THIS session's own autotest-* projects that survived
+    that sweep (e.g. its own delete_project_cascade call failed). If so, that
+    project is cascade-deleted here and the cost center delete is retried
+    once. A cost center pinned to a project from another session — or to
+    nothing, when `prefix` is omitted — is logged and skipped as before.
     """
     from codemie_test_harness.tests.utils.cost_center_utils import (
         CostCenterUtils,
         TEST_COST_CENTER_NAME_RE,
+        session_cost_center_name_re,
     )
 
+    name_re = (
+        session_cost_center_name_re(prefix) if prefix else TEST_COST_CENTER_NAME_RE
+    )
     cost_center_utils = CostCenterUtils(client)
 
     stale_projects: dict[str, str] = {}
@@ -446,7 +456,7 @@ def delete_cost_centers(client, prefix: str | None = None) -> int:
 
     def fetch():
         all_cost_centers = cost_center_utils.list_cost_centers()
-        return [c for c in all_cost_centers if TEST_COST_CENTER_NAME_RE.match(c.name)]
+        return [c for c in all_cost_centers if name_re.match(c.name)]
 
     def delete(cost_center):
         try:
