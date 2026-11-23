@@ -3302,3 +3302,12 @@ def assistant_in_marketplace_state(
         return factories[state]()
 
     return _create
+
+
+@pytest.fixture(scope="module")
+def cli_rbac_world(client, keycloak_utils, user_utils, project_utils):
+    """Disposable five-role world shared by API and browser regressions."""
+    from codemie_test_harness.tests.utils.cli_analytics_rbac_utils import role_world
+
+    with role_world(client, keycloak_utils, user_utils, project_utils) as world:
+        yield world
