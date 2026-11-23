@@ -117,7 +117,11 @@ def test_integration_after_creation(
 )
 @pytest.mark.oss_standalone
 def test_integration_with_invalid_credentials(
-    credential_type, credentials, error_message, integration_utils
+    credential_type,
+    credentials,
+    error_message,
+    integration_utils,
+    integration_validation_ready,
 ):
     integration_alias = get_random_name()
     create_request = Integration(
@@ -186,7 +190,11 @@ def test_integration_during_creation(credential_type, credentials, integration_u
 )
 @pytest.mark.oss_standalone
 def test_integration_during_creation_with_invalid_credentials(
-    credential_type, credentials, error_message, integration_utils
+    credential_type,
+    credentials,
+    error_message,
+    integration_utils,
+    integration_validation_ready,
 ):
     integration_test_model = IntegrationTestRequest(
         credential_type=credential_type,

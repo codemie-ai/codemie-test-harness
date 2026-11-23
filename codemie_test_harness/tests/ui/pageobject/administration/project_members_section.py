@@ -66,6 +66,16 @@ class ProjectMembersSection(BasePage):
     # ── Assertions ────────────────────────────────────────────────────────────
 
     @step
+    def should_list_member(self, email: str):
+        expect(self.member_rows(email)).to_have_count(1, timeout=15000)
+        return self
+
+    @step
+    def should_not_list_member(self, email: str):
+        expect(self.member_rows(email)).to_have_count(0)
+        return self
+
+    @step
     def should_list_members_in_order(self, search_token: str, emails: List[str]):
         """Verify the members whose e-mail holds the token are listed in exactly this order."""
         expect(self.member_rows(search_token)).to_contain_text(emails, timeout=30000)

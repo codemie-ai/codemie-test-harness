@@ -306,6 +306,20 @@ class ProjectDetailsPage(BasePage):
         return self
 
     @step
+    def should_have_members_url(self, project_name: str):
+        """The badge opens this project's Members route."""
+        path = f"{self.BASE_PATH}/{quote(project_name, safe='')}/members"
+        expect(self.page).to_have_url(
+            re.compile(re.escape(path) + r"/?(?:\?.*)?$"), timeout=15000
+        )
+        return self
+
+    @step
+    def should_have_members_tab_selected(self):
+        expect(self.members_tab).to_have_attribute("aria-selected", "true")
+        return self
+
+    @step
     def open_budgets_tab(self):
         """Switch to the Budgets tab (routes to .../budgets)."""
         expect(self.budgets_tab).to_be_visible(timeout=15000)

@@ -157,19 +157,12 @@ def test_batch_discarded_while_disabled_is_not_replayed_and_a_resend_is_listed(
 def test_history_stays_accessible_with_unchanged_permissions_after_disable(
     history_session, role_client, gate_member_client, expected_access
 ):
-    """TC-007 (AC-9): the session is seeded and waited for until listed. Per role, the starting
-    state is asserted explicitly against the existing contract (the sessions, overview and
-    repositories status codes and whether the session is listed: global admin, maintainer and the
-    project admin read it with 200; a plain member, an auditor and an unrelated user get 200 from
-    the session list, which holds only their own Personal sessions and so not this project
-    session, and 403 from the aggregate reads), so an unexpected 403 for an authorized reader
-    fails before the disable. The project is then disabled, the disable is
-    shown to be effective (a new batch is discarded) and the snapshot (the same status codes,
-    read with the filter projects=<name>, and the stable fields of the seeded session's row:
-    identity, owner, repository, start, model, prompt and token counts) must be identical
-    afterwards: disabling neither takes access away, nor grants any, nor drops the retained data.
-    Rollup-derived fields (duration, cost, call counts) are left out on purpose; the drift the
-    review suspected there was not reproduced."""
+    """TC-007 (AC-9): disabling ingestion preserves shared history and permissions.
+
+    The legacy seed has no owner binding: a plain member and an unrelated user do not
+    list it. Platform readers and the project's admin do. All endpoints return 200.
+    Volatile rollup fields are excluded by STABLE_SESSION_FIELDS.
+    """
     world = history_session.world
     project, session_id, repo = (
         world.project,

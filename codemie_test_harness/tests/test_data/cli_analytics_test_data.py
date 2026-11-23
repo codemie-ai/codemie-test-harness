@@ -225,14 +225,8 @@ HOOK_SENDERS = [
     pytest.param("sdk", id="sdk-sender"),
 ]
 
-# What each role reads from the CLI analytics GET endpoints, before and after a project is
-# disabled; disabling must not widen or narrow it. The aggregate reads (overview, repositories)
-# sit behind the router's `_admin_gate` (user.is_admin or user.is_applications_admin). The
-# session list does not: any signed-in user may call it, and a non-admin is scoped to their own
-# Personal sessions only. A maintainer is resolved to is_admin by User.resolve_is_admin, so it
-# reads like a global admin; a project admin passes the gate and sees only its own admin
-# projects. A plain member, an auditor and an unrelated user get 200 from the session list
-# without the seeded project session in it, and 403 from the aggregate reads.
+# Disabling ingestion preserves existing read permissions. Legacy sessions without an
+# owner binding remain hidden from ordinary members; platform readers see shared history.
 # The fields of a session row (LocalAnalyticsSessionRow) fixed once the seeded session is listed:
 # identity, owner, repository, start and the token counts. Excluded as genuinely volatile
 # because the backend derives them in the periodic rollup or from pricing: duration_ms, turns,
@@ -257,12 +251,11 @@ HISTORY_READ_ALLOWED = {
     "repositories": 200,
     "listed": True,
 }
-# The session list answers 200 but holds only the caller's own Personal sessions, so the
-# project session stays hidden; the aggregate reads stay refused.
-HISTORY_READ_OWN_PERSONAL_ONLY = {
+# Readers without rights to this legacy session receive successful empty responses.
+HISTORY_READ_EMPTY = {
     "sessions": 200,
-    "overview": 403,
-    "repositories": 403,
+    "overview": 200,
+    "repositories": 200,
     "listed": False,
 }
 HISTORY_ROLES = [
@@ -273,16 +266,12 @@ HISTORY_ROLES = [
     pytest.param(
         "project_admin", HISTORY_READ_ALLOWED, id="project-admin-of-the-project"
     ),
-    pytest.param(
-        "member", HISTORY_READ_OWN_PERSONAL_ONLY, id="plain-member-own-personal-only"
-    ),
-    pytest.param(
-        "auditor", HISTORY_READ_OWN_PERSONAL_ONLY, id="auditor-own-personal-only"
-    ),
+    pytest.param("member", HISTORY_READ_EMPTY, id="plain-member-legacy-session-hidden"),
+    pytest.param("auditor", HISTORY_READ_ALLOWED, id="auditor-reads-shared-history"),
     pytest.param(
         "unrelated",
-        HISTORY_READ_OWN_PERSONAL_ONLY,
-        id="unrelated-user-own-personal-only",
+        HISTORY_READ_EMPTY,
+        id="unrelated-user-shared-history-hidden",
     ),
 ]
 
