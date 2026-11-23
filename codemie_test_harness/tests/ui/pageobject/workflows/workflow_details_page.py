@@ -18,6 +18,9 @@ from playwright.sync_api import expect, Locator
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.components.uploaded_icon import (
+    uploaded_icon_avatar,
+)
 from codemie_test_harness.tests.ui.pageobject.workflows.assistant_node_panel_page import (
     AssistantNodePanelPage,
 )
@@ -157,6 +160,17 @@ class WorkflowDetailsPage(BasePage):
         """Verify that we are on the Workflow Details page."""
         expect(self.back_button).to_be_visible()
         expect(self.workflow_name).to_be_visible()
+
+    @step
+    def should_show_workflow_icon_in_configuration_sidebar(self, icon_url: str):
+        """Verify the open configuration sidebar shows the avatar of the uploaded icon file.
+
+        The workflow page header avatar of ViewWorkflowHeader.tsx is not mounted by the
+        workflow route, so it is not asserted.
+        """
+        icon = uploaded_icon_avatar(self.configuration_sidebar, icon_url)
+        expect(icon.first).to_be_visible()
+        return self
 
     @step
     def should_have_workflow_name(self, expected_name: str):

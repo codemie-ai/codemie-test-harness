@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+from collections import Counter
+
 from playwright.sync_api import Locator, Page, expect
 from reportportal_client import step
 
@@ -187,6 +190,24 @@ class BaseWorkflowFormPage(BasePage):
         ``rf__node-end``, ``rf__node-<assistant_state_id>``).
         """
         return self.canvas.locator(".react-flow__node")
+
+    @property
+    def canvas_edges(self) -> Locator:
+        """All edges (transitions) rendered on the visual editor canvas.
+
+        The ReactFlow edge wrapper carries the ``react-flow__edge`` class; there is
+        one per transition (confirmed on the Edit Workflow page of a 59-node graph).
+        """
+        return self.canvas.locator(".react-flow__edge")
+
+    def canvas_node_for_state(self, state_id: str) -> Locator:
+        """Canvas node of the state or generated node ``state_id``.
+
+        ReactFlow renders it with ``data-testid="rf__node-<state_id>"``.
+        """
+        return self.canvas.locator(
+            f'.react-flow__node[data-testid="rf__node-{state_id}"]'
+        )
 
     @property
     def non_default_canvas_nodes(self) -> Locator:
@@ -389,6 +410,49 @@ class BaseWorkflowFormPage(BasePage):
         expect(self.canvas).to_be_visible()
         expect(self.start_node).to_be_visible()
         expect(self.end_node).to_be_visible()
+
+    @step
+    def should_have_canvas_node_count(self, expected: int, timeout: int = 30000):
+        """Verify the canvas holds exactly ``expected`` nodes (start, end, branch and iterator nodes included)."""
+        expect(self.canvas_nodes).to_have_count(expected, timeout=timeout)
+        return self
+
+    @step
+    def should_have_canvas_edge_count(self, expected: int, timeout: int = 30000):
+        """Verify the canvas holds exactly ``expected`` edges."""
+        expect(self.canvas_edges).to_have_count(expected, timeout=timeout)
+        return self
+
+    @step
+    def should_have_canvas_node_for_each_state(
+        self, state_ids: list[str], timeout: int = 30000
+    ):
+        """Verify the canvas holds exactly one node for every id in ``state_ids``.
+
+        A node is "off screen" in a large graph but still in the DOM, so the check
+        is on presence and count, not on visibility. All ids are read in one query and
+        share one ``timeout``; a failure lists every missing or repeated id.
+        """
+        deadline = time.monotonic() + timeout / 1000
+        while True:
+            rendered = Counter(
+                self.canvas_nodes.evaluate_all(
+                    "nodes => nodes.map(node => node.dataset.testid)"
+                )
+            )
+            wrong = {
+                state_id: rendered[f"rf__node-{state_id}"]
+                for state_id in state_ids
+                if rendered[f"rf__node-{state_id}"] != 1
+            }
+            if not wrong:
+                return self
+            if time.monotonic() >= deadline:
+                raise AssertionError(
+                    f"expected exactly one canvas node per state, but {len(wrong)} of "
+                    f"{len(state_ids)} states differ (state id: nodes found): {wrong}"
+                )
+            self.page.wait_for_timeout(250)
 
     @step
     def should_have_node_on_canvas(self, node_type: str):
