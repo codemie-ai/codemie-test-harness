@@ -12,7 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Project Users badges open Members for shared projects, including project admins."""
+"""UI tests for the Users badge of Projects Management.
+
+The 'Users' column of the projects table stays, but its cell is now a badge (aria-label 'Users',
+user icon, count) instead of plain text. For a platform admin / maintainer / auditor the badge is
+a link to User Management filtered by the project (?projects=<project name>); for anyone else
+(e.g. a project admin without a platform role) it is shown without a link.
+
+Projects and users are created through the API and removed by their fixtures; counts are read
+back through the SDK. Role accounts of the non-link case come from the module-scoped
+`cli_ui_world` fixture (tests/ui/administration/conftest.py).
+"""
 
 import pytest
 from hamcrest import assert_that, greater_than
@@ -20,11 +30,8 @@ from hamcrest import assert_that, greater_than
 from codemie_test_harness.tests.ui.pageobject.administration.project_management_page import (
     ProjectManagementPage,
 )
-from codemie_test_harness.tests.ui.pageobject.administration.project_details_page import (
-    ProjectDetailsPage,
-)
-from codemie_test_harness.tests.ui.pageobject.administration.project_members_section import (
-    ProjectMembersSection,
+from codemie_test_harness.tests.ui.pageobject.administration.user_management_page import (
+    UserManagementPage,
 )
 
 
@@ -54,10 +61,11 @@ def test_users_cell_shows_badge_with_user_count(page, project_utils, project):
 @pytest.mark.prod_regression
 @pytest.mark.project
 @pytest.mark.oss_standalone
-def test_users_badge_opens_project_members(
+def test_users_badge_opens_user_management_filtered_by_project(
     page, project_utils, platform_user, second_platform_user, project
 ):
-    """The project's Members page lists its assigned user and excludes an outsider."""
+    """Clicking the Users badge opens User Management with
+    ?projects=<project name>; the assigned user is listed and the unassigned one is not."""
     assigned_email, assigned_id = platform_user.email, platform_user.user_id
     unassigned_email = second_platform_user.email
     created = project()
@@ -70,50 +78,51 @@ def test_users_badge_opens_project_members(
 
     projects_page.click_users_badge(created.name)
 
-    ProjectDetailsPage(page).should_have_members_url(created.name)
-    members = ProjectMembersSection(page)
-    members.should_list_member(assigned_email)
-    members.should_not_list_member(unassigned_email)
+    users_page = UserManagementPage(page)
+    users_page.should_be_filtered_by_project_in_url(created.name)
+    users_page.should_list_user(assigned_email)
+    users_page.should_not_list_user(unassigned_email)
 
 
 @pytest.mark.ui
 @pytest.mark.prod_regression
 @pytest.mark.project
 @pytest.mark.oss_standalone
-def test_members_tab_is_selected_after_badge_navigation(page, project):
-    """The Members tab is selected after following the project's Users badge."""
+def test_project_filter_shows_selected_project_after_badge_navigation(page, project):
+    """After navigating through the Users badge the project is
+    shown as selected in the User Management project filter, not only present in the URL."""
     created = project()
     projects_page = ProjectManagementPage(page).navigate_to()
     projects_page.should_list_project(created.name)
 
     projects_page.click_users_badge(created.name)
 
-    details = ProjectDetailsPage(page)
-    details.should_have_members_url(created.name)
-    details.should_have_members_tab_selected()
+    users_page = UserManagementPage(page)
+    users_page.should_be_filtered_by_project_in_url(created.name)
+    users_page.should_show_project_selected_in_filter(created.name)
 
 
 @pytest.mark.ui
 @pytest.mark.project
 @pytest.mark.parametrize(
-    "acting_credentials",
+    "acting_credentials, badge_is_link",
     [
-        pytest.param("cli_project_admin", id="project-admin-link"),
-        pytest.param("cli_maintainer", id="maintainer-link"),
+        pytest.param("cli_project_admin", False, id="project admin - no link"),
+        pytest.param("cli_maintainer", True, id="maintainer - link"),
     ],
     indirect=["acting_credentials"],
 )
 @pytest.mark.oss_standalone
-def test_shared_project_users_badge_is_a_link_for_project_and_platform_admins(
-    page, project_utils, cli_ui_world, acting_credentials
+def test_users_badge_is_a_link_only_for_platform_roles(
+    page, project_utils, cli_ui_world, acting_credentials, badge_is_link
 ):
-    """Both project admins and maintainers can follow a shared project's Members link."""
+    """The Users badge always shows the count; it is a link to
+    User Management for a maintainer and a plain, non-clickable badge for a project admin
+    without a platform role."""
     target = cli_ui_world.target
     expected_count = project_utils.get_project_detail(target).user_count
     projects_page = ProjectManagementPage(page).navigate_to()
 
     projects_page.should_list_project(target)
 
-    projects_page.should_see_users_badge(target, expected_count, as_link=True)
-    projects_page.click_users_badge(target)
-    ProjectDetailsPage(page).should_have_members_url(target)
+    projects_page.should_see_users_badge(target, expected_count, as_link=badge_is_link)

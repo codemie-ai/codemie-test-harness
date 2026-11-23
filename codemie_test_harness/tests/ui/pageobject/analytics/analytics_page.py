@@ -182,10 +182,6 @@ class AnalyticsPage(BasePage):
     def open_cli_analytics(self) -> CLIAnalyticsPage:
         """Open the CLI Analytics tab, wait for its default section data and return its page object."""
         cli_analytics = CLIAnalyticsPage(self.page)
-        if cli_analytics.tab.get_attribute("aria-selected") == "true":
-            return cli_analytics.should_be_visible().should_have_loaded_section(
-                CLIAnalyticsPage.DEFAULT_SECTION
-            )
         with cli_analytics.expect_section_data(CLIAnalyticsPage.DEFAULT_SECTION):
             self.click_tab(CLIAnalyticsPage.TAB_NAME)
         return cli_analytics.should_be_visible()

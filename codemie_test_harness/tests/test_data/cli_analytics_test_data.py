@@ -225,8 +225,11 @@ HOOK_SENDERS = [
     pytest.param("sdk", id="sdk-sender"),
 ]
 
-# Disabling ingestion preserves existing read permissions. Legacy sessions without an
-# owner binding remain hidden from ordinary members; platform readers see shared history.
+# What each role reads from the CLI analytics GET endpoints, before and after a project is
+# disabled; disabling must not widen or narrow it. All roles can call the read endpoints. A
+# maintainer reads like a global admin, and a project admin sees its own admin projects. An
+# auditor reads shared history, while a plain member and an unrelated user get successful empty
+# responses for the legacy session, which has no owner binding.
 # The fields of a session row (LocalAnalyticsSessionRow) fixed once the seeded session is listed:
 # identity, owner, repository, start and the token counts. Excluded as genuinely volatile
 # because the backend derives them in the periodic rollup or from pricing: duration_ms, turns,
@@ -251,8 +254,8 @@ HISTORY_READ_ALLOWED = {
     "repositories": 200,
     "listed": True,
 }
-# Readers without rights to this legacy session receive successful empty responses.
-HISTORY_READ_EMPTY = {
+# The legacy project session stays hidden, and the aggregate reads return empty results.
+HISTORY_READ_OWN_PERSONAL_ONLY = {
     "sessions": 200,
     "overview": 200,
     "repositories": 200,
@@ -266,12 +269,14 @@ HISTORY_ROLES = [
     pytest.param(
         "project_admin", HISTORY_READ_ALLOWED, id="project-admin-of-the-project"
     ),
-    pytest.param("member", HISTORY_READ_EMPTY, id="plain-member-legacy-session-hidden"),
+    pytest.param(
+        "member", HISTORY_READ_OWN_PERSONAL_ONLY, id="plain-member-own-personal-only"
+    ),
     pytest.param("auditor", HISTORY_READ_ALLOWED, id="auditor-reads-shared-history"),
     pytest.param(
         "unrelated",
-        HISTORY_READ_EMPTY,
-        id="unrelated-user-shared-history-hidden",
+        HISTORY_READ_OWN_PERSONAL_ONLY,
+        id="unrelated-user-own-personal-only",
     ),
 ]
 

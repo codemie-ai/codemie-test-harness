@@ -302,7 +302,7 @@ class ProjectManagementPage(BasePage):
     # FE: src/pages/settings/administration/projectsManagement/ProjectsManagementFull.tsx:161,195,521
     #     src/pages/settings/administration/projectsManagement/ResourceCounterBadge.tsx:35,42
     # The 'Users' column stays; its cell holds a badge (aria-label 'Users', svg icon, count).
-    # Shared-project badges link to Members; personal-project badges are not links.
+    # The badge is a link to User Management only for admin / maintainer / auditor.
 
     @property
     def users_column_header(self):
@@ -337,7 +337,7 @@ class ProjectManagementPage(BasePage):
 
     @step
     def click_users_badge(self, project_name: str):
-        """Click the Users badge of a project row (navigates to project Members)."""
+        """Click the Users badge of a project row (navigates to User Management)."""
         badge = self._users_badge_links(project_name)
         expect(badge).to_be_visible(timeout=15000)
         badge.click()

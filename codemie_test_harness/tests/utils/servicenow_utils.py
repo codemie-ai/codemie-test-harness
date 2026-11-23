@@ -13,10 +13,7 @@
 # limitations under the License.
 
 import logging
-import re
-from functools import lru_cache
 from typing import Optional
-from urllib.parse import urljoin
 
 import requests
 
@@ -38,28 +35,6 @@ INCIDENT_TABLE_PATH = "/api/now/table/incident"
 
 class ServiceNowUtils:
     """Utility class for interacting with the ServiceNow Table API."""
-
-    @staticmethod
-    @lru_cache(maxsize=8)
-    def is_hibernating(url: str) -> bool:
-        """Detect the developer instance's HTTP-200 hibernation page without credentials."""
-        response = requests.get(
-            urljoin(url, INCIDENT_TABLE_PATH),
-            params={"sysparm_limit": 1},
-            headers={"Accept": "application/json"},
-            allow_redirects=False,
-            timeout=15,
-        )
-        return (
-            response.status_code == 200
-            and "text/html" in response.headers.get("Content-Type", "").lower()
-            and re.search(
-                r"<title>\s*Instance Hibernating(?: page)?\s*</title>",
-                response.text,
-                re.IGNORECASE,
-            )
-            is not None
-        )
 
     def __init__(self):
         """Initialize ServiceNow utilities with credentials from CredentialsManager."""
