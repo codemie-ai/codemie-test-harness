@@ -28,6 +28,9 @@ Following the same architecture as other page objects in the framework:
 """
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.components.uploaded_icon import (
+    uploaded_icon_avatar,
+)
 from playwright.sync_api import expect, Locator
 from reportportal_client import step
 
@@ -200,15 +203,8 @@ class ChatsSidebar(BasePage):
 
     @step
     def should_show_chat_icon(self, chat_id: str, icon_url: str):
-        """Verify the sidebar item of the chat shows the avatar of the uploaded icon file.
-
-        VERIFY: the selector comes from the code (ChatListItem.tsx renders an Avatar, an img with
-        an 'avatar' class and src ``/v1/files/<token>``, next to the name button), not from a
-        browser walk. Whether the section holding the chat is expanded was not observed.
-        """
-        icon = self.chat_item_by_id(chat_id).locator(
-            f'img[class*="avatar"][src$="/v1/files/{icon_url}"]'
-        )
+        """Verify the sidebar item of the chat shows the avatar of the uploaded icon file."""
+        icon = uploaded_icon_avatar(self.chat_item_by_id(chat_id), icon_url)
         expect(icon.first).to_be_visible()
         return self
 
@@ -225,8 +221,7 @@ class ChatsSidebar(BasePage):
     def chat_density_radio(self, density: str) -> Locator:
         """Radio of the 'List density' group; ``density`` is 'detailed' or 'compact'.
 
-        The input id is ``chat-density-<value>`` (ChatViewSettings.tsx). VERIFY: the id comes
-        from the code, not from a browser walk."""
+        The input id is ``chat-density-<value>`` (ChatViewSettings.tsx)."""
         return self.page.locator(f"#chat-density-{density}")
 
     def _open_chat_view_settings(self):
@@ -242,19 +237,6 @@ class ChatsSidebar(BasePage):
         expect(self.chat_view_settings_button).to_have_attribute(
             "aria-expanded", "false"
         )
-
-    @step
-    def get_chat_list_density(self) -> str:
-        """Read the current list density ('detailed' or 'compact') from the settings popover."""
-        self._open_chat_view_settings()
-        expect(self.chat_density_radio("compact")).to_be_attached()
-        density = (
-            "detailed"
-            if self.chat_density_radio("detailed").is_checked()
-            else "compact"
-        )
-        self._close_chat_view_settings()
-        return density
 
     @step
     def set_chat_list_density(self, density: str):

@@ -18,6 +18,9 @@ from playwright.sync_api import expect, Locator
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.components.uploaded_icon import (
+    uploaded_icon_avatar,
+)
 from codemie_test_harness.tests.ui.pageobject.workflows.assistant_node_panel_page import (
     AssistantNodePanelPage,
 )
@@ -162,14 +165,10 @@ class WorkflowDetailsPage(BasePage):
     def should_show_workflow_icon_in_configuration_sidebar(self, icon_url: str):
         """Verify the open configuration sidebar shows the avatar of the uploaded icon file.
 
-        VERIFY: the selector comes from the code (WorkflowExecutionConfigDetails.tsx renders an
-        Avatar, an img with an 'avatar' class and src ``/v1/files/<token>``, inside the 'Configure
-        Workflow' sidebar), not from a browser walk. The workflow page header avatar of
-        ViewWorkflowHeader.tsx is not mounted by the workflow route, so it is not asserted.
+        The workflow page header avatar of ViewWorkflowHeader.tsx is not mounted by the
+        workflow route, so it is not asserted.
         """
-        icon = self.configuration_sidebar.locator(
-            f'img[class*="avatar"][src$="/v1/files/{icon_url}"]'
-        )
+        icon = uploaded_icon_avatar(self.configuration_sidebar, icon_url)
         expect(icon.first).to_be_visible()
         return self
 

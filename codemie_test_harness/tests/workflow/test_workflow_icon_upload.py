@@ -74,28 +74,46 @@ def workflow_factory(workflow_utils, workflow_yaml):
     """Factory creating workflows with an icon; every one is deleted in teardown."""
     created = []
 
-    def _create(utils=None, icon_url=None, shared=False, project_name=None):
-        owner_utils = utils or workflow_utils
-        listed = owner_utils.create_workflow(
+    def _create(icon_url=None, shared=False):
+        listed = workflow_utils.create_workflow(
             workflow_type=WorkflowMode.SEQUENTIAL,
             workflow_yaml=workflow_yaml,
             workflow_name=get_random_name(),
             description="Workflow icon upload test",
             shared=shared,
-            project_name=project_name,
             icon_url=icon_url,
         )
-        workflow = owner_utils.get_workflow(listed.id)
-        created.append((owner_utils, workflow))
+        workflow = workflow_utils.get_workflow(listed.id)
+        created.append(workflow)
         return workflow
 
     yield _create
 
-    for owner_utils, workflow in created:
+    for workflow in created:
         try:
-            owner_utils.delete_workflow(workflow)
+            workflow_utils.delete_workflow(workflow)
         except Exception as e:
             logger.warning(f"Failed to delete workflow {workflow.id}: {e}")
+
+
+@pytest.fixture
+def refused_workflow_name(platform_user):
+    """Name for a workflow of ``platform_user`` that the server is expected to refuse.
+
+    If the server accepts the request anyway, the workflow is deleted in teardown, so a
+    regression does not leave it behind.
+    """
+    name = get_random_name()
+    yield name
+    try:
+        user_utils = WorkflowUtils(platform_user.client)
+        for workflow in platform_user.client.workflows.list(
+            per_page=200, filter_by_user=True
+        ):
+            if workflow.name == name:
+                user_utils.delete_workflow(workflow)
+    except Exception as e:
+        logger.warning(f"Failed to clean up workflow {name}: {e}")
 
 
 def _upload_png(utils, directory, name="icon.png"):
@@ -261,7 +279,12 @@ def test_user_without_write_access_cannot_change_workflow_icon(
 @pytest.mark.workflow
 @pytest.mark.api
 def test_unreadable_uploaded_icon_of_another_user_cannot_be_reused(
-    workflow_utils, workflow_factory, workflow_yaml, platform_user, tmp_path
+    workflow_utils,
+    workflow_factory,
+    workflow_yaml,
+    platform_user,
+    refused_workflow_name,
+    tmp_path,
 ):
     owner_icon_url = _upload_png(workflow_utils, tmp_path)
     workflow_factory(icon_url=owner_icon_url)
@@ -270,6 +293,7 @@ def test_unreadable_uploaded_icon_of_another_user_cannot_be_reused(
     with pytest.raises(HTTPError) as exc_info:
         other_utils.send_create_workflow_request(
             workflow_yaml,
+            workflow_name=refused_workflow_name,
             project=platform_user.email,
             icon_url=owner_icon_url,
         )

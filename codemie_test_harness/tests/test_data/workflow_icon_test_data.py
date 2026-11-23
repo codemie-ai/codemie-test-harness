@@ -95,13 +95,6 @@ def write_oversized_png(
     return path
 
 
-def write_jpeg_bytes_named_png(directory: Path, name: str = "mismatch.png") -> Path:
-    """JPEG content under a .png name: the declared type does not match the bytes."""
-    path = directory / name
-    path.write_bytes((FILES_PATH / "test.jpg").read_bytes())
-    return path
-
-
 def write_empty_png(directory: Path, name: str = "empty.png") -> Path:
     path = directory / name
     path.write_bytes(b"")
@@ -161,7 +154,8 @@ INVALID_ICON_PARAMS = [
     ),
     pytest.param(
         InvalidIconCase(
-            write_jpeg_bytes_named_png,
+            # JPEG content under a .png name: the declared type does not match the bytes
+            lambda directory: write_jpeg_icon(directory, "mismatch.png"),
             "Unsupported icon file type",
             "File content does not match the declared type image/png",
         ),

@@ -173,8 +173,6 @@ def test_oversized_or_unsupported_icon_is_rejected_in_form(page, tmp_path):
 def test_uploaded_icon_appears_on_workflow_page_and_in_chat_sidebar(
     page, workflow_with_icon, workflow_conversation_id
 ):
-    # VERIFY: both avatar selectors come from the code (Avatar.tsx, ChatListItem.tsx,
-    # WorkflowExecutionConfigDetails.tsx), not from a browser walk.
     details_page = WorkflowDetailsPage(page)
     details_page.navigate_to(workflow_with_icon.id)
     details_page.should_be_on_workflow_details_page()
@@ -187,14 +185,8 @@ def test_uploaded_icon_appears_on_workflow_page_and_in_chat_sidebar(
     chat_page.navigate_to(workflow_conversation_id)
     sidebar = ChatsSidebar(page)
     # The sidebar renders a chat row's avatar only when the list density is not Compact
-    # (ChatListItem.tsx), and Compact is the default (store/chatViewSettings.ts). Switch the
-    # density to Detailed for this check and restore the previous one afterwards. The
-    # 'Show workflow runs separately' setting is not touched.
-    previous_density = sidebar.get_chat_list_density()
-    try:
-        sidebar.set_chat_list_density("detailed")
-        sidebar.should_show_chat_icon(
-            workflow_conversation_id, workflow_with_icon.icon_url
-        )
-    finally:
-        sidebar.set_chat_list_density(previous_density)
+    # (ChatListItem.tsx), and Compact is the default (store/chatViewSettings.ts). The density
+    # is kept in the browser's local storage, and every test gets its own browser context, so
+    # there is nothing to restore. The 'Show workflow runs separately' setting is not touched.
+    sidebar.set_chat_list_density("detailed")
+    sidebar.should_show_chat_icon(workflow_conversation_id, workflow_with_icon.icon_url)

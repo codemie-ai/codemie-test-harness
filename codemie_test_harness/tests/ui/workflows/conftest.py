@@ -662,22 +662,15 @@ def create_node_workflow(workflow_utils, default_llm):
 
 
 @pytest.fixture
-def ui_workflow_name(workflow_utils):
+def ui_workflow_name(cleanup_generated_workflow):
     """A fresh workflow name for a workflow the test creates through the UI.
 
-    Teardown deletes whatever workflow carries the name, also when the test failed before
-    or after the save.
+    The name is tracked by ``cleanup_generated_workflow``, so the workflow is deleted in
+    teardown also when the test failed before or after the save.
     """
     name = get_random_name()
-    yield name
-    try:
-        for workflow in workflow_utils.client.workflows.list(
-            per_page=200, filter_by_user=True
-        ):
-            if workflow.name == name:
-                workflow_utils.delete_workflow(workflow)
-    except Exception as e:
-        logger.warning(f"Failed to clean up workflow {name}: {e}")
+    cleanup_generated_workflow(name)
+    return name
 
 
 @pytest.fixture
