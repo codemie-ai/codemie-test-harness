@@ -258,12 +258,15 @@ def generate_member_spend(
     user_id: str,
     category: str = "platform",
     target_spend: float = MIN_VISIBLE_SPEND,
+    client_header: dict | None = None,
 ) -> float:
     """Spend on a project budget category as one of its members, in bounded batches of long requests.
 
-    The requests carry the CLI client and project headers. The backend routes them to the
-    project's cli key when the project has a cli budget and to its platform key otherwise, so
-    ``category`` must name the key that receives them.
+    The requests carry the project header and ``client_header``, the CLI client header by default.
+    With the CLI client header the backend routes them to the project's cli key when the project
+    has a cli budget and to its platform key otherwise; a premium model goes to the premium_models
+    key, and the chrome extension client header to the platform key. ``category`` must name the
+    key that receives them.
 
     Returns the member's LiteLLM customer spend once it stopped changing; it is below
     ``target_spend`` when the stand did not record that much within the bounded batches.
@@ -271,7 +274,7 @@ def generate_member_spend(
     customer_id = MEMBER_OVERRIDE_CUSTOMER_ID_TEMPLATE.format(
         project_name=project_name, category=category, user_id=user_id
     )
-    headers = {**CLI_CLIENT_HEADER, CLI_PROJECT_HEADER: project_name}
+    headers = {**(client_header or CLI_CLIENT_HEADER), CLI_PROJECT_HEADER: project_name}
     spend = 0.0
     for _ in range(SPEND_MAX_BATCHES):
         for _ in range(SPEND_REQUESTS_PER_BATCH):

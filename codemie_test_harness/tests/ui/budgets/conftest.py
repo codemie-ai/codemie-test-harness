@@ -49,6 +49,7 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
 from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
 from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import (
     SPENT_CATEGORY,
+    THREE_CATEGORY_DISTRIBUTION,
     TWO_CATEGORY_DISTRIBUTION,
 )
 from codemie_test_harness.tests.utils.admin_project_budget_group_utils import (
@@ -342,6 +343,61 @@ def spent_member_cleanup(
     project_name, group_id, _, _ = project_admin_setup
     _, _, member_id = member_override_ui_setup
     yield
+    _delete_spend_objects(
+        client, lite_llm_budget_utils, project_name, group_id, member_id
+    )
+
+
+@pytest.fixture(scope="function")
+def three_category_budget(project_admin_setup, client, lite_llm_budget_utils):
+    """The budget group of ``project_admin_setup`` spread over platform, cli and premium_models.
+
+    Each category then has a row of its own on the personal page. Waits for the LiteLLM key of
+    every category, which receives the spend; the group is deleted with the project.
+
+    Returns:
+        tuple: (project_name, group_id).
+    """
+    project_name, group_id, _, _ = project_admin_setup
+    AdminProjectBudgetGroupUtils(client).update_group(
+        group_id, THREE_CATEGORY_DISTRIBUTION
+    )
+    for category in THREE_CATEGORY_DISTRIBUTION:
+        key = lite_llm_budget_utils.wait_for_key_alias(
+            project_key_alias(project_name, category)
+        )
+        assert_that(
+            key,
+            not_none(),
+            f"The LiteLLM key of the {category} category was not created",
+        )
+    return project_name, group_id
+
+
+@pytest.fixture(scope="function")
+def viewer_spend_cleanup(
+    project_admin_setup,
+    three_category_budget,
+    project_admin_setup_client,
+    client,
+    lite_llm_budget_utils,
+):
+    """Removes, after the test, the LiteLLM objects that spending as the logged-in user leaves.
+
+    Same as ``spent_member_cleanup``, for the project-admin user the page is opened as.
+    """
+    project_name, group_id, _, _ = project_admin_setup
+    viewer_id = project_admin_setup_client.users.about_me().user_id
+    yield
+    _delete_spend_objects(
+        client, lite_llm_budget_utils, project_name, group_id, viewer_id
+    )
+
+
+def _delete_spend_objects(
+    client, lite_llm_budget_utils, project_name, group_id, user_id
+):
+    """Best effort: the user's child budget objects of the group and spend customers."""
     try:
         categories = AdminProjectBudgetGroupUtils(client).get_group(group_id)[
             "categories"
@@ -352,18 +408,18 @@ def spent_member_cleanup(
     for category in categories:
         budget_id = category.get("budget_id")
         try:
-            lite_llm_budget_utils.delete_project_budget_objects(budget_id, member_id)
+            lite_llm_budget_utils.delete_project_budget_objects(budget_id, user_id)
         except Exception as e:
             logger.warning(
                 f"Failed to delete LiteLLM budget objects of {budget_id}: {e}"
             )
     try:
         lite_llm_budget_utils.delete_override_customers_for_project(
-            project_name, member_id
+            project_name, user_id
         )
     except Exception as e:
         logger.warning(
-            f"Failed to delete spend customers of {member_id} in project {project_name}: {e}"
+            f"Failed to delete spend customers of {user_id} in project {project_name}: {e}"
         )
 
 

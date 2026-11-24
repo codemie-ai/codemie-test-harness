@@ -16,9 +16,17 @@
 
 from dataclasses import dataclass
 
+from codemie_test_harness.tests.test_data.budget_test_data import (
+    CHROME_EXTENSION_CLIENT_HEADER,
+    CLI_CLIENT_HEADER,
+    PREMIUM_MODEL,
+)
+
 # The panel draws a table only for two or more rows, so the project budget group spans two
 # categories: percentages of the group total, as the budget group distribution endpoint takes them.
 TWO_CATEGORY_DISTRIBUTION = {"platform": 50.0, "cli": 50.0}
+# Every category a member can spend on, so that each has a row of its own.
+THREE_CATEGORY_DISTRIBUTION = {"platform": 40.0, "cli": 30.0, "premium_models": 30.0}
 
 # Column that the table hides by design; the API still returns it.
 HIDDEN_COLUMN_ID = "budget_limit"
@@ -70,3 +78,37 @@ LIMIT_LABEL_ROWS = {
 # category that receives the spend gets a one dollar budget instead. The
 # requests carry the CLI client header, which routes them to the cli key once the project has one.
 SPENT_CATEGORY = "cli"
+
+
+@dataclass(frozen=True)
+class CategorySpend:
+    """How a member's request lands on one category of a project that has all three budgets.
+
+    ``model`` None means the stand's default model. The routing is the one the API budget tests
+    check: the chrome extension client goes to the platform key, the CLI client to the cli key,
+    and a premium model to the premium_models key.
+    """
+
+    category: str
+    row_suffix: str
+    client_header: dict
+    model: str | None
+
+
+SPEND_CATEGORIES = (
+    CategorySpend(
+        category="platform",
+        row_suffix="",
+        client_header=CHROME_EXTENSION_CLIENT_HEADER,
+        model=None,
+    ),
+    CategorySpend(
+        category="cli", row_suffix=" (cli)", client_header=CLI_CLIENT_HEADER, model=None
+    ),
+    CategorySpend(
+        category="premium_models",
+        row_suffix=" (premium)",
+        client_header=CLI_CLIENT_HEADER,
+        model=PREMIUM_MODEL,
+    ),
+)

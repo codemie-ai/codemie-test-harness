@@ -20,12 +20,14 @@ spend; what the page shows is checked by ``PersonalSpendingPage``.
 """
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from hamcrest import (
     assert_that,
     close_to,
     equal_to,
     greater_than,
+    empty,
     greater_than_or_equal_to,
     is_not,
     not_none,
@@ -37,6 +39,7 @@ from codemie_test_harness.tests.test_data.budget_usage_project_rows_test_data im
     MIN_VISIBLE_SPEND,
     PERCENT_TOLERANCE,
     SCALED_PROJECT_LIMIT,
+    SPEND_PARITY_TOLERANCE,
 )
 from codemie_test_harness.tests.ui.pageobject.budgets.personal_spending_page import (
     PersonalSpendingPage,
@@ -44,6 +47,7 @@ from codemie_test_harness.tests.ui.pageobject.budgets.personal_spending_page imp
 from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import (
     HIDDEN_COLUMN_ID,
     HIDDEN_COLUMN_IDS,
+    SPEND_CATEGORIES,
     SPENT_CATEGORY,
     LimitLabelRow,
 )
@@ -335,6 +339,124 @@ def assert_other_member_spend_moved_only_the_project_percentage(
         row_after["total"],
         greater_than(row_before["total"]),
         "The project percentage must rise with another member's spend",
+    )
+
+
+# ---------------------------------------------------------------------------
+# The viewer's own spend on every category
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ViewerSpend:
+    """The viewer's settled spend on one category and the row of the table that shows it."""
+
+    category: str
+    row_name: str
+    spend: float
+
+
+def generate_viewer_spend_on_every_category(
+    client, budget, default_llm, lite_llm_budget_utils
+) -> list[ViewerSpend]:
+    """The viewer spends on the platform, cli and premium_models categories of the project.
+
+    Every customer and project key is settled before anything reads budget_usage: the first
+    read stores its values for the staleness window.
+    """
+    project_name = _project_name(budget)
+    viewer_id = client.users.about_me().user_id
+    proxy_utils = ProxyUtils(client)
+    spends = [
+        ViewerSpend(
+            category=category_spend.category,
+            row_name=f"{project_name}{category_spend.row_suffix}",
+            spend=generate_member_spend(
+                proxy_utils,
+                lite_llm_budget_utils,
+                category_spend.model or default_llm.base_name,
+                project_name,
+                viewer_id,
+                category=category_spend.category,
+                client_header=category_spend.client_header,
+            ),
+        )
+        for category_spend in SPEND_CATEGORIES
+    ]
+    for spend in spends:
+        wait_for_settled_key_spend(
+            lite_llm_budget_utils, project_key_alias(project_name, spend.category)
+        )
+    return spends
+
+
+def assert_viewer_spend_is_recorded_on_every_category(spends: list[ViewerSpend]):
+    for spend in spends:
+        assert_that(
+            spend.spend,
+            greater_than_or_equal_to(MIN_VISIBLE_SPEND),
+            f"Precondition failed: the stand did not record enough {spend.category} spend "
+            "for the viewer",
+        )
+
+
+def wait_for_viewer_rows_with_own_spend(
+    client, spends: list[ViewerSpend]
+) -> list[dict]:
+    """The viewer's row of every spent category, once the API shows the settled spend on it."""
+    usage = BudgetUsageUtils(client)
+    rows = []
+    for spend in spends:
+        row = usage.wait_for_row_where(
+            spend.row_name,
+            lambda listed, expected=spend.spend: abs(
+                listed["current_spending"] - expected
+            )
+            <= SPEND_PARITY_TOLERANCE,
+        )
+        assert_that(
+            row, not_none(), f"Precondition failed: {spend.row_name} is not listed"
+        )
+        assert_that(
+            row["current_spending"],
+            close_to(spend.spend, SPEND_PARITY_TOLERANCE),
+            f"Precondition failed: the API does not show the viewer's settled {spend.category} "
+            "spend",
+        )
+        rows.append(row)
+    return rows
+
+
+def _has_more_than_two_decimals(value: float) -> bool:
+    exact = Decimal(str(value))
+    return exact != exact.quantize(Decimal("0.01"))
+
+
+def assert_some_spend_has_more_than_two_decimals(category_rows: list[dict]):
+    """The rounding to cents is only exercised by a spend with more digits than cents."""
+    assert_that(
+        [
+            row["project_name"]
+            for row in category_rows
+            if _has_more_than_two_decimals(row["current_spending"])
+        ],
+        is_not(empty()),
+        "Precondition failed: no category spend has more than 2 decimals",
+    )
+
+
+def assert_category_rows_kept_their_spend(
+    api_rows: list[dict], category_rows: list[dict]
+):
+    """The rows read after the page opened still carry the settled spend checked before."""
+    by_name = {row["project_name"]: row for row in api_rows}
+    assert_that(
+        [
+            by_name.get(row["project_name"], {}).get("current_spending")
+            for row in category_rows
+        ],
+        equal_to([row["current_spending"] for row in category_rows]),
+        "The viewer's category spend changed while the page was opened",
     )
 
 

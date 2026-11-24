@@ -28,15 +28,19 @@ import pytest
 
 from codemie_test_harness.tests.ui.budgets.personal_spending_steps import (
     assert_api_lists_platform_and_cli_rows_of_the_project,
+    assert_category_rows_kept_their_spend,
     assert_default_project_rows_come_first_and_only_they_are_flagged,
     assert_other_member_spend_is_recorded,
     assert_other_member_spend_moved_only_the_project_percentage,
     assert_project_is_not_the_default_before_the_admin_sets_it,
     assert_setting_the_default_changed_which_rows_are_flagged,
+    assert_some_spend_has_more_than_two_decimals,
     assert_spent_category_row_keeps_its_combined_total,
     assert_viewer_has_not_spent_and_sees_the_combined_project_total,
+    assert_viewer_spend_is_recorded_on_every_category,
     find_cli_row,
     generate_spend_as_other_member,
+    generate_viewer_spend_on_every_category,
     make_project_the_default,
     project_row_names,
     read_budget_usage,
@@ -48,6 +52,7 @@ from codemie_test_harness.tests.ui.budgets.personal_spending_steps import (
     wait_for_default_project_rows_first,
     wait_for_shared_project_rows,
     wait_for_viewer_row_with_combined_total,
+    wait_for_viewer_rows_with_own_spend,
 )
 from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import (
     LIMIT_LABEL_ROWS,
@@ -118,6 +123,7 @@ def test_personal_spending_default_badge_follows_is_default_flag_of_rows(
 
 # @case per-project-spending-personal-page_TC_021
 # @case spendings-view-show-personal-project_TC_005
+# @case spend-values-use-inconsistent-decimal_TC_001
 @pytest.mark.enterprise
 @pytest.mark.budget
 @pytest.mark.timeout(1800)
@@ -172,6 +178,8 @@ def test_personal_spending_shows_combined_project_total_for_user_who_has_not_spe
     )
     spending.should_show_table()
     spending.should_match_budget_usage(api_rows)
+    # Every amount is in cents: a spend with more digits is rounded half up, not shown in full.
+    spending.should_show_amounts_with_two_decimals(api_rows)
 
     # After: only the project percentage moved; the viewer's own spending and Available did not.
     spent_row = find_cli_row(api_rows, scaled_spent_category_budget)
@@ -228,3 +236,40 @@ def test_personal_spending_limit_label_and_shared_tooltip_follow_the_row_type(
     spending.should_show_table()
     spending.should_show_limit_label(names, row_kind.limit_label)
     spending.should_mark_shared_limit_only_when(names, row_kind.is_shared_limit)
+
+
+# @case spend-values-use-inconsistent-decimal_TC_003
+@pytest.mark.enterprise
+@pytest.mark.budget
+@pytest.mark.timeout(1800)
+@pytest.mark.ui
+def test_personal_spending_shows_own_spend_of_every_category_in_cents(
+    page,
+    three_category_budget,
+    viewer_spend_cleanup,
+    project_admin_setup_client,
+    lite_llm_budget_utils,
+    default_llm,
+):
+    # The viewer spends on platform, cli and premium_models; every spend is settled first.
+    spends = generate_viewer_spend_on_every_category(
+        project_admin_setup_client,
+        three_category_budget,
+        default_llm,
+        lite_llm_budget_utils,
+    )
+    assert_viewer_spend_is_recorded_on_every_category(spends)
+    category_rows = wait_for_viewer_rows_with_own_spend(
+        project_admin_setup_client, spends
+    )
+    assert_some_spend_has_more_than_two_decimals(category_rows)
+
+    spending = PersonalSpendingPage(page).open()
+    api_rows = read_rows(project_admin_setup_client)
+
+    assert_category_rows_kept_their_spend(api_rows, category_rows)
+    spending.should_show_table()
+    # 'Your spending' and 'Available' of every row: the API value rounded half up to cents.
+    spending.should_match_budget_usage(api_rows)
+    # The same format on every category: exactly 2 decimals, never the full sub-cent value.
+    spending.should_show_amounts_with_two_decimals(api_rows)

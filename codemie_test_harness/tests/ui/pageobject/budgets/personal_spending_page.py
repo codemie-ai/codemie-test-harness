@@ -74,6 +74,13 @@ class PersonalSpendingPage(BasePage):
     # How long a tooltip that must not appear is given to show up after the hover.
     TOOLTIP_ABSENCE_WINDOW_S = 1.0
     AVAILABLE_PATTERN = re.compile(r"^Available:")
+    # A currency amount as the panel renders it: exactly 2 decimals, or a dash when absent
+    # (src/utils/currency.ts formatCurrency, minimum and maximum fraction digits 2).
+    TWO_DECIMAL_AMOUNT = r"(\$\d{1,3}(,\d{3})*\.\d{2}|-)"
+    SPENDING_TWO_DECIMALS_PATTERN = re.compile(
+        rf"^Your spending: {TWO_DECIMAL_AMOUNT}$"
+    )
+    AVAILABLE_TWO_DECIMALS_PATTERN = re.compile(rf"^Available: {TWO_DECIMAL_AMOUNT}$")
     RESPONSE_TIMEOUT_MS = 30000
 
     def __init__(self, page):
@@ -207,12 +214,16 @@ class PersonalSpendingPage(BasePage):
 
     # ── Formatting, as the panel renders values ──────────────────────────────
 
-    @staticmethod
-    def format_currency(value: float | None) -> str:
-        """Currency text: dollar sign, thousands separators, 2 decimals; a dash when unknown."""
+    @classmethod
+    def format_currency(cls, value: float | None) -> str:
+        """Currency text: dollar sign, thousands separators, 2 decimals; a dash when unknown.
+
+        Rounded half up like the panel (src/utils/currency.ts formatCurrency): 0.0067 is $0.01
+        and 0.005 is $0.01, where Python's own rounding of the float would give $0.00 for 0.005.
+        """
         if value is None:
             return ABSENT_VALUE_MARKER
-        return f"${value:,.2f}"
+        return f"${Decimal(cls._round_half_up(value, 2)):,}"
 
     @staticmethod
     def format_available(spent: float | None, limit: float | None) -> str:
@@ -389,6 +400,23 @@ class PersonalSpendingPage(BasePage):
                 expect(cells.nth(TIME_UNTIL_RESET_CELL)).not_to_have_text(
                     re.compile(r"^-?$")
                 )
+        return self
+
+    @step
+    def should_show_amounts_with_two_decimals(self, api_rows: list[dict]):
+        """Verify every row's 'Your spending' and 'Available' amount has exactly 2 decimals.
+
+        A spend with more digits (0.0067) is rounded to cents ($0.01), never shown in full
+        ($0.0067) nor with significant digits only; an absent amount stays a dash.
+        """
+        for api_row in api_rows:
+            name = api_row["project_name"]
+            expect(self.usage_spending(name)).to_have_text(
+                self.SPENDING_TWO_DECIMALS_PATTERN
+            )
+            expect(self.usage_available(name)).to_have_text(
+                self.AVAILABLE_TWO_DECIMALS_PATTERN
+            )
         return self
 
     @step
