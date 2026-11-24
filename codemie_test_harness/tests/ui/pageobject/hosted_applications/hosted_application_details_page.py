@@ -110,6 +110,21 @@ class HostedApplicationDetailsPage(HostedPageBase):
         """The hint under the application link that says who can open it."""
         return self.page.get_by_text(text, exact=True)
 
+    @property
+    def categories_heading(self) -> Locator:
+        """Heading of the 'CATEGORIES' section."""
+        return self.page.get_by_role("heading", name="CATEGORIES", exact=True)
+
+    @property
+    def categories_section(self) -> Locator:
+        """The 'CATEGORIES' section: its heading and the tags under it."""
+        return self.categories_heading.locator("xpath=..")
+
+    @property
+    def edit_button(self) -> Locator:
+        """Edit button of the page header."""
+        return self.page.get_by_role("button", name="Edit", exact=True)
+
     @step
     def open(self, app_id: str):
         """Open the details page of an application."""
@@ -194,4 +209,20 @@ class HostedApplicationDetailsPage(HostedPageBase):
         """The hint under the application link reads exactly this."""
         expect(self.access_link_heading).to_be_visible()
         expect(self.access_hint(text)).to_be_visible()
+        return self
+
+    @step
+    def should_list_categories(self, names: list[str]):
+        """The 'CATEGORIES' section lists exactly these category names."""
+        expect(self.categories_heading).to_be_visible()
+        for name in names:
+            expect(
+                self.categories_section.get_by_text(name, exact=True)
+            ).to_be_visible()
+        return self
+
+    @step
+    def press_edit(self):
+        """Press Edit."""
+        self.edit_button.click()
         return self

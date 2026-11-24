@@ -244,8 +244,8 @@ class WorkflowSidebar:
             project_name: Name of the project to select
         """
         self.open_project_multiselect()
-        project_option = self.sidebar_container.locator(
-            f'li:has-text("{project_name}")'
+        project_option = self.sidebar_container.get_by_role(
+            "option", name=project_name, exact=True
         )
         project_option.click()
         return self
