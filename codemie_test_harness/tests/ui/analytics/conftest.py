@@ -14,6 +14,10 @@
 
 import pytest
 
+from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
+    catalog_cost,
+    priced_model,
+)
 from codemie_test_harness.tests.test_data.projects_test_data import (
     get_project_create_data,
 )
@@ -32,7 +36,14 @@ from codemie_test_harness.tests.ui.pageobject.analytics.usage_attribution_table 
 from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
     INSIGHTS_SEEDED_RUN_COUNTS,
 )
+from codemie_test_harness.tests.ui.test_data.cli_analytics_pricing_test_data import (
+    PricingSession,
+    format_cost,
+    get_pricing_session_seeds,
+    unpriced_model_name,
+)
 from codemie_test_harness.tests.utils.analytics_utils import CLIAnalyticsTestSession
+from codemie_test_harness.tests.utils.base_utils import poll_until
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     delete_projects_strict,
 )
@@ -63,6 +74,84 @@ def cli_analytics_session(
         yield analytics_utils.create_cli_session(project=project)
     finally:
         delete_projects_strict(project_utils, [project])
+
+
+@pytest.fixture(scope="session")
+def catalog_priced_model(client):
+    """A model the stand's catalog prices: CLI Analytics money is tokens x its price."""
+    model = priced_model(client.llms.list())
+    if model is None:
+        pytest.skip("no LLM with an input and output price in the catalog")
+    return model
+
+
+@pytest.fixture
+def seed_pricing_session(
+    analytics_utils, admin_utils, project_utils, catalog_priced_model
+):
+    """Factory of CLI sessions in a project of their own, one request per named model.
+
+    A name from ``catalog_priced_model`` is a priced model, any other name is unpriced. The
+    project is enabled for CLI analytics, the sender is the harness admin (see
+    ``cli_analytics_session``), and the factory returns once the session is rolled up with all
+    its models. The ingested data cannot be deleted; the projects are removed after the test,
+    a failure is an error of the run.
+    """
+    projects = []
+
+    def _seed(models: list[str]) -> PricingSession:
+        project = get_project_create_data()["name"]
+        admin_utils.create_project(project)
+        projects.append(project)
+        project_utils.update_project(project, cli_analytics_enabled=True)
+        seeds = get_pricing_session_seeds(models)
+        for seed in seeds:
+            analytics_utils.ingest_cli_event_hooks(
+                seed.events(project), project=project
+            )
+        session_id = seeds[0].session_id
+        analytics_utils.wait_for_cli_session(session_id)
+        poll_until(
+            lambda: analytics_utils.find_cli_analytics_session(session_id),
+            lambda row: row is not None and all(m in row.model_name for m in models),
+            timeout=120,
+            interval=5,
+        )
+        priced = [s for s in seeds if s.model == catalog_priced_model.base_name]
+        unpriced = [s for s in seeds if s.model != catalog_priced_model.base_name]
+        return PricingSession(
+            project=project,
+            session_id=session_id,
+            started_at=seeds[0].started_at,
+            priced_model=priced[0].model if priced else None,
+            priced_cost=(
+                format_cost(catalog_cost(priced, catalog_priced_model.cost))
+                if priced
+                else None
+            ),
+            unpriced_model=unpriced[0].model if unpriced else None,
+        )
+
+    yield _seed
+    delete_projects_strict(project_utils, projects)
+
+
+@pytest.fixture
+def mixed_pricing_session(seed_pricing_session, catalog_priced_model):
+    """One session that used a priced model and a model without a catalog price."""
+    return seed_pricing_session([catalog_priced_model.base_name, unpriced_model_name()])
+
+
+@pytest.fixture
+def fully_priced_session(seed_pricing_session, catalog_priced_model):
+    """One session that used a priced model only."""
+    return seed_pricing_session([catalog_priced_model.base_name])
+
+
+@pytest.fixture
+def unpriced_only_session(seed_pricing_session):
+    """One session that used a model without a catalog price only."""
+    return seed_pricing_session([unpriced_model_name()])
 
 
 @pytest.fixture
