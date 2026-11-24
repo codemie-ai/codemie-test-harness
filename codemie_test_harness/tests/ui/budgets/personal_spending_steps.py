@@ -487,6 +487,21 @@ def assert_some_spend_has_more_than_two_decimals(category_rows: list[dict]):
     )
 
 
+def find_platform_row(api_rows: list[dict], budget) -> dict:
+    """The platform category row of the project: its label is the project name alone."""
+    return next(row for row in api_rows if row["project_name"] == _project_name(budget))
+
+
+def assert_platform_spend_has_more_than_two_decimals(platform_row: dict):
+    """The platform rounding to cents is only exercised by a platform spend below a cent step."""
+    assert_that(
+        _has_more_than_two_decimals(platform_row["current_spending"]),
+        equal_to(True),
+        "Precondition failed: the viewer's platform spend "
+        f"{platform_row['current_spending']} has no more than 2 decimals",
+    )
+
+
 def assert_category_rows_kept_their_spend(
     api_rows: list[dict], category_rows: list[dict]
 ):

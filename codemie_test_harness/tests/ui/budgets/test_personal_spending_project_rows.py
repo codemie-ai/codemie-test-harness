@@ -32,6 +32,7 @@ from codemie_test_harness.tests.ui.budgets.personal_spending_steps import (
     assert_default_project_rows_come_first_and_only_they_are_flagged,
     assert_other_member_spend_is_recorded,
     assert_other_member_spend_moved_only_the_project_percentage,
+    assert_platform_spend_has_more_than_two_decimals,
     assert_project_is_not_the_default_before_the_admin_sets_it,
     assert_setting_the_default_changed_which_rows_are_flagged,
     assert_some_spend_has_more_than_two_decimals,
@@ -39,6 +40,7 @@ from codemie_test_harness.tests.ui.budgets.personal_spending_steps import (
     assert_viewer_has_not_spent_and_sees_the_combined_project_total,
     assert_viewer_spend_is_recorded_on_every_category,
     find_cli_row,
+    find_platform_row,
     generate_spend_as_other_member,
     generate_viewer_spend_on_every_category,
     make_project_the_default,
@@ -123,7 +125,6 @@ def test_personal_spending_default_badge_follows_is_default_flag_of_rows(
 
 # @case per-project-spending-personal-page_TC_021
 # @case spendings-view-show-personal-project_TC_005
-# @case spend-values-use-inconsistent-decimal_TC_001
 @pytest.mark.enterprise
 @pytest.mark.budget
 @pytest.mark.timeout(1800)
@@ -238,6 +239,7 @@ def test_personal_spending_limit_label_and_shared_tooltip_follow_the_row_type(
     spending.should_mark_shared_limit_only_when(names, row_kind.is_shared_limit)
 
 
+# @case spend-values-use-inconsistent-decimal_TC_001
 # @case spend-values-use-inconsistent-decimal_TC_003
 @pytest.mark.enterprise
 @pytest.mark.budget
@@ -263,6 +265,9 @@ def test_personal_spending_shows_own_spend_of_every_category_in_cents(
         project_admin_setup_client, spends, lite_llm_budget_utils
     )
     assert_some_spend_has_more_than_two_decimals(category_rows)
+    assert_platform_spend_has_more_than_two_decimals(
+        find_platform_row(category_rows, three_category_budget)
+    )
 
     spending = PersonalSpendingPage(page).open()
     api_rows = read_rows(project_admin_setup_client)
@@ -273,3 +278,5 @@ def test_personal_spending_shows_own_spend_of_every_category_in_cents(
     spending.should_match_budget_usage(api_rows)
     # The same format on every category: exactly 2 decimals, never the full sub-cent value.
     spending.should_show_amounts_with_two_decimals(api_rows)
+    # Platform: 'Your spending' is the sub-cent API spend rounded half up, e.g. 0.0067 -> $0.01.
+    spending.should_show_usage_block(find_platform_row(api_rows, three_category_budget))
