@@ -19,6 +19,8 @@ import re
 import pytest
 
 from codemie_test_harness.tests.utils.base_utils import get_random_name
+from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.skill_utils import SkillsUtils
 
 
 @pytest.fixture
@@ -50,3 +52,52 @@ def import_skill_file_content():
     )
 
     return file_content, skill_name
+
+
+@pytest.fixture
+def skill_project(project):
+    """Name of a fresh project created by the harness admin; removed after the test."""
+    return project().name
+
+
+@pytest.fixture
+def other_skill_project(project):
+    """Name of a second fresh project created by the harness admin; removed after the test."""
+    return project().name
+
+
+@pytest.fixture
+def non_member_skill_utils(platform_user):
+    """SkillsUtils for a platform_user who belongs to no project created for the test."""
+    return SkillsUtils(platform_user.client)
+
+
+@pytest.fixture
+def member_skill_utils(platform_user, user_utils, skill_project):
+    """SkillsUtils for a platform_user assigned to skill_project as a plain member.
+
+    The client is a fresh login made after the assignment, so a backend that caches the
+    user's projects per token cannot hold the list from before it.
+    """
+    user_utils.assign_user_to_project(
+        platform_user.user_id, skill_project, is_project_admin=False
+    )
+    yield SkillsUtils(
+        get_client(username=platform_user.email, password=platform_user.password)
+    )
+    try:
+        user_utils.remove_user_from_project(platform_user.user_id, skill_project)
+    except Exception:
+        pass
+
+
+@pytest.fixture
+def created_skill_ids(skill_utils):
+    """List collecting ids of skills a test created outside the `skill` factory; deleted after."""
+    ids = []
+    yield ids
+    for skill_id in ids:
+        try:
+            skill_utils.delete_skill_by_id(skill_id)
+        except Exception:
+            pass
