@@ -16,6 +16,9 @@
 
 from dataclasses import dataclass
 
+# Capabilities of a stand: the override of a user, and the model settings of a project.
+BOTH_FEATURES = ("features:userModelOverride", "features:projectModelOverride")
+
 # Messages and details the platform answers with.
 BATCH_FAILED_MESSAGE = "Batch operation failed; no users updated"
 NOT_A_MEMBER_REASON = "User not a member of this project"
@@ -62,6 +65,9 @@ OVERRIDE_ROUTES = {
     ),
     "batch": lambda utils, project, user_id, models: utils.batch_grant(
         project, [user_id], models
+    ),
+    "batch_revoke": lambda utils, project, user_id, models: utils.batch_revoke(
+        project, [user_id]
     ),
 }
 

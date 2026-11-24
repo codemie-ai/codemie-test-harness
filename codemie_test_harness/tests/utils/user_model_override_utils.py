@@ -58,6 +58,23 @@ def resolve_models(tokens: list[str], named: dict[str, str]) -> list[str]:
     return [named.get(token, token) for token in tokens]
 
 
+def pick_web_hidden_model(client: CodeMieClient, project_name: str) -> str | None:
+    """Base name of an enabled chat model that the default list leaves out as forbidden for web."""
+    shown = {m.base_name for m in client.llms.list_for_project(project_name)}
+    return next(
+        (
+            model.base_name
+            for model in client.llms.list_for_project(project_name, include_all=True)
+            if model.forbidden_for_web
+            and model.enabled
+            and not model.is_router
+            and model.base_name not in shown
+            and model.status in (None, ModelStatus.ENABLED)
+        ),
+        None,
+    )
+
+
 def platform_default_of(client: CodeMieClient) -> str | None:
     """Base name of the model the unscoped list of the client flags as default."""
     return next((m.base_name for m in client.llms.list() if m.default), None)
@@ -82,8 +99,10 @@ class UserModelOverrideUtils(BaseUtils):
     def get_override(self, project_name: str, user_id: str):
         return self.client.projects.get_user_model_override(project_name, user_id)
 
-    def list_overrides(self, project_name: str):
-        return self.client.projects.list_user_model_overrides(project_name)
+    def list_overrides(self, project_name: str, skip: int = 0, limit: int = 100):
+        return self.client.projects.list_user_model_overrides(
+            project_name, skip=skip, limit=limit
+        )
 
     def users_with_override(self, project_name: str) -> list[str]:
         """IDs of the project members that have an override."""
@@ -101,6 +120,12 @@ class UserModelOverrideUtils(BaseUtils):
     ):
         return self.client.projects.batch_user_model_overrides(
             project_name, "grant", user_ids, allowed_models, default_model
+        )
+
+    def batch_revoke(self, project_name: str, user_ids: list[str]):
+        """Remove the override of every listed user; answers with the overrides it removed."""
+        return self.client.projects.batch_user_model_overrides(
+            project_name, "revoke", user_ids
         )
 
     def batch(
@@ -136,15 +161,21 @@ class UserModelOverrideUtils(BaseUtils):
     # ── Model list of a user in a project ─────────────────────────────────────
 
     @staticmethod
-    def models_listed(client: CodeMieClient, project_name: str) -> list[LLMModel]:
+    def models_listed(
+        client: CodeMieClient, project_name: str, include_all: bool = False
+    ) -> list[LLMModel]:
         """Models of GET /v1/llm_models?project_id=<project> for the user behind the client."""
-        return client.llms.list_for_project(project_name)
+        return client.llms.list_for_project(project_name, include_all=include_all)
 
     @staticmethod
-    def base_names_listed(client: CodeMieClient, project_name: str) -> list[str]:
+    def base_names_listed(
+        client: CodeMieClient, project_name: str, include_all: bool = False
+    ) -> list[str]:
         return [
             model.base_name
-            for model in UserModelOverrideUtils.models_listed(client, project_name)
+            for model in UserModelOverrideUtils.models_listed(
+                client, project_name, include_all
+            )
         ]
 
     @staticmethod

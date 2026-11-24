@@ -51,9 +51,13 @@ from codemie_test_harness.tests.utils.user_model_override_utils import (
 
 
 @pytest.fixture
-def override_caller(request, platform_user, outsider_user):
-    """The user behind the indirect parameter: a plain project member or a user outside the project."""
-    return {"member": platform_user, "outsider": outsider_user}[request.param]
+def override_caller(request):
+    """The user behind the indirect parameter: a plain project member or a user outside the project.
+
+    Only the selected user is created, so a run does not log in a user it never uses.
+    """
+    fixture = {"member": "platform_user", "outsider": "outsider_user"}[request.param]
+    return request.getfixturevalue(fixture)
 
 
 # @case user-level-model-override_TC_001
@@ -147,6 +151,117 @@ def test_bulk_grant_with_non_member_changes_no_user(
     )
 
 
+# @case user-level-model-override_TC_002
+@pytest.mark.requires_capability("features:userModelOverride")
+@pytest.mark.project
+@pytest.mark.api
+def test_bulk_revoke_removes_override_of_selected_members_only(
+    override_utils,
+    override_project,
+    platform_user,
+    second_platform_user,
+    override_models,
+):
+    first, second, _ = override_models
+    for member in (platform_user, second_platform_user):
+        override_utils.set_override(
+            override_project, member.user_id, [first, second], first
+        )
+
+    revoked = override_utils.batch_revoke(override_project, [platform_user.user_id])
+
+    assert_that(
+        [o.user_id for o in revoked],
+        equal_to([platform_user.user_id]),
+        "the batch must answer with the overrides it removed",
+    )
+    assert_that(
+        override_utils.users_with_override(override_project),
+        equal_to([second_platform_user.user_id]),
+        "the member that was not selected keeps the override",
+    )
+    with pytest.raises(HTTPError) as not_found:
+        override_utils.get_override(override_project, platform_user.user_id)
+    assert_that(not_found.value.response.status_code, equal_to(404))
+
+
+# @case user-level-model-override_TC_001
+@pytest.mark.requires_capability("features:userModelOverride")
+@pytest.mark.project
+@pytest.mark.api
+def test_list_returns_every_override_and_drops_the_deleted_one(
+    override_utils,
+    override_project,
+    platform_user,
+    second_platform_user,
+    override_models,
+):
+    first, second, third = override_models
+    override_utils.set_override(
+        override_project, platform_user.user_id, [first, second], second
+    )
+    override_utils.set_override(override_project, second_platform_user.user_id, [third])
+
+    listed = {o.user_id: o for o in override_utils.list_overrides(override_project)}
+
+    assert_that(
+        listed.keys(),
+        contains_inanyorder(platform_user.user_id, second_platform_user.user_id),
+    )
+    assert_that(listed[platform_user.user_id].allowed_models, equal_to([first, second]))
+    assert_that(listed[platform_user.user_id].default_model, equal_to(second))
+    assert_that(listed[second_platform_user.user_id].allowed_models, equal_to([third]))
+    assert_that(listed[second_platform_user.user_id].default_model, equal_to(None))
+
+    override_utils.delete_override(override_project, platform_user.user_id)
+
+    assert_that(
+        override_utils.users_with_override(override_project),
+        equal_to([second_platform_user.user_id]),
+        "the deleted override must leave the list",
+    )
+    with pytest.raises(HTTPError) as not_found:
+        override_utils.get_override(override_project, platform_user.user_id)
+    assert_that(not_found.value.response.status_code, equal_to(404))
+    assert_that(
+        not_found.value.response.json()["error"]["message"],
+        equal_to(OVERRIDE_NOT_FOUND_MESSAGE),
+    )
+
+
+# @case user-level-model-override_TC_001
+@pytest.mark.requires_capability("features:userModelOverride")
+@pytest.mark.project
+@pytest.mark.api
+def test_list_pages_through_overrides_with_skip_and_limit(
+    override_utils,
+    override_project,
+    platform_user,
+    second_platform_user,
+    override_models,
+):
+    override_utils.batch_grant(
+        override_project,
+        [platform_user.user_id, second_platform_user.user_id],
+        override_models[:1],
+    )
+
+    everything = override_utils.list_overrides(override_project)
+    first_page = override_utils.list_overrides(override_project, limit=1)
+    second_page = override_utils.list_overrides(override_project, skip=1, limit=1)
+    past_the_end = override_utils.list_overrides(override_project, skip=2)
+
+    assert_that(everything, has_length(2))
+    assert_that(first_page, has_length(1))
+    assert_that(second_page, has_length(1))
+    assert_that(
+        [o.user_id for o in first_page + second_page],
+        equal_to([o.user_id for o in everything]),
+        "the pages must cover the whole list in the same order",
+    )
+    assert_that(past_the_end, has_length(0))
+
+
 # @case user-level-model-override_TC_013
 @pytest.mark.requires_capability("features:userModelOverride")
 @pytest.mark.project
@@ -207,7 +322,8 @@ def test_override_with_invalid_input_is_refused(
     assert_that(response.status_code, equal_to(invalid.status), response.text)
     error = response.json()["error"]
     assert_that(error["message"], contains_string(invalid.message_part))
-    assert_that(str(error.get("details")), contains_string(invalid.details_part))
+    if invalid.details_part:
+        assert_that(str(error["details"]), contains_string(invalid.details_part))
     assert_that(
         override_utils.users_with_override(override_project),
         not_(has_item(platform_user.user_id)),

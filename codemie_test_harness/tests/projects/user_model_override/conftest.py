@@ -24,6 +24,7 @@ from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     wait_until_accessible,
 )
+from codemie_test_harness.tests.utils.logger_util import setup_logger
 from codemie_test_harness.tests.utils.user_lifecycle_utils import (
     new_logged_in_user,
     user_email,
@@ -33,6 +34,8 @@ from codemie_test_harness.tests.utils.user_model_override_utils import (
     pick_override_models,
     platform_default_of,
 )
+
+logger = setup_logger(__name__)
 
 
 @dataclass
@@ -65,20 +68,29 @@ def outsider_user(keycloak_utils):
 
 
 @pytest.fixture
-def override_project(platform_user, second_platform_user, project, user_utils):
+def override_project(
+    platform_user, second_platform_user, project, user_utils, override_utils
+):
     """Name of a new project whose plain members are platform_user and second_platform_user.
 
     The users are requested first, so they outlive the teardown of the project. Members are
     added through the admin user route, which refreshes the member's cached project list; the
     project-scoped assignment route leaves it stale for the auth cache TTL, so the member's
-    first calls on the project would answer 403.
+    first calls on the project would answer 403. The overrides are deleted before the project
+    is, so its deletion never depends on how the backend treats the rows of a project.
     """
     name = project().name
     for member in (platform_user, second_platform_user):
         user_utils.assign_user_to_project(member.user_id, name, False)
     for member in (platform_user, second_platform_user):
         wait_until_accessible(member.client, [name])
-    return name
+    yield name
+
+    try:
+        for user_id in override_utils.users_with_override(name):
+            override_utils.delete_override(name, user_id)
+    except Exception as e:
+        logger.warning(f"Failed to delete the overrides of project {name}: {e}")
 
 
 @pytest.fixture
@@ -86,7 +98,8 @@ def project_admin_overrides(keycloak_utils, project_utils, override_project):
     """Override calls made as a project admin of override_project, logged in after the grant.
 
     The first login of the new user is made before the role is assigned, so a backend that
-    caches the administered projects per token would not know the role yet.
+    caches the administered projects per token would not know the role yet. The admin is
+    unassigned before the user is deleted.
     """
     with new_logged_in_user(
         keycloak_utils, user_email("overrideadmin"), admin=False
@@ -94,9 +107,17 @@ def project_admin_overrides(keycloak_utils, project_utils, override_project):
         project_utils.assign_user_to_project(
             override_project, admin.user_id, is_project_admin=True
         )
-        admin_client = get_client(username=admin.email, password=admin.password)
-        wait_until_accessible(admin_client, [override_project])
-        yield OverrideAdmin(admin.user_id, UserModelOverrideUtils(admin_client))
+        try:
+            admin_client = get_client(username=admin.email, password=admin.password)
+            wait_until_accessible(admin_client, [override_project])
+            yield OverrideAdmin(admin.user_id, UserModelOverrideUtils(admin_client))
+        finally:
+            try:
+                project_utils.remove_user_from_project(override_project, admin.user_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to unassign admin {admin.user_id} from {override_project}: {e}"
+                )
 
 
 @pytest.fixture

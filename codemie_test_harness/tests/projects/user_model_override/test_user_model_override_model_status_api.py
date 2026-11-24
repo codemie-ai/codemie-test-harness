@@ -27,6 +27,7 @@ from requests import HTTPError
 from codemie_sdk.models.llm import ModelStatus
 
 from codemie_test_harness.tests.test_data.user_model_override_test_data import (
+    BOTH_FEATURES,
     BATCH_FAILED_MESSAGE,
     OVERRIDE_NOT_FOUND_MESSAGE,
     deprecated_not_added_message,
@@ -35,7 +36,7 @@ from codemie_test_harness.tests.test_data.user_model_override_test_data import (
 
 # @case user-level-model-override_TC_008
 @pytest.mark.xdist_group(name="model_status")
-@pytest.mark.requires_capability("features:userModelOverride")
+@pytest.mark.requires_capability(*BOTH_FEATURES)
 @pytest.mark.project
 @pytest.mark.api
 def test_platform_disabled_override_default_falls_to_project_default(

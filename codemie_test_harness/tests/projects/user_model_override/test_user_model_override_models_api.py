@@ -24,13 +24,15 @@ from hamcrest import assert_that, equal_to, has_item, has_items, not_
 from requests import HTTPError
 
 from codemie_test_harness.tests.test_data.user_model_override_test_data import (
+    BOTH_FEATURES,
     DEFAULT_TIERS,
     NOT_IN_OVERRIDE_DETAILS,
     not_allowed_message,
 )
 from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
-
-BOTH_FEATURES = ("features:userModelOverride", "features:projectModelOverride")
+from codemie_test_harness.tests.utils.user_model_override_utils import (
+    pick_web_hidden_model,
+)
 
 
 # @case user-level-model-override_TC_004
@@ -65,8 +67,37 @@ def test_override_replaces_project_model_set_in_model_list(
     )
 
 
+# @case user-level-model-override_TC_004
+@pytest.mark.requires_capability(*BOTH_FEATURES)
+@pytest.mark.project
+@pytest.mark.api
+def test_model_list_hides_web_forbidden_override_model_unless_include_all(
+    client, override_utils, override_project, platform_user, override_models
+):
+    hidden = pick_web_hidden_model(client, override_project)
+    if hidden is None:
+        pytest.skip("No enabled chat model is forbidden for web on this stand")
+    kept = override_models[0]
+    override_utils.set_override(override_project, platform_user.user_id, [kept, hidden])
+
+    default_list = override_utils.base_names_listed(
+        platform_user.client, override_project
+    )
+    full_list = override_utils.base_names_listed(
+        platform_user.client, override_project, include_all=True
+    )
+
+    assert_that(default_list, has_item(kept))
+    assert_that(
+        default_list,
+        not_(has_item(hidden)),
+        "a model forbidden for web is left out of the default list",
+    )
+    assert_that(full_list, has_items(kept, hidden))
+
+
 # @case user-level-model-override_TC_005
-@pytest.mark.requires_capability("features:userModelOverride")
+@pytest.mark.requires_capability(*BOTH_FEATURES)
 @pytest.mark.project
 @pytest.mark.api
 def test_narrowed_member_loses_model_other_members_keep(
@@ -123,7 +154,7 @@ def test_assistant_with_override_model_outside_project_set_is_created(
 
 
 # @case user-level-model-override_TC_006
-@pytest.mark.requires_capability("features:userModelOverride")
+@pytest.mark.requires_capability(*BOTH_FEATURES)
 @pytest.mark.project
 @pytest.mark.api
 def test_assistant_with_model_left_out_of_override_is_rejected(
