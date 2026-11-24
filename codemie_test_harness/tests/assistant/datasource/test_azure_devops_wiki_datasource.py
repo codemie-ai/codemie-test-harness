@@ -13,9 +13,11 @@
 # limitations under the License.
 
 import os
+import uuid
+from types import SimpleNamespace
 
 import pytest
-from hamcrest import assert_that, equal_to
+from hamcrest import assert_that, equal_to, is_not, none
 from requests import HTTPError
 
 from codemie_sdk.models.datasource import DataSourceStatus
@@ -351,6 +353,43 @@ def ado_wiki_context_menu_reindex_setup(project, integration_utils, datasource_u
             pass
 
 
+@pytest.fixture
+def ado_wiki_multi_integration_setup(project, integration_utils):
+    """
+    Isolated project with 3 Azure DevOps integrations: invalid-1, valid, invalid-2.
+
+    Yields the project name and the integration ids so a health check can select
+    one of them explicitly. No datasource is created.
+    """
+    isolated_project = project()
+
+    invalid_creds = CredentialsManager.invalid_ado_credentials()
+    invalid_integration_1 = integration_utils.create_integration(
+        CredentialTypes.AZURE_DEVOPS, invalid_creds, project_name=isolated_project.name
+    )
+    valid_integration = integration_utils.create_integration(
+        CredentialTypes.AZURE_DEVOPS,
+        CredentialsManager.azure_devops_credentials(),
+        project_name=isolated_project.name,
+    )
+    invalid_integration_2 = integration_utils.create_integration(
+        CredentialTypes.AZURE_DEVOPS, invalid_creds, project_name=isolated_project.name
+    )
+
+    yield SimpleNamespace(
+        project_name=isolated_project.name,
+        invalid_setting_id_1=invalid_integration_1.id,
+        valid_setting_id=valid_integration.id,
+        invalid_setting_id_2=invalid_integration_2.id,
+    )
+
+    for intg in [invalid_integration_1, valid_integration, invalid_integration_2]:
+        try:
+            integration_utils.delete_integration(intg)
+        except HTTPError:
+            pass
+
+
 @pytest.mark.datasource
 @pytest.mark.ado
 @pytest.mark.api
@@ -375,3 +414,117 @@ def test_ado_wiki_datasource_context_menu_reindex_without_setting_id(
     )
 
     assert_that(updated_datasource.status, equal_to(DataSourceStatus.COMPLETED))
+
+
+def _ado_wiki_health_check(client, setup, setting_id):
+    # wiki_name / wiki_query are forwarded as extra payload fields
+    # (DatasourceHealthCheckRequest.wiki_name / wiki_query).
+    return client.datasources.health_check(
+        index_type="knowledge_base_azure_devops_wiki",
+        setting_id=setting_id,
+        project_name=setup.project_name,
+        wiki_name=CredentialsManager.azure_devops_wiki_name(),
+        wiki_query="",
+    )
+
+
+# @case azure-devops-wiki-healthcheck-endpoint_TC_001
+@pytest.mark.datasource
+@pytest.mark.ado
+@pytest.mark.api
+def test_ado_wiki_health_check_uses_selected_valid_integration(
+    client, ado_wiki_multi_integration_setup
+):
+    """
+    Health check with the valid integration selected explicitly succeeds,
+    although invalid-token integrations precede it in the project.
+    """
+    response = _ado_wiki_health_check(
+        client,
+        ado_wiki_multi_integration_setup,
+        ado_wiki_multi_integration_setup.valid_setting_id,
+    )
+
+    assert_that(
+        response.get("error"),
+        none(),
+        "Health check with the selected valid integration should return no error",
+    )
+    assert_that(
+        response.get("documents_count"),
+        is_not(none()),
+        "Health check with the selected valid integration should return documents_count",
+    )
+
+
+# @case azure-devops-wiki-healthcheck-endpoint_TC_001
+@pytest.mark.datasource
+@pytest.mark.ado
+@pytest.mark.api
+def test_ado_wiki_health_check_with_unknown_setting_id_returns_field_error(
+    client, ado_wiki_multi_integration_setup
+):
+    """
+    Health check with a non-existent setting_id returns the setting_id field
+    error instead of falling back to another integration of the project.
+    """
+    response = _ado_wiki_health_check(
+        client, ado_wiki_multi_integration_setup, str(uuid.uuid4())
+    )
+
+    error = response.get("error")
+    assert_that(
+        error,
+        is_not(none()),
+        "Health check with an unknown setting_id should return an error",
+    )
+    assert_that(
+        error.get("field_error"),
+        equal_to("setting_id"),
+        "Health check error should point at the 'setting_id' field",
+    )
+    assert_that(
+        error.get("message"),
+        equal_to("Selected Azure DevOps integration is unavailable"),
+    )
+    assert_that(
+        response.get("documents_count"),
+        none(),
+        "No other integration should be substituted for an unknown setting_id",
+    )
+
+
+# @case azure-devops-wiki-healthcheck-endpoint_TC_001
+@pytest.mark.datasource
+@pytest.mark.ado
+@pytest.mark.api
+def test_ado_wiki_health_check_with_selected_invalid_token_integration_fails(
+    client, ado_wiki_multi_integration_setup
+):
+    """
+    Health check with an invalid-token integration selected reports the
+    authentication error for that integration; the valid integration of the
+    same project is not substituted.
+    """
+    response = _ado_wiki_health_check(
+        client,
+        ado_wiki_multi_integration_setup,
+        ado_wiki_multi_integration_setup.invalid_setting_id_1,
+    )
+
+    error = response.get("error")
+    assert_that(
+        error,
+        is_not(none()),
+        "Health check with the selected invalid-token integration should return an error",
+    )
+    assert_that(
+        error.get("field_error"),
+        none(),
+        "An authentication error of the selected integration has no field_error",
+    )
+    assert_that(
+        response.get("documents_count"),
+        none(),
+        "The valid integration should not be substituted for the selected one",
+    )
