@@ -249,6 +249,14 @@ class ConversationUtils(BaseUtils):
         )
         return self.client.conversations.delete_feedback(delete_request)
 
+    def list_feedback(self):
+        """List the feedback entries visible to the current user."""
+        return self.client.conversations.list_feedback()
+
+    def get_feedback(self, document_id: str):
+        """Get a feedback entry by id."""
+        return self.client.conversations.get_feedback(document_id)
+
     # Conversation finishing
 
     def finish_conversation(self, conversation_id: str) -> ConversationFinishResponse:
