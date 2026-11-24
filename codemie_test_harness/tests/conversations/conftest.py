@@ -14,6 +14,7 @@
 
 """Fixtures for the conversation tests."""
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -29,6 +30,8 @@ from codemie_test_harness.tests.utils.conversation_utils import (
     CLI_IMPORT_ASSISTANT_ID,
     ConversationUtils,
 )
+
+logger = logging.getLogger(__name__)
 
 # Index of the assistant answer in the history built below: the question is item 0.
 ANSWER_MESSAGE_INDEX = 1
@@ -117,8 +120,17 @@ def feedback_conversation():
                     assistant_id=item.assistant_id,
                 )
         except Exception:
-            pass
+            logger.warning(
+                "Cleanup leaked feedback %s on conversation %s",
+                item.feedback_id,
+                item.conversation_id,
+                exc_info=True,
+            )
         try:
             utils.delete_conversation(item.conversation_id)
         except Exception:
-            pass
+            logger.warning(
+                "Cleanup leaked conversation %s",
+                item.conversation_id,
+                exc_info=True,
+            )
