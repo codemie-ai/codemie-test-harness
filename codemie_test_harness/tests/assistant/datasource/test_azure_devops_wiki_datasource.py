@@ -419,13 +419,21 @@ def test_ado_wiki_datasource_context_menu_reindex_without_setting_id(
 def _ado_wiki_health_check(client, setup, setting_id):
     # wiki_name / wiki_query are forwarded as extra payload fields
     # (DatasourceHealthCheckRequest.wiki_name / wiki_query).
-    return client.datasources.health_check(
-        index_type="knowledge_base_azure_devops_wiki",
+    # The health-check endpoint dispatches on DatasourceTypes.AZURE_DEVOPS_WIKI
+    # ("azure_devops_wiki"); an unmatched type returns implemented=False.
+    response = client.datasources.health_check(
+        index_type="azure_devops_wiki",
         setting_id=setting_id,
         project_name=setup.project_name,
         wiki_name=CredentialsManager.azure_devops_wiki_name(),
         wiki_query="",
     )
+    assert_that(
+        response.get("implemented"),
+        equal_to(True),
+        "Health check should be implemented for the azure_devops_wiki type",
+    )
+    return response
 
 
 # @case azure-devops-wiki-healthcheck-endpoint_TC_001
