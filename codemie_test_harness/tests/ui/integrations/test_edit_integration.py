@@ -20,13 +20,22 @@ including updating credentials and alias.
 """
 
 import pytest
+from hamcrest import assert_that, equal_to, is_, none, not_
 from playwright.sync_api import Page
+
+from codemie_sdk.models.integration import IntegrationType
 
 from codemie_test_harness.tests.ui.pageobject.integrations.create_integration_page import (
     CreateIntegrationPage,
 )
 from codemie_test_harness.tests.ui.pageobject.integrations.edit_integration_page import (
     EditIntegrationPage,
+)
+from codemie_test_harness.tests.ui.pageobject.integrations.integration_form_page import (
+    IntegrationFormPage,
+)
+from codemie_test_harness.tests.ui.pageobject.integrations.integrations_list_page import (
+    IntegrationsListPage,
 )
 from codemie_test_harness.tests.ui.pageobject.integrations.integrations_page import (
     IntegrationsPage,
@@ -35,7 +44,10 @@ from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestDataFactory,
 )
 from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    DELETED_TOAST,
     SAVED_TOAST,
+    SCOPE_PROJECT,
+    SCOPE_USER,
     UPDATED_TOAST,
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name
@@ -81,8 +93,8 @@ def test_edit_integration_update_credentials(page: Page):
 
     # Wait for integration to be created
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_saved_message(SAVED_TOAST)
-    integrations_page.close_toasts()
+    integrations_page.toast.should_show_success(SAVED_TOAST)
+    integrations_page.toast.should_disappear()
 
     # Act - Edit the integration
     integration_row = integrations_page.get_integration_row_by_alias(
@@ -100,7 +112,7 @@ def test_edit_integration_update_credentials(page: Page):
 
     # Assert - Verify success
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_message(UPDATED_TOAST)
+    integrations_page.toast.should_show(UPDATED_TOAST)
 
     integrations_page.should_see_specific_integration(integration_test_data.alias)
 
@@ -143,8 +155,8 @@ def test_edit_integration_update_alias(page: Page):
 
     # Wait for integration to be created
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_saved_message(SAVED_TOAST)
-    integrations_page.close_toasts()
+    integrations_page.toast.should_show_success(SAVED_TOAST)
+    integrations_page.toast.should_disappear()
 
     # Act - Edit the integration alias
     integration_row = integrations_page.get_integration_row_by_alias(
@@ -162,7 +174,88 @@ def test_edit_integration_update_alias(page: Page):
 
     # Assert - Verify success with new alias
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_updated"]
-    )
+    integrations_page.toast.should_show(UPDATED_TOAST)
     integrations_page.should_see_specific_integration(new_alias)
+
+
+# @case unified-integrations-list_TC_020
+@pytest.mark.integration
+@pytest.mark.ui
+@pytest.mark.prod_regression
+@pytest.mark.oss_standalone
+@pytest.mark.ui_login_as("project_admin")
+def test_edit_page_shows_scope_read_only_and_save_and_delete_act_on_that_scope_only(
+    page,
+    project_admin_user,
+    default_project_member,
+    project_admin_integrations,
+    scoped_integrations,
+):
+    user_alias = get_random_name()
+    project_alias = get_random_name()
+    user_row = scoped_integrations.create(
+        project_admin_integrations,
+        IntegrationType.USER,
+        project_admin_user.email,
+        user_alias,
+    )
+    project_row = scoped_integrations.create(
+        project_admin_integrations,
+        IntegrationType.PROJECT,
+        default_project_member.project_a,
+        project_alias,
+    )
+    new_alias = get_random_name()
+    list_page = IntegrationsListPage(page)
+    form_page = IntegrationFormPage(page)
+    list_page.navigate_to()
+
+    list_page.open_row_menu_item(user_alias, "Edit")
+
+    form_page.should_show_edit_heading(SCOPE_USER)
+    form_page.should_have_scope_locked_to(SCOPE_USER)
+
+    form_page.fill_alias(new_alias)
+    form_page.save()
+
+    list_page.toast.should_show(UPDATED_TOAST)
+    list_page.should_show_row(new_alias)
+    assert_that(
+        project_admin_integrations.get_integration_by_id(
+            user_row.id, IntegrationType.USER
+        ).alias,
+        equal_to(new_alias),
+        "The edited user integration kept its old alias",
+    )
+    assert_that(
+        project_admin_integrations.get_integration_by_id(
+            project_row.id, IntegrationType.PROJECT
+        ).alias,
+        equal_to(project_alias),
+        "Saving the user integration changed the project integration",
+    )
+
+    list_page.open_row_menu_item(project_alias, "Edit")
+
+    form_page.should_show_edit_heading(SCOPE_PROJECT)
+    form_page.should_have_scope_locked_to(SCOPE_PROJECT)
+
+    form_page.cancel()
+    list_page.delete_row(project_alias)
+
+    list_page.toast.should_show(DELETED_TOAST)
+    list_page.should_not_show_row(project_alias)
+    assert_that(
+        project_admin_integrations.get_integration_by_id(
+            project_row.id, IntegrationType.PROJECT
+        ),
+        is_(none()),
+        "The project integration was not deleted",
+    )
+    assert_that(
+        project_admin_integrations.get_integration_by_id(
+            user_row.id, IntegrationType.USER
+        ),
+        is_(not_(none())),
+        "Deleting the project integration removed the user integration",
+    )

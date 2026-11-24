@@ -33,6 +33,10 @@ from hamcrest import (
 from playwright.sync_api import Download, Locator, Page, expect
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.toast import (
+    ALL_VARIANTS,
+    Toast,
+)
 from codemie_test_harness.tests.ui.test_data.call_history_export_test_data import (
     CALL_HISTORY_TITLE_PREFIX,
     DEFAULT_CALL_LABEL,
@@ -49,6 +53,7 @@ class CallHistoryPopup:
 
     def __init__(self, page: Page):
         self.page = page
+        self.toast = Toast(page)
 
     # ====================
     # PROPERTIES
@@ -84,10 +89,6 @@ class CallHistoryPopup:
     def call_entries(self) -> Locator:
         """Header buttons of the top-level calls; the popup opens them expanded (nested calls stay collapsed)."""
         return self.dialog.get_by_role("button", expanded=True)
-
-    def toast(self, text: str) -> Locator:
-        """Toast notification with the given header text."""
-        return self.page.locator(".codemie-toast-header").filter(has_text=text)
 
     # ====================
     # ACTIONS
@@ -154,7 +155,7 @@ class CallHistoryPopup:
     @step
     def should_show_toast(self, text: str):
         """Verify a toast whose header contains ``text`` is shown."""
-        expect(self.toast(text)).to_be_visible()
+        self.toast.should_show(text, ALL_VARIANTS)
 
     @step
     def should_have_download_named(

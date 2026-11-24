@@ -13,7 +13,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.12"
-codemie-sdk-python = "0.1.721"
+codemie-sdk-python = "0.1.724"
 pytest = "^8.4.1"
 python-dotenv = "^1.1.0"
 PyHamcrest = "^2.1.0"
@@ -131,6 +131,7 @@ markers = [
     "hosted_applications: Hosted applications (upload, share, view) tests",
     "prod_regression: UI tests safe to run on PROD (regular user or admin, not a maintainer)",
     "oss_standalone: Integration-entity tests safe to run against an OSS standalone deployment",
+    "ui_login_as(role): Integrations UI tests that sign in as a fresh user of the given role instead of the harness account",
     "requires_capability(name): needs a /v1/config capability, skipped in gated runs when absent",
     "requires_setting(KEY): needs a harness setting, skipped in gated runs when unset",
 ]

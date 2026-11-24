@@ -160,7 +160,7 @@ class DataSourceSidebar(BasePage):
     @step
     def select_project(self, project_name: str):
         self.project_filter_multiselect.click()
-        self.page.locator(f'li:has-text("{project_name}")').click()
+        self.page.get_by_role("option", name=project_name, exact=True).click()
         return self
 
     @step

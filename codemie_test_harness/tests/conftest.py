@@ -112,6 +112,9 @@ from codemie_test_harness.tests.utils.github_seed import (
 from codemie_test_harness.tests.utils.github_utils import GitHubUtils
 from codemie_test_harness.tests.utils.azure_devops_seed import SeedPullRequest
 from codemie_test_harness.tests.utils.azure_devops_utils import AzureDevOpsUtils
+from codemie_test_harness.tests.utils.hosted_application_utils import (
+    HostedApplicationUtils,
+)
 from codemie_test_harness.tests.utils.hosted_sharing_utils import HostedPeople
 from codemie_test_harness.tests.utils.http_utils import RequestHandler
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
@@ -837,6 +840,45 @@ def hosted_people(keycloak_utils, admin_utils, user_utils, project_utils):
         yield HostedPeople(
             cleanup, keycloak_utils, admin_utils, user_utils, project_utils
         )
+
+
+HOSTED_CATEGORY_COUNT = 3
+
+
+@pytest.fixture
+def hosted_categories(client):
+    """Three categories the platform already has, with plain names; the tests never change them.
+
+    Skips the test when the platform holds fewer than three such categories.
+    """
+    categories = HostedApplicationUtils(client).plain_categories(HOSTED_CATEGORY_COUNT)
+    if len(categories) < HOSTED_CATEGORY_COUNT:
+        pytest.skip(
+            f"the platform has fewer than {HOSTED_CATEGORY_COUNT} categories with plain names"
+        )
+    return categories
+
+
+@pytest.fixture
+def hosted_temp_category(categories_utils):
+    """Factory: create a category for the test; it is deleted after the test.
+
+    Category creation and deletion need an administrator, which the session client is. A category
+    an application still carries cannot be deleted, so the test removes those applications first.
+    """
+    created = []
+
+    def create():
+        category = categories_utils.create_category()
+        created.append(category.id)
+        return category
+
+    yield create
+    for category_id in created:
+        try:
+            categories_utils.delete_category(category_id)
+        except Exception as error:
+            logger.warning(f"Failed to delete category {category_id}: {error}")
 
 
 # Role fixtures. Each yields a LoggedInUser (email, password, user_id, client) of a fresh
@@ -2808,10 +2850,11 @@ def pytest_sessionfinish(session):
     predicate still requires the session prefix too, not "autotest-"
     alone. Skills are only scoped by created_by (matches every skill this
     TEST_USER created, across sessions — same as before this refactor,
-    not narrowed further here). Providers and cost centers match a
-    structural name pattern, also session-agnostic — except that a cost
-    center still pinned to a project (409 on delete) gets one prefix-scoped
-    retry: see delete_cost_centers' own docstring. Jira/Confluence/ADO
+    not narrowed further here). Providers match a structural name pattern,
+    also session-agnostic. Cost centers are scoped to this session's own
+    name letters (see get_random_cost_center_name), and one still pinned to
+    a project (409 on delete) gets one prefix-scoped retry: see
+    delete_cost_centers' own docstring. Jira/Confluence/ADO
     cleanup is intentionally NOT done here — see test_clean_all_entities
     for that.
 

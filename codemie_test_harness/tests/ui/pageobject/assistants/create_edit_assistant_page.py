@@ -19,6 +19,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect, Locator
 from reportportal_client import step
 
+from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 from codemie_test_harness.tests.ui.pageobject.assistants.generate_with_ai_modal import (
     AIAssistantGeneratorPage,
 )
@@ -286,6 +287,11 @@ class CreateEditAssistantPage(BasePage):
         to 'https://example.com/logo.jpg'. Identified by name attribute.
         """
         return self.page.locator('input[name="icon_url"]')
+
+    @property
+    def logo_hint(self) -> Locator:
+        """Hint under the logo input (LogoUrlInputField), carrying the upload limits."""
+        return self.page.get_by_text("Must be JPEG, PNG, SVG and max size 500kb")
 
     @property
     def description_textarea(self) -> Locator:
@@ -1422,7 +1428,9 @@ class CreateEditAssistantPage(BasePage):
 
         # Find the specific option role element for this skill in the dropdown
         # After filtering/typing, the skill should be visible in the dropdown
-        skill_option = self.page.get_by_role("option").filter(has_text=skill_name)
+        skill_option = self.page.get_by_role("option").filter(
+            has=self.page.get_by_text(skill_name, exact=True)
+        )
 
         if skill_option.count() > 0:
             skill_option.first.click()
@@ -1466,7 +1474,9 @@ class CreateEditAssistantPage(BasePage):
 
         # Find the skill option (which should be selected) and click it to deselect
         # Use role="option" to target the actual dropdown options
-        skill_option = self.page.get_by_role("option").filter(has_text=skill_name)
+        skill_option = self.page.get_by_role("option").filter(
+            has=self.page.get_by_text(skill_name, exact=True)
+        )
 
         if skill_option.count() > 0:
             skill_option.first.click()
@@ -1627,6 +1637,12 @@ class CreateEditAssistantPage(BasePage):
     def should_have_categories_visible(self):
         """Verify categories dropdown is visible.."""
         expect(self.categories_dropdown).to_be_visible()
+        return self
+
+    @step
+    def should_have_logo_upload_hint(self):
+        """Verify the logo input shows the assistant upload limits hint."""
+        expect(self.logo_hint).to_be_visible()
         return self
 
     @step
@@ -1830,8 +1846,8 @@ class CreateEditAssistantPage(BasePage):
         filter_input.fill(datasource_name)
         self.page.wait_for_timeout(300)
 
-        datasource_option = (
-            self.page.get_by_role("option").filter(has_text=datasource_name).first
+        datasource_option = self.page.get_by_role("option").filter(
+            has=self.page.get_by_text(datasource_name, exact=True)
         )
         datasource_option.wait_for(state="visible", timeout=10000)
         if datasource_option.get_attribute("aria-selected") != "true":
@@ -1851,8 +1867,8 @@ class CreateEditAssistantPage(BasePage):
             self.datasource_context_dropdown.click()
 
         # Wait for options to load, then click if currently selected
-        datasource_option = (
-            self.page.get_by_role("option").filter(has_text=datasource_name).first
+        datasource_option = self.page.get_by_role("option").filter(
+            has=self.page.get_by_text(datasource_name, exact=True)
         )
         datasource_option.wait_for(state="visible", timeout=10000)
         if datasource_option.get_attribute("aria-selected") == "true":
@@ -1880,7 +1896,7 @@ class CreateEditAssistantPage(BasePage):
         Returns:
             self: Returns the page object for method chaining
         """
-        expect(self.page.locator(".codemie-toast")).not_to_be_visible(timeout=3000)
+        self.toast.should_not_show()
         return self
 
     # ==================== HIDE TOOL OUTPUTS ====================
@@ -1912,9 +1928,7 @@ class CreateEditAssistantPage(BasePage):
     @step
     def should_see_toast_message(self, text: str):
         """Verify a toast notification with the given header text is shown."""
-        toast_header = self.page.locator(".codemie-toast .codemie-toast-header")
-        expect(toast_header).to_be_visible()
-        expect(toast_header).to_have_text(text)
+        self.toast.should_show(text, ALL_VARIANTS, exact=True)
         return self
 
     @step

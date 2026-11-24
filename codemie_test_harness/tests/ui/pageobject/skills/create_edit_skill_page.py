@@ -528,16 +528,6 @@ class CreateEditSkillPage(BasePage):
     # IMPORT ERROR TOAST
     # =============================================================================
 
-    @property
-    def import_error_toast(self) -> Locator:
-        """Error toast shown after a failed bundle import (inherited from BasePage)."""
-        return self.error_toast
-
-    @property
-    def import_error_toast_header(self) -> Locator:
-        """The heading (h2.codemie-toast-header) of the first error toast."""
-        return self.error_toast.locator(".codemie-toast-header").first
-
     @step("Verify import error toast shows a user-friendly message")
     def should_see_import_error_toast(self):
         """Assert that a user-friendly error toast appeared after a failed bundle import.
@@ -545,13 +535,12 @@ class CreateEditSkillPage(BasePage):
         Verifies the heading is visible, does not contain the raw HTTP error string,
         and contains at least one known human-readable phrase from the backend.
         """
-        expect(self.import_error_toast).to_be_visible(timeout=10_000)
-        expect(self.import_error_toast_header).to_be_visible(timeout=10_000)
-        expect(self.import_error_toast_header).not_to_contain_text("HTTP error")
-        expect(self.import_error_toast_header).not_to_contain_text(
-            re.compile(r"HTTP\s+error\s+400", re.I)
-        )
-        expect(self.import_error_toast_header).to_contain_text(
+        header = self.toast.error_header
+        self.toast.should_show_any(("error",), timeout=10_000)
+        expect(header).to_be_visible(timeout=10_000)
+        expect(header).not_to_contain_text("HTTP error")
+        expect(header).not_to_contain_text(re.compile(r"HTTP\s+error\s+400", re.I))
+        expect(header).to_contain_text(
             re.compile(r"Invalid skill bundle|SKILL\.md|Oops", re.I)
         )
         return self

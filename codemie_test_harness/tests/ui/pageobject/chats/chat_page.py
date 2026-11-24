@@ -40,6 +40,9 @@ from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.pageobject.components.export_conversation_dialog import (
     ExportConversationDialog,
 )
+from codemie_test_harness.tests.ui.pageobject.components.generated_files import (
+    GeneratedFiles,
+)
 from codemie_test_harness.tests.ui.pageobject.components.tool_output_preview import (
     ToolOutputPreview,
 )
@@ -1297,7 +1300,7 @@ class ChatPage(BasePage):
     def should_not_have_error_toast(self):
         """Assert no error toast visible — regression guard.
         Must be called during the action (inside capture_requests_during lambda) to catch transient toasts."""
-        expect(self.error_toast).to_be_hidden()
+        self.toast.should_not_show(variants=("error",))
         return self
 
     @step
@@ -1443,6 +1446,11 @@ class ChatPage(BasePage):
             .filter(has=self.page.get_by_role("button", name=tool_name, exact=True))
             .first
         )
+
+    @property
+    def generated_files(self) -> GeneratedFiles:
+        """Files the chat's assistant messages published (the generated-files block)."""
+        return GeneratedFiles(self.chat_history_container)
 
     @step
     def open_tool_output(self, tool_name: str) -> ToolOutputPreview:

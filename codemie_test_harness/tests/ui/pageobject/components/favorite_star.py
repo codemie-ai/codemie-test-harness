@@ -16,6 +16,7 @@
 
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
+from codemie_test_harness.tests.ui.pageobject.components.toast import Toast
 
 
 class FavoriteStar:
@@ -35,6 +36,7 @@ class FavoriteStar:
         """
         self.page = page
         self.card = card_locator
+        self.toast = Toast(page)
 
     @property
     def unfilled_star(self) -> Locator:
@@ -45,11 +47,6 @@ class FavoriteStar:
     def filled_star(self) -> Locator:
         """The star while the item is a favorite."""
         return self.card.get_by_role("button", name="Remove from favorites", exact=True)
-
-    @property
-    def added_toast_heading(self) -> Locator:
-        """Heading of the success toast shown after a favorite is saved."""
-        return self.page.get_by_role("heading", name="Added to favorites", level=2)
 
     @property
     def removal_dialog(self) -> Locator:
@@ -65,7 +62,7 @@ class FavoriteStar:
     def favorite(self):
         """Click the unfilled star and wait until the save toast confirms the save."""
         self.unfilled_star.click()
-        expect(self.added_toast_heading).to_be_visible()
+        self.toast.should_show("Added to favorites")
         return self
 
     @step("Remove the item from favorites")

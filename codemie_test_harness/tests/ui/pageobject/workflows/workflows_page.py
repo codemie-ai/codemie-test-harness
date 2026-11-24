@@ -26,6 +26,9 @@ from codemie_test_harness.tests.ui.pageobject.components import (
     WorkflowCard,
     WorkflowSidebar,
 )
+from codemie_test_harness.tests.ui.pageobject.components.uploaded_icon import (
+    uploaded_icon_avatar,
+)
 from codemie_test_harness.tests.ui.pageobject.workflows.create_workflow_page import (
     CreateWorkflowPage,
 )
@@ -273,6 +276,16 @@ class WorkflowsPage(BasePage):
         self.wait_for_page_load()
         expect(self.page).to_have_url(re.compile(r"/workflows/my"))
         expect(self.workflow_card_with_exact_title(workflow_name)).to_be_visible()
+        return self
+
+    @step
+    def should_show_workflow_icon(self, workflow_name: str, icon_url: str):
+        """Verify the named card shows the avatar of the uploaded icon file.
+
+        A freshly created workflow still shows its local preview; check after a reload.
+        """
+        card = self.workflow_card_with_exact_title(workflow_name)
+        expect(uploaded_icon_avatar(card, icon_url).first).to_be_visible()
         return self
 
     @step
