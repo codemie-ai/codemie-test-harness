@@ -40,6 +40,8 @@ from codemie_test_harness.tests.test_data.budget_usage_project_rows_test_data im
     PERCENT_TOLERANCE,
     SCALED_PROJECT_LIMIT,
     SPEND_PARITY_TOLERANCE,
+    STORED_ROW_POLL_INTERVAL,
+    STORED_ROW_WAIT_TIMEOUT,
 )
 from codemie_test_harness.tests.ui.pageobject.budgets.personal_spending_page import (
     PersonalSpendingPage,
@@ -55,9 +57,12 @@ from codemie_test_harness.tests.utils.budget_usage_utils import (
     BudgetUsageUtils,
     expected_total,
     generate_member_spend,
+    member_customer_spend,
     row_names,
     wait_for_settled_key_spend,
+    wait_for_settled_spend,
 )
+from codemie_test_harness.tests.utils.base_utils import poll_until
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.proxy_utils import ProxyUtils
 
@@ -349,11 +354,22 @@ def assert_other_member_spend_moved_only_the_project_percentage(
 
 @dataclass
 class ViewerSpend:
-    """The viewer's settled spend on one category and the row of the table that shows it."""
+    """The viewer's spend on one category and the row of the table that shows it.
+
+    ``spend`` is the viewer's LiteLLM customer spend on the category; ``customer_spend()``
+    reads it again, so a row is compared with a value measured after the row was read.
+    """
 
     category: str
     row_name: str
+    project_name: str
+    user_id: str
     spend: float
+
+    def customer_spend(self, lite_llm_budget_utils) -> float:
+        return member_customer_spend(
+            lite_llm_budget_utils, self.project_name, self.user_id, self.category
+        )
 
 
 def generate_viewer_spend_on_every_category(
@@ -361,31 +377,39 @@ def generate_viewer_spend_on_every_category(
 ) -> list[ViewerSpend]:
     """The viewer spends on the platform, cli and premium_models categories of the project.
 
-    Every customer and project key is settled before anything reads budget_usage: the first
-    read stores its values for the staleness window.
+    Every customer and project key is settled once all categories were spent on, before
+    anything reads budget_usage: the first read stores its values for the staleness window.
+    The returned spend of each category is the settled customer spend, read after that.
     """
     project_name = _project_name(budget)
     viewer_id = client.users.about_me().user_id
     proxy_utils = ProxyUtils(client)
-    spends = [
-        ViewerSpend(
+    spends = []
+    for category_spend in SPEND_CATEGORIES:
+        generate_member_spend(
+            proxy_utils,
+            lite_llm_budget_utils,
+            category_spend.model or default_llm.base_name,
+            project_name,
+            viewer_id,
             category=category_spend.category,
-            row_name=f"{project_name}{category_spend.row_suffix}",
-            spend=generate_member_spend(
-                proxy_utils,
-                lite_llm_budget_utils,
-                category_spend.model or default_llm.base_name,
-                project_name,
-                viewer_id,
-                category=category_spend.category,
-                client_header=category_spend.client_header,
-            ),
+            client_header=category_spend.client_header,
         )
-        for category_spend in SPEND_CATEGORIES
-    ]
+        spends.append(
+            ViewerSpend(
+                category=category_spend.category,
+                row_name=f"{project_name}{category_spend.row_suffix}",
+                project_name=project_name,
+                user_id=viewer_id,
+                spend=0.0,
+            )
+        )
     for spend in spends:
         wait_for_settled_key_spend(
             lite_llm_budget_utils, project_key_alias(project_name, spend.category)
+        )
+        spend.spend = wait_for_settled_spend(
+            lambda spend=spend: spend.customer_spend(lite_llm_budget_utils)
         )
     return spends
 
@@ -400,29 +424,47 @@ def assert_viewer_spend_is_recorded_on_every_category(spends: list[ViewerSpend])
         )
 
 
+def _wait_for_row_with_measured_spend(
+    usage: BudgetUsageUtils, spend: ViewerSpend, lite_llm_budget_utils
+) -> tuple[dict | None, float]:
+    """Poll until the row shows the viewer's customer spend measured right after the row.
+
+    LiteLLM writes spend in batches and the row catches up only after the ledger collected
+    it, so both sides are read on every attempt: the row first, then the customer spend.
+    Returns ``(row, measured)`` of the last attempt, matched or not.
+    """
+    return poll_until(
+        lambda: (
+            usage.get_row(spend.row_name),
+            spend.customer_spend(lite_llm_budget_utils),
+        ),
+        lambda result: result[0] is not None
+        and abs(result[0]["current_spending"] - result[1]) <= SPEND_PARITY_TOLERANCE,
+        timeout=STORED_ROW_WAIT_TIMEOUT,
+        interval=STORED_ROW_POLL_INTERVAL,
+    )
+
+
 def wait_for_viewer_rows_with_own_spend(
-    client, spends: list[ViewerSpend]
+    client, spends: list[ViewerSpend], lite_llm_budget_utils
 ) -> list[dict]:
-    """The viewer's row of every spent category, once the API shows the settled spend on it."""
+    """The viewer's row of every spent category, once the API shows the viewer's spend on it."""
     usage = BudgetUsageUtils(client)
     rows = []
     for spend in spends:
-        row = usage.wait_for_row_where(
-            spend.row_name,
-            lambda listed, expected=spend.spend: abs(
-                listed["current_spending"] - expected
-            )
-            <= SPEND_PARITY_TOLERANCE,
+        row, measured = _wait_for_row_with_measured_spend(
+            usage, spend, lite_llm_budget_utils
         )
         assert_that(
             row, not_none(), f"Precondition failed: {spend.row_name} is not listed"
         )
         assert_that(
             row["current_spending"],
-            close_to(spend.spend, SPEND_PARITY_TOLERANCE),
+            close_to(measured, SPEND_PARITY_TOLERANCE),
             f"Precondition failed: the API does not show the viewer's settled {spend.category} "
             "spend",
         )
+        spend.spend = measured
         rows.append(row)
     return rows
 

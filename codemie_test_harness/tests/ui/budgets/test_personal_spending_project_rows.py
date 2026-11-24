@@ -260,7 +260,7 @@ def test_personal_spending_shows_own_spend_of_every_category_in_cents(
     )
     assert_viewer_spend_is_recorded_on_every_category(spends)
     category_rows = wait_for_viewer_rows_with_own_spend(
-        project_admin_setup_client, spends
+        project_admin_setup_client, spends, lite_llm_budget_utils
     )
     assert_some_spend_has_more_than_two_decimals(category_rows)
 
