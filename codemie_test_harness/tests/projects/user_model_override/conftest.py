@@ -65,14 +65,17 @@ def outsider_user(keycloak_utils):
 
 
 @pytest.fixture
-def override_project(platform_user, second_platform_user, project, project_utils):
+def override_project(platform_user, second_platform_user, project, user_utils):
     """Name of a new project whose plain members are platform_user and second_platform_user.
 
-    The users are requested first, so they outlive the teardown of the project.
+    The users are requested first, so they outlive the teardown of the project. Members are
+    added through the admin user route, which refreshes the member's cached project list; the
+    project-scoped assignment route leaves it stale for the auth cache TTL, so the member's
+    first calls on the project would answer 403.
     """
     name = project().name
     for member in (platform_user, second_platform_user):
-        project_utils.assign_user_to_project(name, member.user_id, False)
+        user_utils.assign_user_to_project(member.user_id, name, False)
     for member in (platform_user, second_platform_user):
         wait_until_accessible(member.client, [name])
     return name
