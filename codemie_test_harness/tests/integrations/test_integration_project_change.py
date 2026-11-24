@@ -464,32 +464,56 @@ def _create_as_member_once_effective(create, timeout=60, interval=3):
     """Run ``create`` until the backend accepts it, i.e. until the member's role is effective.
 
     A plain member cannot list project integrations, so there is nothing to poll for them; their
-    own create call is the access check. A rejected create leaves nothing behind, so repeating it
-    is safe. The last rejection is raised when the timeout elapses.
+    own create call is the access check. Only 403/404 mean the access is not effective yet and are
+    retried; any other status is a real defect and propagates at once. ``create`` must reuse one
+    alias across attempts, so a row created before a failed follow-up lookup is never duplicated.
+    The last rejection is raised when the timeout elapses.
     """
     deadline = time.monotonic() + timeout
     while True:
         try:
             with expected_http_errors():
                 return create()
-        except HTTPError:
-            if time.monotonic() >= deadline:
+        except HTTPError as error:
+            status = error.response.status_code if error.response is not None else None
+            if status not in (403, 404) or time.monotonic() >= deadline:
                 raise
             time.sleep(interval)
 
 
 @pytest.fixture
 def owner_personal_integration(
-    owner_project, platform_user, create_integration_in_project
+    owner_project, platform_user, integration_utils, create_integration_in_project
 ):
-    """Personal (USER-type) integration that ``platform_user`` created in ``owner_project``."""
+    """Personal (USER-type) integration that ``platform_user`` created in ``owner_project``.
+
+    The factory records the row as USER, which is wrong once the owner converts it to PROJECT, so
+    this fixture deletes the row by the type it has at teardown, tolerating it being gone.
+    """
     owner_utils = IntegrationUtils(platform_user.client)
+    alias = get_random_name()
     created = _create_as_member_once_effective(
         lambda: create_integration_in_project(
-            owner_project.name, setting_type=IntegrationType.USER, utils=owner_utils
+            owner_project.name,
+            alias=alias,
+            setting_type=IntegrationType.USER,
+            utils=owner_utils,
         )
     )
-    return owner_utils, created
+    yield owner_utils, created
+
+    try:
+        if created.id in integration_utils.list_integration_ids_in_project(
+            owner_project.name, IntegrationType.PROJECT
+        ):
+            integration_utils.delete_integration_by_id(
+                created.id, IntegrationType.PROJECT
+            )
+        else:
+            owner_utils.delete_integration_by_id(created.id, IntegrationType.USER)
+    except HTTPError as error:
+        if error.response is None or error.response.status_code != 404:
+            raise
 
 
 @pytest.fixture
@@ -526,6 +550,7 @@ def test_convert_personal_integration_to_project_denied_for_non_owner_allowed_fo
     non_owner_fixture,
 ):
     # @case personal-integration-conversion-owner-only_TC_001
+    # Denial and owner success stay in one test on purpose: the owner step relies on the denied state.
     """A non-owner gets 403 'Access denied' and the integration stays personal; the owner converts it."""
     non_owner_utils = request.getfixturevalue(non_owner_fixture)
     owner_utils, personal = owner_personal_integration
