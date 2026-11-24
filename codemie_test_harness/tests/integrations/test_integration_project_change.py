@@ -19,6 +19,7 @@ PUT /v1/settings/project/{id} and PUT /v1/settings/user/{id} move the integratio
 and TC_007.
 """
 
+import time
 from typing import List, Optional
 
 import pytest
@@ -459,17 +460,34 @@ def _wait_until_member_sees_project(
     )
 
 
+def _create_as_member_once_effective(create, timeout=60, interval=3):
+    """Run ``create`` until the backend accepts it, i.e. until the member's role is effective.
+
+    A plain member cannot list project integrations, so there is nothing to poll for them; their
+    own create call is the access check. A rejected create leaves nothing behind, so repeating it
+    is safe. The last rejection is raised when the timeout elapses.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            with expected_http_errors():
+                return create()
+        except HTTPError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(interval)
+
+
 @pytest.fixture
 def owner_personal_integration(
     owner_project, platform_user, create_integration_in_project
 ):
     """Personal (USER-type) integration that ``platform_user`` created in ``owner_project``."""
     owner_utils = IntegrationUtils(platform_user.client)
-    _wait_until_member_sees_project(
-        owner_utils, owner_project.name, create_integration_in_project
-    )
-    created = create_integration_in_project(
-        owner_project.name, setting_type=IntegrationType.USER, utils=owner_utils
+    created = _create_as_member_once_effective(
+        lambda: create_integration_in_project(
+            owner_project.name, setting_type=IntegrationType.USER, utils=owner_utils
+        )
     )
     return owner_utils, created
 
