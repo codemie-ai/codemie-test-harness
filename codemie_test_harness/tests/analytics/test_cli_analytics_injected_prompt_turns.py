@@ -82,8 +82,8 @@ def test_session_turns_exclude_injected_prompts(
     analytics_utils, injected_prompt_sessions, scenario
 ):
     """A session with one typed prompt and messages Claude Code injected itself (subagent
-    hand-backs, a task notification answered or not), whose client summary counts them
-    all, has one turn."""
+    hand-backs, a task notification answered or not) has one turn. No client summary is
+    sent, so the served turns are the ones the backend counted."""
     seed = injected_prompt_sessions[scenario]
     _wait_until_rolled_up(analytics_utils, seed)
 

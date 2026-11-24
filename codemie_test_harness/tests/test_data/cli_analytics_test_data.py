@@ -355,7 +355,7 @@ WINDOW_UTC_OFFSETS = [0, 2, -5]
 
 @dataclass
 class CliSessionSeed:
-    """One CLI session to ingest: a session start plus a single model request.
+    """One CLI session to ingest: a session start plus ``requests`` model requests.
 
     ``started_at`` is the instant of the session; ``utc_offset_hours`` only changes
     how that instant is written in the events. With ``duration`` the session also
@@ -369,9 +369,13 @@ class CliSessionSeed:
     the model as the API names it, when that differs from ``model``: Claude Code
     through the LiteLLM proxy reports the route the request ran on as ``model``
     (``x-litellm-model-name``) and the name it asked for as ``model_raw``.
-    ``branch`` is the git branch the session started on; ``cache_read_tokens`` are the
-    tokens its request read from the prompt cache (with a single request they are the
-    session's context per call). ``tool_calls_succeeded`` and ``tool_calls_failed`` are the
+    ``branch`` is the git branch the session started on. The token counts are the
+    session's totals, spread over its ``requests`` (the first request takes what does
+    not divide evenly): ``cache_read_tokens`` are the tokens read from the prompt
+    cache, so the session's context per call is ``cache_read_tokens / requests``, and
+    ``cache_creation_5m_tokens`` / ``cache_creation_1h_tokens`` the tokens written to
+    it for five minutes and for an hour. A seed with ``cost_usd`` makes one request.
+    ``tool_calls_succeeded`` and ``tool_calls_failed`` are the
     tool calls the session makes: each has a tool start, and a tool end when it succeeded or
     a tool error when it failed, so the session counts that many tool calls and a success
     rate over them.
@@ -391,11 +395,25 @@ class CliSessionSeed:
     skill_name: str | None = None
     branch: str | None = None
     cache_read_tokens: int = 0
+    cache_creation_5m_tokens: int = 0
+    cache_creation_1h_tokens: int = 0
+    requests: int = 1
     tool_calls_succeeded: int = 0
     tool_calls_failed: int = 0
     session_id: str = field(
         default_factory=lambda: f"autotest-cli-{uuid.uuid4().hex[:12]}"
     )
+
+    def __post_init__(self) -> None:
+        if self.requests < 1 or (self.cost_usd is not None and self.requests != 1):
+            raise ValueError(
+                f"seed {self.key}: {self.requests} requests; a seed makes at least one, "
+                "and one when it reports a cost"
+            )
+
+    @property
+    def cache_creation_tokens(self) -> int:
+        return self.cache_creation_5m_tokens + self.cache_creation_1h_tokens
 
     def events(self, project_name: str) -> list[dict]:
         """Hook events for ``POST /v1/analytics/cli-analytics/event-hooks``."""
@@ -447,7 +465,7 @@ class CliSessionSeed:
                 }
             )
         if self.cost_usd is None:
-            events.append(self._usage_event(envelope))
+            events.extend(self._usage_events(envelope))
         events.extend(self._tool_events(envelope))
         return events
 
@@ -483,13 +501,25 @@ class CliSessionSeed:
             )
         return events
 
-    def _usage_event(self, envelope: dict) -> dict:
+    def _share(self, total: int, number: int) -> int:
+        """The part of a session total that request ``number`` (from 1) carries."""
+        share = total // self.requests
+        return share + total % self.requests if number == 1 else share
+
+    def _usage_events(self, envelope: dict) -> list[dict]:
+        return [
+            self._usage_event(envelope, number)
+            for number in range(1, self.requests + 1)
+        ]
+
+    def _usage_event(self, envelope: dict, number: int) -> dict:
+        suffix = "" if number == 1 else f"_{number}"
         return {
             **envelope,
             "type": "agent.usage.request",
-            "event_id": f"usage:{self.session_id}:1:{self.model}",
-            "request_id": f"req_{self.session_id}",
-            "message_id": f"msg_{self.session_id}",
+            "event_id": f"usage:{self.session_id}:{number}:{self.model}",
+            "request_id": f"req_{self.session_id}{suffix}",
+            "message_id": f"msg_{self.session_id}{suffix}",
             "agent_id": "",
             "agent_type": "",
             "scope_kind": "main",
@@ -499,11 +529,15 @@ class CliSessionSeed:
             "speed": "standard",
             "inference_geo": "not_available",
             "service_tier": "standard",
-            "input_tokens": self.input_tokens,
-            "cache_creation_5m_tokens": 0,
-            "cache_creation_1h_tokens": 0,
-            "cache_read_tokens": self.cache_read_tokens,
-            "output_tokens": self.output_tokens,
+            "input_tokens": self._share(self.input_tokens, number),
+            "cache_creation_5m_tokens": self._share(
+                self.cache_creation_5m_tokens, number
+            ),
+            "cache_creation_1h_tokens": self._share(
+                self.cache_creation_1h_tokens, number
+            ),
+            "cache_read_tokens": self._share(self.cache_read_tokens, number),
+            "output_tokens": self._share(self.output_tokens, number),
             "thinking_tokens": 0,
             "web_search_requests": 0,
             "web_fetch_requests": 0,
@@ -526,7 +560,7 @@ class CliSessionSeed:
             "input_tokens": {"intValue": str(self.input_tokens)},
             "output_tokens": {"intValue": str(self.output_tokens)},
             "cache_read_tokens": {"intValue": str(self.cache_read_tokens)},
-            "cache_creation_tokens": {"intValue": "0"},
+            "cache_creation_tokens": {"intValue": str(self.cache_creation_tokens)},
         }
         record = {
             "timeUnixNano": str(int(self.started_at.timestamp()) * 10**9),
@@ -641,10 +675,20 @@ def get_cost_session_seeds(model: str) -> list[CliSessionSeed]:
 
 
 def get_hooks_only_cost_seeds(model: str) -> list[CliSessionSeed]:
-    """Two users' sessions of a catalog-priced model whose requests come from hooks
-    only: no OTel ``api_request`` record, so no reported cost."""
+    """Two users' sessions of a model the catalog prices for every token kind, whose
+    requests come from hooks only: no OTel ``api_request`` record, so no reported
+    cost. The owner's session also reads from the prompt cache and writes to it for
+    five minutes and for an hour, so each cache rate takes part in its cost."""
     return _seeds(
-        ("hooks_owner", timedelta(hours=10), {}),
+        (
+            "hooks_owner",
+            timedelta(hours=10),
+            {
+                "cache_read_tokens": 30000,
+                "cache_creation_5m_tokens": 4000,
+                "cache_creation_1h_tokens": 2000,
+            },
+        ),
         ("hooks_member", timedelta(hours=11), {"user": MEMBER}),
         model=model,
     )
@@ -839,10 +883,71 @@ def priced_model(models: list[LLMModel]) -> LLMModel | None:
     return min(priced, key=lambda model: model.base_name, default=None)
 
 
-def session_catalog_cost(seed: CliSessionSeed, price: CostConfig) -> float:
-    """Money of one session: its tokens at the catalog price (seeds carry no cache
-    tokens). The cost the session reported plays no part."""
-    return seed.input_tokens * price.input + seed.output_tokens * price.output
+@dataclass(frozen=True)
+class CatalogRates:
+    """Per-token catalog rates of a model, as ``GET /v1/llm_models`` reports its cost:
+    ``cache_write`` prices the five-minute cache writes, ``cache_write_1h`` the
+    one-hour ones. The SDK's ``CostConfig`` keeps only the input and output rates."""
+
+    input: float
+    output: float
+    cache_read: float | None = None
+    cache_write: float | None = None
+    cache_write_1h: float | None = None
+
+    @classmethod
+    def from_cost(cls, cost: dict) -> "CatalogRates":
+        return cls(
+            input=cost["input"],
+            output=cost["output"],
+            cache_read=cost.get("cache_read_input_token_cost"),
+            cache_write=cost.get("cache_creation_input_token_cost"),
+            cache_write_1h=cost.get("cache_creation_input_token_cost_above_1hr"),
+        )
+
+
+def cache_priced_model(models: list[dict]) -> tuple[str, CatalogRates] | None:
+    """The enabled, non-router model of a raw ``GET /v1/llm_models`` answer whose
+    catalog entry prices every token kind (input, output, cache read, five-minute and
+    one-hour cache write), first by ``base_name``, with its rates."""
+    priced = [
+        (model["base_name"], CatalogRates.from_cost(model["cost"]))
+        for model in models
+        if model.get("enabled") and not model.get("is_router") and model.get("cost")
+    ]
+    priced = [
+        (name, rates)
+        for name, rates in priced
+        if all(
+            rate is not None and rate > 0
+            for rate in (
+                rates.input,
+                rates.output,
+                rates.cache_read,
+                rates.cache_write,
+                rates.cache_write_1h,
+            )
+        )
+    ]
+    return min(priced, key=lambda entry: entry[0], default=None)
+
+
+def session_catalog_cost(
+    seed: CliSessionSeed, price: CostConfig | CatalogRates
+) -> float:
+    """Money of one session: its tokens at the catalog price. The cost the session
+    reported plays no part. Cache tokens are priced only with a ``CatalogRates``
+    price; a ``CostConfig`` has no cache rates, so it serves only where cache tokens
+    cannot change the result (orderings whose cost gaps dwarf them)."""
+    cost = seed.input_tokens * price.input + seed.output_tokens * price.output
+    for tokens, rate in (
+        (seed.cache_read_tokens, getattr(price, "cache_read", None)),
+        (seed.cache_creation_5m_tokens, getattr(price, "cache_write", None)),
+        (seed.cache_creation_1h_tokens, getattr(price, "cache_write_1h", None)),
+    ):
+        if tokens and rate is not None:
+            cost += tokens * rate
+    return cost
 
 
 def catalog_cost(seeds: list[CliSessionSeed], price: CostConfig) -> float:
@@ -953,14 +1058,16 @@ def get_session_list_seeds(model: str) -> list[CliSessionSeed]:
 
 
 def get_context_session_seeds(model: str) -> list[CliSessionSeed]:
-    """Four sessions whose single request read a different number of tokens from the
-    prompt cache, so their context per call differs; the newest has none."""
-    # key, hour, cache read tokens
+    """Four sessions that read a different number of tokens from the prompt cache over
+    a different number of requests, so their context per call differs; the newest has
+    none. By total cache reads ctx_2 would lead, but per call ctx_3 does (500 over one
+    request against 900 over three), so a sort by the total fails."""
+    # key, hour, cache read tokens, requests
     specs = [
-        ("ctx_1", 10, 200),
-        ("ctx_2", 11, 800),
-        ("ctx_3", 12, 500),
-        ("ctx_4", 13, 0),
+        ("ctx_1", 10, 200, 1),
+        ("ctx_2", 11, 900, 3),
+        ("ctx_3", 12, 500, 1),
+        ("ctx_4", 13, 0, 1),
     ]
     return [
         CliSessionSeed(
@@ -969,9 +1076,10 @@ def get_context_session_seeds(model: str) -> list[CliSessionSeed]:
             input_tokens=1000 * (index + 1),
             output_tokens=10 * (index + 1),
             cache_read_tokens=cache_read,
+            requests=requests,
             model=model,
         )
-        for index, (key, hour, cache_read) in enumerate(specs)
+        for index, (key, hour, cache_read, requests) in enumerate(specs)
     ]  # fmt: skip
 
 
@@ -1011,14 +1119,34 @@ def get_new_session_seed(model: str) -> CliSessionSeed:
     )
 
 
+def context_per_call(seed: CliSessionSeed) -> float:
+    """Cache read tokens per model request, as the Sessions list reports ctx_per_call."""
+    return seed.cache_read_tokens / seed.requests
+
+
+def get_paging_boundary_seeds(model: str) -> list[CliSessionSeed]:
+    """One session more than the default page holds, a minute apart, so the default
+    page must leave out the oldest one."""
+    return [
+        CliSessionSeed(
+            key=f"page_boundary_{index}",
+            started_at=seed_day_start() + timedelta(hours=10, minutes=index),
+            input_tokens=1000 + index,
+            output_tokens=10,
+            model=model,
+        )
+        for index in range(SESSIONS_DEFAULT_PER_PAGE + 1)
+    ]
+
+
 def sorted_session_ids(
     seeds: list[CliSessionSeed],
     sort_by: str,
     prices: dict[str, CostConfig] | None = None,
 ) -> list[str]:
     """Session ids in the order of the Sessions list: the key of ``sort_by``
-    descending, then the session id ascending. A seed with one request has its cache
-    read tokens as context per call. The cost is the catalog cost of the tokens at
+    descending, then the session id ascending. The context per call is the cache read
+    tokens over the requests, 0 for a session that read nothing. The cost is the catalog cost of the tokens at
     the ``prices`` of the model (by name); a model with no price costs nothing."""
     prices = prices or {}
     keys = {
@@ -1029,7 +1157,7 @@ def sorted_session_ids(
             else 0.0,
             9,
         ),
-        SORT_BY_CTX_PER_CALL: lambda seed: seed.cache_read_tokens,
+        SORT_BY_CTX_PER_CALL: context_per_call,
     }
     key = keys[sort_by]
     return [

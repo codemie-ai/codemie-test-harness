@@ -16,22 +16,37 @@
 record): priced from tokens and the model's catalog price, or reported as unpriced."""
 
 import pytest
-from hamcrest import assert_that, close_to, greater_than, has_item
+from hamcrest import assert_that, close_to, equal_to, greater_than, has_item
 
 from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     COST_TOLERANCE,
+    CatalogRates,
+    cache_priced_model,
     get_hooks_only_cost_seeds,
     get_unpriced_model_seed,
     session_catalog_cost,
 )
+from codemie_test_harness.tests.utils.cli_analytics_api_utils import CliAnalyticsApi
 
 
 @pytest.fixture(scope="module")
-def hooks_only_priced_sessions(seed_cli_sessions, cost_model):
-    """Two users' hooks-only sessions of a catalog-priced model."""
-    return list(
-        seed_cli_sessions(get_hooks_only_cost_seeds(cost_model.base_name)).values()
-    )
+def cache_cost_model(client) -> tuple[str, CatalogRates]:
+    """A model the stand's catalog prices for every token kind, cache writes of both
+    durations included, with its rates. The SDK's model list drops the cache rates,
+    so the catalog is read raw."""
+    response = CliAnalyticsApi(client).request("GET", "/v1/llm_models")
+    assert_that(response.status_code, equal_to(200), response.text[:300])
+    model = cache_priced_model(response.json())
+    if model is None:
+        pytest.skip("no LLM in the catalog prices input, output and every cache kind")
+    return model
+
+
+@pytest.fixture(scope="module")
+def hooks_only_priced_sessions(seed_cli_sessions, cache_cost_model):
+    """Two users' hooks-only sessions of a model priced for every token kind."""
+    model_name, _ = cache_cost_model
+    return list(seed_cli_sessions(get_hooks_only_cost_seeds(model_name)).values())
 
 
 @pytest.fixture(scope="module")
@@ -44,10 +59,12 @@ def hooks_only_unpriced_session(seed_cli_sessions):
 @pytest.mark.cli_analytics
 @pytest.mark.api
 def test_hooks_only_session_cost_is_its_tokens_priced_at_catalog(
-    analytics_utils, cost_model, hooks_only_priced_sessions
+    analytics_utils, cache_cost_model, hooks_only_priced_sessions
 ):
     """A session whose requests came from hooks only is priced from its tokens at the
-    model's catalog price, not shown as $0.00."""
+    model's catalog price, not shown as $0.00: input and output, cache reads, and
+    five-minute and one-hour cache writes each at their own rate."""
+    model_name, rates = cache_cost_model
     for seed in hooks_only_priced_sessions:
         session = analytics_utils.wait_for_cli_session(seed.session_id)
         assert_that(  # repro:precondition
@@ -57,8 +74,8 @@ def test_hooks_only_session_cost_is_its_tokens_priced_at_catalog(
         )
         assert_that(  # repro:symptom
             session.cost_usd,
-            close_to(session_catalog_cost(seed, cost_model.cost), COST_TOLERANCE),
-            f"cost of hooks-only session {seed.session_id} of {cost_model.base_name}",
+            close_to(session_catalog_cost(seed, rates), COST_TOLERANCE),
+            f"cost of hooks-only session {seed.session_id} of {model_name}",
         )
 
 

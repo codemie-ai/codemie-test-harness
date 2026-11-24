@@ -32,14 +32,15 @@ DATE_FILTERED_ENDPOINTS = [
     "/v1/analytics/cli-analytics/tools",
 ]
 
-# What a correct backend may answer for a date without an offset: it is treated as UTC (200)
-# or rejected with a validation error (400/422). Never a server error.
-NAIVE_DATE_ACCEPTED_STATUSES = (200, 400, 422)
+# Reads of a filter whose end is "now" (no end_date) can see sessions arriving between
+# the naive and the aware request, so they are compared again before failing.
+NAIVE_DATE_COMPARE_ATTEMPTS = 3
 
 
 @dataclass(frozen=True)
 class NaiveDateCase:
-    """The same filter written without an offset (naive) and with one (aware)."""
+    """The same filter written without an offset (naive) and with one in UTC (aware): a
+    naive date is UTC, so both must apply the same range and return the same data."""
 
     name: str
     naive: dict

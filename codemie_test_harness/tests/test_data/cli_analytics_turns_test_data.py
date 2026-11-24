@@ -112,8 +112,10 @@ class ClaudeCodeTurnsSeed:
     one interaction span each. Only typed prompts are turns.
 
     With ``client_summary`` the client sends an agent.session.summary at the end whose
-    turns are ``summary_turns``: the CLI counts every prompt line of the transcript,
-    injected ones included, so one per prompt. With ``late_injected_hooks`` the prompt
+    turns are ``summary_turns``, one per prompt line of the transcript, injected ones
+    included, as CLI 0.16.7 and older counted them (0.16.8 and later skip injected
+    prompts). The backend serves the larger of its own count and the summary, so a seed
+    that checks the backend's count sends none. With ``late_injected_hooks`` the prompt
     hooks of the injected prompts are left out of ``events`` and sent later through
     ``late_events``, as when they reach the backend after the session was first rolled
     up."""
@@ -125,7 +127,7 @@ class ClaudeCodeTurnsSeed:
         - timedelta(minutes=10)
     )
     user: str = OWNER
-    client_summary: bool = True
+    client_summary: bool = False
     late_injected_hooks: bool = False
     session_id: str = field(
         default_factory=lambda: f"autotest-cc-{uuid.uuid4().hex[:12]}"
@@ -340,7 +342,8 @@ class ClaudeCodeTurnsSeed:
 
 def get_injected_prompt_seeds() -> dict[str, ClaudeCodeTurnsSeed]:
     """One session per kind of injected prompt, keyed by the scenario id. Each has one
-    typed prompt, so one turn, and a client summary that counts every prompt."""
+    typed prompt, so one turn. No client summary, so the served turns are the ones the
+    backend counted."""
     return {
         "subagent-hand-back": ClaudeCodeTurnsSeed("hand_back", (HAND_BACK,)),
         "unanswered-task-notification": ClaudeCodeTurnsSeed(
@@ -357,19 +360,14 @@ def get_injected_prompt_seeds() -> dict[str, ClaudeCodeTurnsSeed]:
 
 def get_typed_prompts_seed() -> ClaudeCodeTurnsSeed:
     """Two typed prompts, the second starting like a peer session's hand-back, and a
-    subagent hand-back between them: two turns. No client summary: its count of every
-    prompt would be served over a typed prompt wrongly left out."""
-    return ClaudeCodeTurnsSeed(
-        "typed_prompts", (HAND_BACK, TYPED_PEER_LOOKALIKE), client_summary=False
-    )
+    subagent hand-back between them: two turns. No client summary, so the served turns
+    are the ones the backend counted."""
+    return ClaudeCodeTurnsSeed("typed_prompts", (HAND_BACK, TYPED_PEER_LOOKALIKE))
 
 
 def get_late_hook_seed() -> ClaudeCodeTurnsSeed:
     """A typed prompt and a subagent hand-back whose prompt hook reaches the backend after
     the session was rolled up. No client summary, so the served turns are the counted ones."""
     return ClaudeCodeTurnsSeed(
-        "late_hand_back_hook",
-        (HAND_BACK,),
-        client_summary=False,
-        late_injected_hooks=True,
+        "late_hand_back_hook", (HAND_BACK,), late_injected_hooks=True
     )

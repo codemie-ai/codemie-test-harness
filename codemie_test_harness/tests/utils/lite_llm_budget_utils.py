@@ -26,6 +26,9 @@ _BUDGET_ID_POLL_TIMEOUT = 10
 # so waiting for a charge needs a longer window than the usual 120s spend polls.
 _CHARGE_POLL_TIMEOUT = 240
 _CHARGE_GRACE = 30
+# (connect, read) seconds for the route price read: it runs in module-fixture setup,
+# which the pytest timeout (timeout_func_only) does not cover.
+_ROUTE_PRICES_TIMEOUT = (10, 30)
 
 
 class LiteLLMBudgetUtils:
@@ -43,6 +46,7 @@ class LiteLLMBudgetUtils:
             f"{self._url}/model/info",
             headers={"Authorization": f"Bearer {self._api_key}"},
             verify=VERIFY_SSL,
+            timeout=_ROUTE_PRICES_TIMEOUT,
         )
         resp.raise_for_status()
         prices: dict[str, set[tuple[float | None, float | None]]] = {}

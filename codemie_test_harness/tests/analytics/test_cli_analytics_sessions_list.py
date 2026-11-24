@@ -54,10 +54,12 @@ from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     SORT_BY_CTX_PER_CALL,
     SORT_BY_START_TIME,
     SUPERPOWERS_LABEL,
+    context_per_call,
     day_window,
     get_context_session_seeds,
     get_early_session_seeds,
     get_new_session_seed,
+    get_paging_boundary_seeds,
     get_session_list_seeds,
     sorted_session_ids,
 )
@@ -197,6 +199,35 @@ def test_sessions_list_without_paging_returns_first_twenty_newest_first(
     )
 
 
+@pytest.mark.cli_analytics
+@pytest.mark.oss_standalone
+@pytest.mark.api
+def test_default_page_holds_twenty_of_twenty_one_sessions(
+    sessions_api, create_cli_analytics_project, seed_cli_sessions, priced_model_name
+):
+    """With one session more than a page holds, the list without paging returns the
+    twenty newest sessions and still reports all twenty-one in its total."""
+    project = create_cli_analytics_project()
+    seeds = list(
+        seed_cli_sessions(
+            get_paging_boundary_seeds(priced_model_name), project
+        ).values()
+    )
+    expected_ids = sorted_session_ids(seeds, SORT_BY_START_TIME)[
+        :SESSIONS_DEFAULT_PER_PAGE
+    ]
+
+    body = _list(sessions_api, project)
+
+    assert_that(  # repro:precondition
+        len(seeds), equal_to(SESSIONS_DEFAULT_PER_PAGE + 1)
+    )
+    assert_that(  # repro:symptom
+        (body["data"]["total"], body["data"]["per_page"], _ids(body)),
+        equal_to((len(seeds), SESSIONS_DEFAULT_PER_PAGE, expected_ids)),
+    )
+
+
 @pytest.mark.parametrize("sort_by", [SORT_BY_START_TIME, SORT_BY_COST])
 @pytest.mark.cli_analytics
 @pytest.mark.oss_standalone
@@ -229,8 +260,8 @@ def test_sort_orders_every_session_across_pages(
 def test_context_per_call_sort_orders_sessions_by_cache_read_per_call(
     sessions_api, context_project, context_seeds
 ):
-    """Sessions with more cache-read tokens per model call come first; a session that
-    read nothing from the cache is last."""
+    """Sessions with more cache-read tokens per model call come first, whatever their
+    total cache reads; a session that read nothing from the cache is last."""
     expected_ids = sorted_session_ids(context_seeds, SORT_BY_CTX_PER_CALL)
 
     rows, listed_ids = _read_pages(
@@ -242,9 +273,7 @@ def test_context_per_call_sort_orders_sessions_by_cache_read_per_call(
 
     assert_that(  # repro:precondition
         {row["trace_id"]: row["ctx_per_call"] for row in rows},
-        equal_to(
-            {seed.session_id: float(seed.cache_read_tokens) for seed in context_seeds}
-        ),
+        equal_to({seed.session_id: context_per_call(seed) for seed in context_seeds}),
     )
     assert_that(
         listed_ids, equal_to(expected_ids), "sessions by ctx_per_call"
