@@ -31,6 +31,15 @@ project_change_scope_test_data = [
 # Messages the backend returns for the rejected project changes.
 ACCESS_DENIED_DETAILS = "You do not have sufficient permissions to access the project"
 ALIAS_COLLISION_DETAILS = "There are more than one settings with the alias named"
+NOT_OWNER_ACCESS_DENIED_MESSAGE = "Access denied"
+NOT_OWNER_UPDATE_DETAILS = "to update this entity"
+
+# Fixture names of callers who are not the owner of a personal integration; resolved lazily so
+# each caller is only created for its own case.
+non_owner_caller_test_data = [
+    pytest.param("project_admin_non_owner_utils", id="project_admin"),
+    pytest.param("platform_admin_non_owner_utils", id="platform_admin"),
+]
 
 # Message returned by a successful PUT /v1/settings/{project|user}/{id}.
 INTEGRATION_UPDATED_MESSAGE = "Specified credentials updated"
