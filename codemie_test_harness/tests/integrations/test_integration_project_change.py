@@ -19,6 +19,7 @@ PUT /v1/settings/project/{id} and PUT /v1/settings/user/{id} move the integratio
 and TC_007.
 """
 
+import time
 from typing import List, Optional
 
 import pytest
@@ -43,7 +44,10 @@ from codemie_test_harness.tests.test_data.integration_project_change_test_data i
     ACCESS_DENIED_DETAILS,
     ALIAS_COLLISION_DETAILS,
     INTEGRATION_UPDATED_MESSAGE,
+    NOT_OWNER_ACCESS_DENIED_MESSAGE,
+    NOT_OWNER_UPDATE_DETAILS,
     git_datasource_source,
+    non_owner_caller_test_data,
     project_change_scope_test_data,
 )
 from codemie_test_harness.tests.utils.base_utils import (
@@ -429,4 +433,182 @@ def test_change_integration_project_unlinks_source_project_datasources(
         datasource_utils.get_datasource(datasource.id).setting_id,
         any_of(none(), equal_to("")),
         "Datasource left in the source project still references the moved integration.",
+    )
+
+
+@pytest.fixture
+def owner_project(project, user_utils, platform_user):
+    """Fresh project whose only plain member is ``platform_user``, the owner of the personal integration."""
+    created = project()
+    user_utils.assign_user_to_project(platform_user.user_id, created.name)
+    return created
+
+
+def _wait_until_member_sees_project(
+    member_utils, project_name, create_integration_in_project
+):
+    """Wait until the member's role in the project is effective on the backend.
+
+    The role change reaches the backend through a cache, so a project integration created by
+    the platform admin must be listed for the member before the test acts as that member.
+    """
+    anchor = create_integration_in_project(project_name)
+    wait_for_entity(
+        lambda: member_utils.list_integrations(IntegrationType.PROJECT, per_page=200),
+        entity_name=anchor.alias,
+        timeout=60,
+    )
+
+
+def _create_as_member_once_effective(create, timeout=60, interval=3):
+    """Run ``create`` until the backend accepts it, i.e. until the member's role is effective.
+
+    A plain member cannot list project integrations, so there is nothing to poll for them; their
+    own create call is the access check. Only 403/404 mean the access is not effective yet and are
+    retried; any other status is a real defect and propagates at once. ``create`` must reuse one
+    alias across attempts, so a row created before a failed follow-up lookup is never duplicated.
+    The last rejection is raised when the timeout elapses.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            with expected_http_errors():
+                return create()
+        except HTTPError as error:
+            status = error.response.status_code if error.response is not None else None
+            if status not in (403, 404) or time.monotonic() >= deadline:
+                raise
+            time.sleep(interval)
+
+
+@pytest.fixture
+def owner_personal_integration(
+    owner_project, platform_user, integration_utils, create_integration_in_project
+):
+    """Personal (USER-type) integration that ``platform_user`` created in ``owner_project``.
+
+    The factory records the row as USER, which is wrong once the owner converts it to PROJECT, so
+    this fixture deletes the row by the type it has at teardown, tolerating it being gone.
+    """
+    owner_utils = IntegrationUtils(platform_user.client)
+    alias = get_random_name()
+    created = _create_as_member_once_effective(
+        lambda: create_integration_in_project(
+            owner_project.name,
+            alias=alias,
+            setting_type=IntegrationType.USER,
+            utils=owner_utils,
+        )
+    )
+    yield owner_utils, created
+
+    try:
+        if created.id in integration_utils.list_integration_ids_in_project(
+            owner_project.name, IntegrationType.PROJECT
+        ):
+            integration_utils.delete_integration_by_id(
+                created.id, IntegrationType.PROJECT
+            )
+        else:
+            owner_utils.delete_integration_by_id(created.id, IntegrationType.USER)
+    except HTTPError as error:
+        if error.response is None or error.response.status_code != 404:
+            raise
+
+
+@pytest.fixture
+def project_admin_non_owner_utils(
+    owner_project, second_platform_user, user_utils, create_integration_in_project
+):
+    """Client of a plain user who is admin of ``owner_project`` but not the integration owner."""
+    user_utils.assign_user_to_project(
+        second_platform_user.user_id, owner_project.name, is_project_admin=True
+    )
+    member_utils = IntegrationUtils(second_platform_user.client)
+    _wait_until_member_sees_project(
+        member_utils, owner_project.name, create_integration_in_project
+    )
+    return member_utils
+
+
+@pytest.fixture
+def platform_admin_non_owner_utils(admin_user):
+    """Client of a platform admin who is not the integration owner."""
+    return IntegrationUtils(admin_user.client)
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.parametrize("non_owner_fixture", non_owner_caller_test_data)
+@pytest.mark.api
+def test_convert_personal_integration_to_project_denied_for_non_owner_allowed_for_owner(
+    request,
+    integration_utils,
+    owner_project,
+    owner_personal_integration,
+    non_owner_fixture,
+):
+    # @case personal-integration-conversion-owner-only_TC_001
+    # Denial and owner success stay in one test on purpose: the owner step relies on the denied state.
+    """A non-owner gets 403 'Access denied' and the integration stays personal; the owner converts it."""
+    non_owner_utils = request.getfixturevalue(non_owner_fixture)
+    owner_utils, personal = owner_personal_integration
+
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
+        non_owner_utils.update_integration(
+            _integration_request(
+                owner_project.name,
+                personal.alias,
+                IntegrationType.PROJECT,
+                personal.id,
+            )
+        )
+
+    assert_error_details(
+        exc_info.value.response,
+        403,
+        NOT_OWNER_ACCESS_DENIED_MESSAGE,
+        field="message",
+    )
+    assert_error_details(exc_info.value.response, 403, NOT_OWNER_UPDATE_DETAILS)
+    unchanged = owner_utils.get_integration_by_id(personal.id, IntegrationType.USER)
+    assert_that(
+        unchanged,
+        not_none(),
+        "Personal integration disappeared after the denied conversion.",
+    )
+    assert_that(
+        unchanged.project_name,
+        equal_to(owner_project.name),
+        "Personal integration changed project after the denied conversion.",
+    )
+    assert_that(
+        integration_utils.list_integration_ids_in_project(
+            owner_project.name, IntegrationType.PROJECT
+        ),
+        is_not(has_item(personal.id)),
+        "Personal integration became a project integration despite the non-owner caller.",
+    )
+
+    response = owner_utils.update_integration(
+        _integration_request(
+            owner_project.name,
+            personal.alias,
+            IntegrationType.PROJECT,
+            personal.id,
+        )
+    )
+
+    assert_that(
+        response["message"],
+        equal_to(INTEGRATION_UPDATED_MESSAGE),
+        "Owner conversion response message is not as expected.",
+    )
+    assert_that(
+        integration_utils.list_integration_ids_in_project(
+            owner_project.name, IntegrationType.PROJECT
+        ),
+        has_item(personal.id),
+        "Integration is not a project integration after the owner converted it.",
     )
