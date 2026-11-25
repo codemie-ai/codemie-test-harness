@@ -57,6 +57,23 @@ from codemie_test_harness.tests.utils.hosted_sharing_utils import SharingWorld
 
 CAPABILITY = "features:hostedApplications"
 
+# Signing in as a platform admin needs PUT /v1/admin/users, which the PROD account may not call.
+PROD_UNSAFE_ROLES = {"platform_admin"}
+
+
+def prod_safe_params(views):
+    """Parametrize ``views``, marking only those that can run on PROD as ``prod_regression``."""
+    return [
+        pytest.param(
+            view,
+            id=view.id,
+            marks=[]
+            if view.role in PROD_UNSAFE_ROLES
+            else [pytest.mark.prod_regression],
+        )
+        for view in views
+    ]
+
 
 @pytest.fixture
 def ui_sharing_world(hosted_people, view):
@@ -88,12 +105,9 @@ def clipboard_permissions(context):
 
 
 @pytest.mark.requires_capability(CAPABILITY)
-@pytest.mark.parametrize(
-    "view", SHARE_MANAGER_VIEWS, ids=[item.id for item in SHARE_MANAGER_VIEWS]
-)
+@pytest.mark.parametrize("view", prod_safe_params(SHARE_MANAGER_VIEWS))
 @pytest.mark.hosted_applications
 @pytest.mark.ui
-@pytest.mark.prod_regression
 def test_manager_who_is_not_the_creator_is_offered_share_and_sees_who_has_access(
     page, ui_sharing_world, view
 ):
@@ -123,7 +137,6 @@ def test_manager_who_is_not_the_creator_is_offered_share_and_sees_who_has_access
 )
 @pytest.mark.hosted_applications
 @pytest.mark.ui
-@pytest.mark.prod_regression
 def test_platform_admin_menus_offer_suspend_and_no_revoke_share_link(
     page, ui_sharing_world, view
 ):

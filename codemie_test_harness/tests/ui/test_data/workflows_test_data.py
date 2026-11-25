@@ -74,6 +74,18 @@ class WorkflowCategoriesUiDataFactory:
         )
 
 
+# Exchange "Read messages" tool bound to a workflow Tool node. Its Folder, Start and
+# Count arguments are required: codemie's args_schema extraction
+# (ToolConfigExtractor) marks a non-optional field required unless its default is frozen,
+# and ReadInput's folder/start/count defaults are plain ones
+# (codemie_tools.ms_exchange.tools). Start is an int with ge=0, so 0 is a valid value.
+EXCHANGE_TOOLKIT_NAME = "Microsoft Exchange"
+EXCHANGE_READ_TOOL_NAME = "Exchange: Read messages"
+EXCHANGE_READ_TOOL_ID = "exchange_read"
+EXCHANGE_READ_FOLDER = "ocr"
+EXCHANGE_READ_COUNT = 10
+EXCHANGE_READ_START = 0
+
 WORKFLOW_UPDATED_TOAST = "Workflow has been updated successfully!"
 
 # Saving a global workflow whose script step may call the Jira tool through the author's own

@@ -185,6 +185,7 @@ from codemie_test_harness.tests.utils.marketplace_management_utils import (
     personal_project_of,
     MarketplaceManagementUtils,
     MarketplaceSubmitter,
+    delete_submitter_assistant,
     poll_marketplace_listing,
 )
 from codemie_test_harness.tests.utils.notification_utils import (
@@ -405,6 +406,12 @@ def large_file_fixture(tmp_path_factory):
 @pytest.fixture(scope="session")
 def client():
     return get_client()
+
+
+@pytest.fixture(scope="session")
+def current_user_id(client):
+    """Platform user id of the user the default ``client`` is logged in as."""
+    return client.users.about_me().user_id
 
 
 @pytest.fixture(scope="session")
@@ -2494,6 +2501,7 @@ def workflow(workflow_utils):
         state_model=None,
         project_name=None,
         description=None,
+        headroom=None,
     ):
         workflow_name = workflow_name if workflow_name else get_random_name()
 
@@ -2503,7 +2511,12 @@ def workflow(workflow_utils):
             states=[state_model],
         )
 
-        yaml_content = prepare_yaml_content(workflow_yaml.model_dump(exclude_none=True))
+        yaml_dict = workflow_yaml.model_dump(exclude_none=True)
+        # Top-level Headroom block of the workflow YAML (``headroom:``); the YAML model
+        # has no field for it.
+        if headroom is not None:
+            yaml_dict["headroom"] = headroom
+        yaml_content = prepare_yaml_content(yaml_dict)
 
         created_workflow = workflow_utils.create_workflow(
             workflow_name=workflow_name,
@@ -2543,6 +2556,7 @@ def workflow_with_virtual_assistant(workflow, default_llm):
         datasource_ids=None,
         project_name=None,
         skill_ids=None,
+        headroom=None,
     ):
         # Normalize tool_names to a tuple; allow None or single or tuple
         if tool_names is None:
@@ -2577,7 +2591,10 @@ def workflow_with_virtual_assistant(workflow, default_llm):
         )
 
         return workflow(
-            assistant_model=assistant, state_model=state, project_name=project_name
+            assistant_model=assistant,
+            state_model=state,
+            project_name=project_name,
+            headroom=headroom,
         )
 
     return _create_workflow
@@ -3247,28 +3264,13 @@ def marketplace_submitter(request, default_llm, marketplace_core_gates):
         )
 
 
-def _delete_submitter_assistant(submitter, admin_client, assistant_id) -> None:
-    """Delete an assistant of the submitter in any review state (pending, rejected, approved).
-
-    The owner deletes it; the admin client is the fallback. A failure of both is logged as
-    an error, because the assistant is then left behind.
-    """
-    try:
-        submitter.assistant_utils.delete_assistant_by_id(assistant_id)
-    except Exception:
-        try:
-            admin_client.assistants.delete(assistant_id)
-        except Exception as e:
-            logger.error(f"Failed to delete assistant {assistant_id}: {e}")
-
-
 @pytest.fixture
 def marketplace_assistants_to_delete(marketplace_submitter, client):
     """Collects the assistants a test creates for the submitter and deletes them on teardown."""
     created = []
     yield created
     for assistant in created:
-        _delete_submitter_assistant(marketplace_submitter, client, assistant.id)
+        delete_submitter_assistant(marketplace_submitter, client, assistant.id)
 
 
 @pytest.fixture
@@ -3278,7 +3280,7 @@ def delete_marketplace_assistant(
     """Deletes an assistant right away (for one that is public) and drops it from the teardown list."""
 
     def _delete(assistant) -> None:
-        _delete_submitter_assistant(marketplace_submitter, client, assistant.id)
+        delete_submitter_assistant(marketplace_submitter, client, assistant.id)
         marketplace_assistants_to_delete.remove(assistant)
 
     return _delete

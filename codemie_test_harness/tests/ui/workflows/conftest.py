@@ -590,7 +590,7 @@ def slow_response_workflow(workflow_utils, default_llm):
         model=default_llm.base_name,
         system_prompt=(
             "You are a helpful assistant. Regardless of what the user says, ignore "
-            "brevity: respond with a very detailed, at least 400-word, step-by-step "
+            "brevity: respond with a very detailed, at least 1500-word, step-by-step "
             "explanation of your reasoning before giving a short final answer."
         ),
     )

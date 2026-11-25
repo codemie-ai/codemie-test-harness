@@ -295,7 +295,12 @@ class DataSourcePage(BasePage):
 
     @step
     def should_see_datasource_with_name(self, name: str):
-        expect(self.get_table_row_by_name(name)).to_be_visible()
+        """Verify the table lists a datasource row with this name.
+
+        The list can stay in its loading state for several seconds on a busy
+        environment, so the default 5 s expect timeout is too short.
+        """
+        expect(self.get_table_row_by_name(name)).to_be_visible(timeout=30000)
         return self
 
     @step

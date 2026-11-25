@@ -14,9 +14,27 @@
 
 import pytest
 
+from codemie_test_harness.tests.utils.logger_util import setup_logger
+
+logger = setup_logger(__name__)
+
 
 @pytest.fixture
 def clear_asst_ai_popup(page):
     """Remove the assistant AI popup suppression so the modal appears for tests that verify it."""
     page.add_init_script("localStorage.removeItem('codemie-new-asst-ai-popup');")
     yield
+
+
+@pytest.fixture
+def ui_created_assistant_names(assistant_utils):
+    """Names of assistants created through the UI form; deleted through the API on teardown."""
+    names = []
+    yield names
+    for name in names:
+        try:
+            assistant_utils.delete_assistant(
+                assistant_utils.get_assistant_by_name(name)
+            )
+        except Exception as e:
+            logger.warning(f"Failed to delete UI-created assistant {name}: {e}")

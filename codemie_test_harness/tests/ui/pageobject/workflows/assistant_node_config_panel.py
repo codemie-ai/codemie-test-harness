@@ -22,6 +22,9 @@ from codemie_test_harness.tests.ui.pageobject.assistants.tools_section import (
     ToolsSection,
 )
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.components.headroom_settings import (
+    HeadroomSettings,
+)
 
 
 class AssistantNodeConfigPanel(BasePage):
@@ -144,6 +147,26 @@ class AssistantNodeConfigPanel(BasePage):
         """Save button in config panel."""
         return self.config_panel.get_by_role("button", name="Save")
 
+    # Headroom (node override of the workflow block)
+    @property
+    def headroom_accordion(self) -> Locator:
+        """'Context compression (Headroom)' accordion button of the node; collapsed by default."""
+        return self.config_panel.get_by_role(
+            "button", name=re.compile(r"Context compression \(Headroom\)")
+        )
+
+    @property
+    def headroom_region(self) -> Locator:
+        """Region the expanded node Headroom accordion shows."""
+        return self.config_panel.get_by_role(
+            "region", name="Context compression (Headroom)"
+        )
+
+    @property
+    def headroom(self) -> HeadroomSettings:
+        """Node-level Headroom controls (they show the inherited workflow value until changed)."""
+        return HeadroomSettings(self.page, self.headroom_region)
+
     @step
     def tools_group_header(self, group_name: str) -> Locator:
         """Heading of a tool group in the Available Tools list of the panel."""
@@ -222,6 +245,30 @@ class AssistantNodeConfigPanel(BasePage):
     def click_save(self):
         """Click the Save button in the node config panel."""
         self.save_button.click()
+        return self
+
+    @step
+    def should_have_headroom_accordion_collapsed(self):
+        """Verify the node's Headroom accordion is present and collapsed."""
+        expect(self.headroom_accordion).to_be_visible()
+        expect(self.headroom_accordion).to_have_attribute("aria-expanded", "false")
+        return self
+
+    @step
+    def open_headroom_settings(self) -> HeadroomSettings:
+        """Expand the node's Headroom accordion and return its controls."""
+        expect(self.headroom_accordion).to_be_visible()
+        if self.headroom_accordion.get_attribute("aria-expanded") != "true":
+            self.headroom_accordion.click()
+        expect(self.headroom_accordion).to_have_attribute("aria-expanded", "true")
+        self.headroom.should_be_visible()
+        return self.headroom
+
+    @step
+    def save_node(self):
+        """Save the node configuration; the node panel closes."""
+        self.save_button.click()
+        self.config_panel.wait_for(state="hidden", timeout=10000)
         return self
 
     @step
