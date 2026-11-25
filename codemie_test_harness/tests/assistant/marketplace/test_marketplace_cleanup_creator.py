@@ -27,7 +27,10 @@ one xdist worker for the same reason (``--dist=loadgroup``, see strategy.md).
 from dataclasses import dataclass
 
 import pytest
-from codemie_sdk.models.marketplace_management import MarketplaceCleanupBucket
+from codemie_sdk.models.marketplace_management import (
+    MarketplaceAuditRunStatus,
+    MarketplaceCleanupBucket,
+)
 from hamcrest import assert_that, equal_to, has_item, has_length, is_not
 
 from codemie_test_harness.tests.test_data.marketplace_approval_gate_test_data import (
@@ -38,9 +41,17 @@ from codemie_test_harness.tests.test_data.marketplace_cleanup_test_data import (
     CLEANUP_RESPONSE_KEYS,
     SYSTEM_CREATOR,
 )
+from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
 from codemie_test_harness.tests.utils.marketplace_management_utils import (
     CLEANUP_PAGE_SIZE,
+    delete_submitter_assistant,
     poll_marketplace_listing,
+)
+
+pytestmark = pytest.mark.skipif(
+    EnvironmentResolver.is_production(),
+    reason="publishes to the live marketplace and replaces the latest finished audit run, "
+    "which production treats as read-only",
 )
 
 
@@ -54,17 +65,6 @@ class CleanupAudit:
     queue_submitted_by: str
     admin_published_id: str
     admin_name: str | None
-
-
-def _delete_assistant(marketplace_submitter, client, assistant_id: str) -> None:
-    """Delete an assistant in any review state: the owner first, the admin as the fallback."""
-    try:
-        marketplace_submitter.assistant_utils.delete_assistant_by_id(assistant_id)
-    except Exception:
-        try:
-            client.assistants.delete(assistant_id)
-        except Exception:
-            pass
 
 
 @pytest.fixture(scope="module")
@@ -126,6 +126,14 @@ def cleanup_audit(
             categories=admin_submission.categories,
             ignore_recommendations=True,
         )
+        admin_listed = poll_marketplace_listing(
+            assistant_utils, admin_assistant.id, listed=True
+        )
+        assert_that(
+            admin_listed,
+            has_item(admin_assistant.id),
+            "the admin-published assistant did not appear in the marketplace listing in time",
+        )
 
         audit = marketplace_management_utils.run_audit()
         assert_that(
@@ -136,6 +144,16 @@ def cleanup_audit(
             equal_to(None),
             f"the audit run must end without an error (status {audit.status})",
         )
+        assert_that(
+            audit.status,
+            equal_to(MarketplaceAuditRunStatus.SUCCEEDED),
+            f"the audit run must complete (degraded_reason: {audit.degraded_reason})",
+        )
+        assert_that(
+            audit.degraded,
+            equal_to(False),
+            f"the audit run must not be degraded (degraded_reason: {audit.degraded_reason})",
+        )
         yield CleanupAudit(
             approved_id=submitted.id,
             approved_name=submitted.name,
@@ -145,12 +163,11 @@ def cleanup_audit(
             admin_name=client.users.about_me().name,
         )
     finally:
-        _delete_assistant(marketplace_submitter, client, submitted.id)
+        delete_submitter_assistant(marketplace_submitter, client, submitted.id)
         if admin_assistant:
-            try:
-                assistant_utils.delete_assistant(admin_assistant)
-            except Exception:
-                pass
+            delete_submitter_assistant(
+                marketplace_submitter, client, admin_assistant.id
+            )
 
 
 def _row_of(rows: list, assistant_id: str):
