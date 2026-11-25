@@ -23,6 +23,10 @@ from reportportal_client import step
 from codemie_test_harness.tests.ui.pageobject.components.expanded_yaml_dialog import (
     ExpandedYamlDialog,
 )
+from codemie_test_harness.tests.ui.pageobject.components.headroom_settings import (
+    HeadroomSettings,
+)
+from codemie_test_harness.tests.ui.pageobject.components.toast import Toast
 from codemie_test_harness.tests.ui.pageobject.workflows.workflow_version_history_popup import (
     WorkflowVersionHistoryPopup,
 )
@@ -239,6 +243,26 @@ class WorkflowConfigPanel:
     def edit_current_version_tab(self) -> Locator:
         """Edit mode tab in YAML editor (previously named 'Edit Current Version')."""
         return self.page.get_by_role("tab", name="Edit mode")
+
+    # ------ Headroom Elements (in Advanced Tab) ------
+    @property
+    def headroom_accordion(self) -> Locator:
+        """'Context compression (Headroom)' accordion button; collapsed by default."""
+        return self.config_panel.get_by_role(
+            "button", name=re.compile(r"Context compression \(Headroom\)")
+        )
+
+    @property
+    def headroom_region(self) -> Locator:
+        """Region the expanded Headroom accordion shows (switch, checkboxes, Strategy)."""
+        return self.config_panel.get_by_role(
+            "region", name="Context compression (Headroom)"
+        )
+
+    @property
+    def headroom(self) -> HeadroomSettings:
+        """Workflow-level Headroom controls."""
+        return HeadroomSettings(self.page, self.headroom_region)
 
     # ------ Footer Buttons (in Config Panel) ------
     @property
@@ -524,6 +548,25 @@ class WorkflowConfigPanel:
         popup = WorkflowVersionHistoryPopup(self.page)
         popup.wait_for_visible()
         return popup
+
+    # ------ Headroom Actions ------
+    @step
+    def open_headroom_settings(self) -> HeadroomSettings:
+        """Open the Advanced tab, expand the Headroom accordion and return its controls."""
+        self.switch_to_advanced_tab()
+        expect(self.headroom_accordion).to_be_visible()
+        if self.headroom_accordion.get_attribute("aria-expanded") != "true":
+            self.headroom_accordion.click()
+        expect(self.headroom_accordion).to_have_attribute("aria-expanded", "true")
+        self.headroom.should_be_visible()
+        return self.headroom
+
+    @step
+    def save_configuration(self):
+        """Save the panel and wait for its confirmation; the panel closes."""
+        self.save_button.click()
+        Toast(self.page).should_show_success("Workflow configuration has been saved")
+        self.wait_for_closed()
 
     # ------ Footer Button Actions ------
     @step

@@ -492,6 +492,14 @@ class ChatPage(BasePage):
         return self
 
     @step
+    def open_conversation(self, chat_id: str):
+        """Open an existing conversation and wait until its message input is shown."""
+        self.page.set_viewport_size({"width": 1920, "height": 980})
+        self.navigate_to(chat_id)
+        self.chat_input.wait_for(state="visible", timeout=15000)
+        return self
+
+    @step
     def navigate_to_shared_conversation(self, share_token: str):
         """Open the read-only shared view of a conversation (/share/conversations/<token>)."""
         self.page.goto(f"/share/conversations/{share_token}")
@@ -527,6 +535,38 @@ class ChatPage(BasePage):
     def click_execution_info(self):
         """Click the execution info button."""
         self.execution_info_button.click()
+        return self
+
+    @property
+    def headroom_tokens_saved_label(self) -> Locator:
+        """'Tokens saved (Headroom):' row label of the Usage details overlay.
+
+        The row is rendered only when the conversation metrics carry
+        headroom_tokens_saved > 0 (codemie-ui ChatHeader.tsx).
+        """
+        return self.page.get_by_text("Tokens saved (Headroom):", exact=True)
+
+    @property
+    def headroom_tokens_saved_value(self) -> Locator:
+        """Value box next to the 'Tokens saved (Headroom):' label, e.g. '10,239 (99%)'."""
+        return self.headroom_tokens_saved_label.locator("xpath=following-sibling::*[1]")
+
+    @step
+    def open_usage_details(self):
+        """Open the chat header 'Usage details' overlay."""
+        self._dismiss_release_notification_if_present()
+        self.should_have_execution_info_button_visible()
+        self.execution_info_button.click()
+        expect(self.page.get_by_text("Chat totals, auto-updated")).to_be_visible()
+        return self
+
+    @step
+    def should_show_headroom_tokens_saved(self):
+        """Verify Usage details shows a positive 'Tokens saved (Headroom)' figure."""
+        expect(self.headroom_tokens_saved_label).to_be_visible(timeout=30000)
+        expect(self.headroom_tokens_saved_value).to_have_text(
+            re.compile(r"^\s*[1-9][\d,]*( \(\d+%\))?\s*$")
+        )
         return self
 
     @step

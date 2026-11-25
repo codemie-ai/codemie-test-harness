@@ -24,6 +24,9 @@ from codemie_test_harness.tests.ui.pageobject.assistants.generate_with_ai_modal 
     AIAssistantGeneratorPage,
 )
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.components.headroom_settings import (
+    HeadroomSettings,
+)
 from codemie_test_harness.tests.ui.pageobject.assistants.assistant_mcp_server import (
     AssistantMCPIntegrationModal,
 )
@@ -1234,6 +1237,29 @@ class CreateEditAssistantPage(BasePage):
     # ==================== ACTION METHODS ====================
 
     # ==================== EFFORT ====================
+
+    # ==================== HEADROOM (CONTEXT COMPRESSION) ====================
+
+    @property
+    def headroom_section_title(self) -> Locator:
+        """'Context compression (Headroom)' section title (Extra configuration accordion).
+
+        Rendered only while the features:headroom flag is on.
+        """
+        return self.page.get_by_text("Context compression (Headroom)", exact=True)
+
+    @property
+    def headroom(self) -> HeadroomSettings:
+        """Headroom controls of the form (the form holds one set)."""
+        return HeadroomSettings(self.page, self.page)
+
+    @step
+    def open_headroom_settings(self) -> HeadroomSettings:
+        """Expand 'Extra configuration' and return the Headroom controls once shown."""
+        self.expand_extra_configuration()
+        expect(self.headroom_section_title).to_be_visible()
+        self.headroom.should_be_visible()
+        return self.headroom
 
     @step
     def select_effort(self, level: str):

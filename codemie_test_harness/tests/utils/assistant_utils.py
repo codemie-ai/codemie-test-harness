@@ -81,6 +81,7 @@ class AssistantUtils(BaseUtils):
         prompt_variables=None,
         effort=None,
         disabled_context_tools=None,
+        headroom_config=None,
     ):
         # Generate a random name if assistant_name is not provided
         assistant_name = assistant_name if assistant_name else get_random_name()
@@ -115,6 +116,7 @@ class AssistantUtils(BaseUtils):
             disabled_context_tools=list(disabled_context_tools)
             if disabled_context_tools
             else None,
+            headroom_config=headroom_config,
         )
 
         response = self.client.assistants.create(request)
@@ -143,6 +145,7 @@ class AssistantUtils(BaseUtils):
         prompt_variables=None,
         effort=None,
         disabled_context_tools=None,
+        headroom_config=None,
     ):
         # Generate a random name if assistant_name is not provided
         assistant_name = assistant_name if assistant_name else get_random_name()
@@ -174,6 +177,7 @@ class AssistantUtils(BaseUtils):
             prompt_variables=prompt_variables,
             effort=effort,
             disabled_context_tools=disabled_context_tools,
+            headroom_config=headroom_config,
         )
 
         return wait_for_entity(
@@ -567,6 +571,39 @@ class AssistantUtils(BaseUtils):
                 effort=effort,
             ),
         )
+
+    def update_assistant_headroom(self, assistant_id: str, headroom_config):
+        """Replace the Headroom config of an existing assistant.
+
+        The backend fills its defaults into every field a config leaves out (a
+        strategy-only update resets the strategy of a stored config), so pass a full
+        ``HeadroomConfig`` with all four fields set. The stored required fields are
+        sent unchanged.
+        """
+        assistant = self.get_assistant_by_id(assistant_id)
+        return self.update_assistant(
+            assistant_id,
+            AssistantUpdateRequest(
+                name=assistant.name,
+                description=assistant.description,
+                system_prompt=assistant.system_prompt,
+                project=assistant.project,
+                llm_model_type=assistant.llm_model_type,
+                headroom_config=headroom_config,
+            ),
+        )
+
+    def get_conversation_metrics(self, conversation_id: str) -> dict:
+        """Body of ``GET /v1/assistants/metrics/{conversation_id}`` (chat usage totals).
+
+        The SDK has no method for this route, so it goes through the raw request
+        handler, like ``get_assistant_by_slug_response``. The Headroom fields
+        (``headroom_tokens_saved``, ``headroom_tokens_original``) are present only
+        when Headroom saved tokens in the conversation.
+        """
+        response = self._raw_api().get(f"/v1/assistants/metrics/{conversation_id}")
+        response.raise_for_status()
+        return response.json()
 
     def update_assistant_disabled_context_tools(
         self, assistant_id: str, disabled_context_tools: list[str]

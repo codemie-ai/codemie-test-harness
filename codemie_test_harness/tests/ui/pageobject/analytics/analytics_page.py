@@ -237,6 +237,52 @@ class AnalyticsPage(BasePage):
         )
         return self
 
+    # ── Headroom (context compression) section of the Insights tab ──────────────
+
+    @property
+    def headroom_section_heading(self) -> Locator:
+        """'Context Compression' section heading (h2) of the Insights tab."""
+        return self.page.get_by_role("heading", name="Context Compression", level=2)
+
+    def headroom_widget_heading(self, title: str) -> Locator:
+        """Heading (h3) of a Headroom widget: Headroom Summary, Savings Over Time, ..."""
+        return self.page.get_by_role("heading", name=title, exact=True, level=3)
+
+    @property
+    def headroom_summary_card(self) -> Locator:
+        """Card of the 'Headroom Summary' widget: the nearest ancestor of its heading
+        that holds the summary tiles (found by the 'Unique Sessions' tile, rendered in
+        upper case).
+        """
+        return self.headroom_widget_heading("Headroom Summary").locator(
+            "xpath=ancestor::*[.//*[contains(translate(normalize-space(text()),"
+            " 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'),"
+            " 'UNIQUE SESSIONS')]][1]"
+        )
+
+    def headroom_summary_tile_label(self, label: str) -> Locator:
+        """Label of one summary tile, matched whole and case-insensitively."""
+        return self.headroom_summary_card.get_by_text(
+            re.compile(rf"^\s*{re.escape(label)}\s*$", re.IGNORECASE)
+        ).first
+
+    @step
+    def should_show_headroom_section(
+        self, widget_titles: list[str], summary_labels: list[str]
+    ):
+        """Verify the Context Compression section, its widgets and the summary tiles.
+
+        Each tile shows a number; zero values are allowed (a stand with no compressed
+        request shows zeros).
+        """
+        expect(self.headroom_section_heading).to_be_visible(timeout=30000)
+        for title in widget_titles:
+            expect(self.headroom_widget_heading(title)).to_be_visible()
+        for label in summary_labels:
+            expect(self.headroom_summary_tile_label(label)).to_be_visible()
+        expect(self.headroom_summary_card).to_contain_text(re.compile(r"\d"))
+        return self
+
     @step
     def should_see_analytics_sections(self, sections: list[str]):
         """Assert each named analytics section tab is visible on the page.

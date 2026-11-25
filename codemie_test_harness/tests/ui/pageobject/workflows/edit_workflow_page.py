@@ -53,6 +53,13 @@ class EditWorkflowPage(BaseWorkflowFormPage):
         # Wait for the visual editor canvas to finish loading before returning
         self.wait_for_page_load()
 
+    @step
+    def save_workflow(self):
+        """Save the workflow from the header and wait for the update confirmation."""
+        self.click_save()
+        self.toast.should_show_success("Workflow has been updated successfully!")
+        return self
+
     # ====================
     # VERIFICATION METHODS
     # ====================

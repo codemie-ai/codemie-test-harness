@@ -2424,6 +2424,7 @@ def workflow(workflow_utils):
         state_model=None,
         project_name=None,
         description=None,
+        headroom=None,
     ):
         workflow_name = workflow_name if workflow_name else get_random_name()
 
@@ -2433,7 +2434,12 @@ def workflow(workflow_utils):
             states=[state_model],
         )
 
-        yaml_content = prepare_yaml_content(workflow_yaml.model_dump(exclude_none=True))
+        yaml_dict = workflow_yaml.model_dump(exclude_none=True)
+        # Top-level Headroom block of the workflow YAML (``headroom:``); the YAML model
+        # has no field for it.
+        if headroom is not None:
+            yaml_dict["headroom"] = headroom
+        yaml_content = prepare_yaml_content(yaml_dict)
 
         created_workflow = workflow_utils.create_workflow(
             workflow_name=workflow_name,
@@ -2473,6 +2479,7 @@ def workflow_with_virtual_assistant(workflow, default_llm):
         datasource_ids=None,
         project_name=None,
         skill_ids=None,
+        headroom=None,
     ):
         # Normalize tool_names to a tuple; allow None or single or tuple
         if tool_names is None:
@@ -2507,7 +2514,10 @@ def workflow_with_virtual_assistant(workflow, default_llm):
         )
 
         return workflow(
-            assistant_model=assistant, state_model=state, project_name=project_name
+            assistant_model=assistant,
+            state_model=state,
+            project_name=project_name,
+            headroom=headroom,
         )
 
     return _create_workflow
