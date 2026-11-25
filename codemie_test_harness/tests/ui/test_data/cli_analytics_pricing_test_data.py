@@ -48,11 +48,6 @@ def unpriced_model_name() -> str:
     return f"autotest-unpriced-{uuid.uuid4().hex[:8]}"
 
 
-def format_cost(amount: float) -> str:
-    """A cost as the dashboard writes it."""
-    return f"${amount:,.2f}"
-
-
 @dataclass(frozen=True)
 class PricingSession:
     """One seeded CLI session (in a project of its own) and what the dashboard shows for it.

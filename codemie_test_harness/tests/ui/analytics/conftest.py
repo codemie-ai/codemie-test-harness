@@ -38,10 +38,10 @@ from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
 )
 from codemie_test_harness.tests.ui.test_data.cli_analytics_pricing_test_data import (
     PricingSession,
-    format_cost,
     get_pricing_session_seeds,
     unpriced_model_name,
 )
+from codemie_test_harness.tests.ui.utils.money import format_money
 from codemie_test_harness.tests.utils.analytics_utils import CLIAnalyticsTestSession
 from codemie_test_harness.tests.utils.base_utils import poll_until
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
@@ -113,7 +113,9 @@ def seed_pricing_session(
         analytics_utils.wait_for_cli_session(session_id)
         poll_until(
             lambda: analytics_utils.find_cli_analytics_session(session_id),
-            lambda row: row is not None and all(m in row.model_name for m in models),
+            # The row joins the session's model names with ", "; compare whole names.
+            lambda row: row is not None
+            and set(models) <= {name.strip() for name in row.model_name.split(",")},
             timeout=120,
             interval=5,
         )
@@ -125,7 +127,7 @@ def seed_pricing_session(
             started_at=seeds[0].started_at,
             priced_model=priced[0].model if priced else None,
             priced_cost=(
-                format_cost(catalog_cost(priced, catalog_priced_model.cost))
+                format_money(catalog_cost(priced, catalog_priced_model.cost))
                 if priced
                 else None
             ),

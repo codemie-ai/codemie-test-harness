@@ -40,6 +40,7 @@ from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import (
     SHARED_LIMIT_TOOLTIP,
 )
+from codemie_test_harness.tests.ui.utils.money import format_money
 from codemie_test_harness.tests.utils.base_utils import poll_until
 
 logger = logging.getLogger(__name__)
@@ -212,7 +213,7 @@ class PersonalSpendingPage(BasePage):
         """Currency text: dollar sign, thousands separators, 2 decimals; a dash when unknown."""
         if value is None:
             return ABSENT_VALUE_MARKER
-        return f"${value:,.2f}"
+        return format_money(value)
 
     @staticmethod
     def format_available(spent: float | None, limit: float | None) -> str:
