@@ -49,7 +49,6 @@ from codemie_test_harness.tests.test_data.budget_test_data import (
 from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
 from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import (
     SPENT_CATEGORY,
-    THREE_CATEGORY_DISTRIBUTION,
     TWO_CATEGORY_DISTRIBUTION,
 )
 from codemie_test_harness.tests.utils.admin_project_budget_group_utils import (
@@ -58,9 +57,13 @@ from codemie_test_harness.tests.utils.admin_project_budget_group_utils import (
 from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
+from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
-from codemie_test_harness.tests.utils.user_lifecycle_utils import new_logged_in_user
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    new_logged_in_user,
+    user_email,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -343,61 +346,6 @@ def spent_member_cleanup(
     project_name, group_id, _, _ = project_admin_setup
     _, _, member_id = member_override_ui_setup
     yield
-    _delete_spend_objects(
-        client, lite_llm_budget_utils, project_name, group_id, member_id
-    )
-
-
-@pytest.fixture(scope="function")
-def three_category_budget(project_admin_setup, client, lite_llm_budget_utils):
-    """The budget group of ``project_admin_setup`` spread over platform, cli and premium_models.
-
-    Each category then has a row of its own on the personal page. Waits for the LiteLLM key of
-    every category, which receives the spend; the group is deleted with the project.
-
-    Returns:
-        tuple: (project_name, group_id).
-    """
-    project_name, group_id, _, _ = project_admin_setup
-    AdminProjectBudgetGroupUtils(client).update_group(
-        group_id, THREE_CATEGORY_DISTRIBUTION
-    )
-    for category in THREE_CATEGORY_DISTRIBUTION:
-        key = lite_llm_budget_utils.wait_for_key_alias(
-            project_key_alias(project_name, category)
-        )
-        assert_that(
-            key,
-            not_none(),
-            f"The LiteLLM key of the {category} category was not created",
-        )
-    return project_name, group_id
-
-
-@pytest.fixture(scope="function")
-def viewer_spend_cleanup(
-    project_admin_setup,
-    three_category_budget,
-    project_admin_setup_client,
-    client,
-    lite_llm_budget_utils,
-):
-    """Removes, after the test, the LiteLLM objects that spending as the logged-in user leaves.
-
-    Same as ``spent_member_cleanup``, for the project-admin user the page is opened as.
-    """
-    project_name, group_id, _, _ = project_admin_setup
-    viewer_id = project_admin_setup_client.users.about_me().user_id
-    yield
-    _delete_spend_objects(
-        client, lite_llm_budget_utils, project_name, group_id, viewer_id
-    )
-
-
-def _delete_spend_objects(
-    client, lite_llm_budget_utils, project_name, group_id, user_id
-):
-    """Best effort: the user's child budget objects of the group and spend customers."""
     try:
         categories = AdminProjectBudgetGroupUtils(client).get_group(group_id)[
             "categories"
@@ -408,18 +356,18 @@ def _delete_spend_objects(
     for category in categories:
         budget_id = category.get("budget_id")
         try:
-            lite_llm_budget_utils.delete_project_budget_objects(budget_id, user_id)
+            lite_llm_budget_utils.delete_project_budget_objects(budget_id, member_id)
         except Exception as e:
             logger.warning(
                 f"Failed to delete LiteLLM budget objects of {budget_id}: {e}"
             )
     try:
         lite_llm_budget_utils.delete_override_customers_for_project(
-            project_name, user_id
+            project_name, member_id
         )
     except Exception as e:
         logger.warning(
-            f"Failed to delete spend customers of {user_id} in project {project_name}: {e}"
+            f"Failed to delete spend customers of {member_id} in project {project_name}: {e}"
         )
 
 
@@ -429,6 +377,50 @@ def platform_budget_id(project_admin_setup, project_admin_setup_client):
     _, group_id, _, _ = project_admin_setup
     group = AdminProjectBudgetGroupUtils(project_admin_setup_client).get_group(group_id)
     return AdminProjectBudgetUtils.budget_ids_by_category(group)["platform"]
+
+
+@pytest.fixture(scope="function")
+def personal_budget_user(keycloak_utils, lite_llm_budget_utils):
+    """A fresh platform user with the admin role and no project; yields a LoggedInUser.
+
+    Logged in through the SDK (``user.client``); a new user is created for every test.
+
+    Its only budgets are the personal defaults (platform, cli, premium_models). After the user is
+    deleted, the LiteLLM customers that spending on them created are removed, as in
+    ``_budget_user`` of tests/budgets/conftest.py. Best effort: never fails the test.
+    """
+    email = user_email("budget_ui")
+    with new_logged_in_user(keycloak_utils, email, admin=True) as user:
+        yield user
+    for customer_id in (
+        email,
+        f"{email}_{DEFAULT_CLI_BUDGET_ID}",
+        f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
+    ):
+        try:
+            lite_llm_budget_utils.delete_customer(customer_id)
+        except Exception as e:
+            logger.warning(f"Failed to delete LiteLLM customer {customer_id}: {e}")
+
+
+@pytest.fixture(scope="function")
+def personal_budget_assistant(personal_budget_user, default_llm):
+    """An assistant of ``personal_budget_user`` in its personal project (the e-mail).
+
+    Created with that user's client, as ``user_assistant`` of tests/budgets/conftest.py does, so
+    chatting with it is charged to the user's personal platform budget. Deleted after the test,
+    best effort.
+    """
+    assistant_utils = AssistantUtils(personal_budget_user.client)
+    assistant = assistant_utils.create_assistant(
+        llm_model_type=default_llm.base_name,
+        project_name=personal_budget_user.email,
+    )
+    yield assistant
+    try:
+        assistant_utils.delete_assistant(assistant)
+    except Exception as e:
+        logger.warning(f"Failed to delete assistant {assistant.id}: {e}")
 
 
 @pytest.fixture(autouse=True)

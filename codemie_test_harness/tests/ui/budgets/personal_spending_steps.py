@@ -14,7 +14,8 @@
 
 """Scenario steps of the 'Your personal spending' UI tests.
 
-The tests in ``test_personal_spending_project_rows.py`` read as lists of calls to the page object
+The tests in ``test_personal_spending_project_rows.py`` and ``test_personal_spending_categories.py``
+read as lists of calls to the page object
 and to the functions here. These read and check the same user's API response and set up the
 spend; what the page shows is checked by ``PersonalSpendingPage``.
 """
@@ -27,7 +28,6 @@ from hamcrest import (
     close_to,
     equal_to,
     greater_than,
-    empty,
     greater_than_or_equal_to,
     is_not,
     not_none,
@@ -40,8 +40,6 @@ from codemie_test_harness.tests.test_data.budget_usage_project_rows_test_data im
     PERCENT_TOLERANCE,
     SCALED_PROJECT_LIMIT,
     SPEND_PARITY_TOLERANCE,
-    STORED_ROW_POLL_INTERVAL,
-    STORED_ROW_WAIT_TIMEOUT,
 )
 from codemie_test_harness.tests.ui.pageobject.budgets.personal_spending_page import (
     PersonalSpendingPage,
@@ -49,7 +47,10 @@ from codemie_test_harness.tests.ui.pageobject.budgets.personal_spending_page imp
 from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import (
     HIDDEN_COLUMN_ID,
     HIDDEN_COLUMN_IDS,
-    SPEND_CATEGORIES,
+    PERSONAL_BUDGETS,
+    PLATFORM_ASSISTANT_SPEND_MAX_BATCHES,
+    PERSONAL_ROW_POLL_INTERVAL,
+    PERSONAL_ROW_WAIT_TIMEOUT,
     SPENT_CATEGORY,
     LimitLabelRow,
 )
@@ -57,11 +58,13 @@ from codemie_test_harness.tests.utils.budget_usage_utils import (
     BudgetUsageUtils,
     expected_total,
     generate_member_spend,
-    member_customer_spend,
+    generate_personal_assistant_spend,
+    generate_personal_spend,
     row_names,
+    settle_customer_spend,
     wait_for_settled_key_spend,
-    wait_for_settled_spend,
 )
+from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
 from codemie_test_harness.tests.utils.base_utils import poll_until
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.proxy_utils import ProxyUtils
@@ -348,111 +351,101 @@ def assert_other_member_spend_moved_only_the_project_percentage(
 
 
 # ---------------------------------------------------------------------------
-# The viewer's own spend on every category
+# A user with no project: own spend on every personal default budget
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class ViewerSpend:
-    """The viewer's spend on one category and the row of the table that shows it.
-
-    ``spend`` is the viewer's LiteLLM customer spend on the category; ``customer_spend()``
-    reads it again, so a row is compared with a value measured after the row was read.
-    """
+class PersonalSpend:
+    """The user's settled LiteLLM customer spend on one personal budget, and the row showing it."""
 
     category: str
     row_name: str
-    project_name: str
-    user_id: str
+    customer_id: str
     spend: float
 
-    def customer_spend(self, lite_llm_budget_utils) -> float:
-        return member_customer_spend(
-            lite_llm_budget_utils, self.project_name, self.user_id, self.category
-        )
 
+def generate_personal_spend_on_every_category(
+    user, assistant, default_llm, lite_llm_budget_utils
+) -> list[PersonalSpend]:
+    """The user spends on its personal platform, cli and premium budgets.
 
-def generate_viewer_spend_on_every_category(
-    client, budget, default_llm, lite_llm_budget_utils
-) -> list[ViewerSpend]:
-    """The viewer spends on the platform, cli and premium_models categories of the project.
-
-    Every customer and project key is settled once all categories were spent on, before
-    anything reads budget_usage: the first read stores its values for the staleness window.
-    The returned spend of each category is the settled customer spend, read after that.
+    Platform: chat with ``assistant``, the user's assistant in its personal project. Cli and
+    premium: /v1/messages with the CLI client header and no project header. Every category is
+    spent on first and each customer is settled afterwards, so the returned spend of each
+    category is a value LiteLLM no longer changes.
     """
-    project_name = _project_name(budget)
-    viewer_id = client.users.about_me().user_id
-    proxy_utils = ProxyUtils(client)
+    proxy_utils = ProxyUtils(user.client)
+    assistant_utils = AssistantUtils(user.client)
     spends = []
-    for category_spend in SPEND_CATEGORIES:
-        generate_member_spend(
-            proxy_utils,
-            lite_llm_budget_utils,
-            category_spend.model or default_llm.base_name,
-            project_name,
-            viewer_id,
-            category=category_spend.category,
-            client_header=category_spend.client_header,
-        )
+    for budget in PERSONAL_BUDGETS:
+        customer_id = f"{user.email}{budget.customer_suffix}"
+        if budget.client_header is None:
+            generate_personal_assistant_spend(
+                assistant_utils,
+                assistant,
+                lite_llm_budget_utils,
+                customer_id,
+                max_batches=PLATFORM_ASSISTANT_SPEND_MAX_BATCHES,
+            )
+        else:
+            generate_personal_spend(
+                proxy_utils,
+                lite_llm_budget_utils,
+                budget.model or default_llm.base_name,
+                customer_id,
+                budget.client_header,
+            )
         spends.append(
-            ViewerSpend(
-                category=category_spend.category,
-                row_name=f"{project_name}{category_spend.row_suffix}",
-                project_name=project_name,
-                user_id=viewer_id,
+            PersonalSpend(
+                category=budget.category,
+                row_name=f"{user.email}{budget.row_suffix}",
+                customer_id=customer_id,
                 spend=0.0,
             )
         )
     for spend in spends:
-        wait_for_settled_key_spend(
-            lite_llm_budget_utils, project_key_alias(project_name, spend.category)
-        )
-        spend.spend = wait_for_settled_spend(
-            lambda spend=spend: spend.customer_spend(lite_llm_budget_utils)
-        )
+        spend.spend = settle_customer_spend(lite_llm_budget_utils, spend.customer_id)
     return spends
 
 
-def assert_viewer_spend_is_recorded_on_every_category(spends: list[ViewerSpend]):
+def assert_personal_spend_is_recorded_on_every_category(spends: list[PersonalSpend]):
     for spend in spends:
         assert_that(
             spend.spend,
             greater_than_or_equal_to(MIN_VISIBLE_SPEND),
             f"Precondition failed: the stand did not record enough {spend.category} spend "
-            "for the viewer",
+            "for the user",
         )
 
 
-def _wait_for_row_with_measured_spend(
-    usage: BudgetUsageUtils, spend: ViewerSpend, lite_llm_budget_utils
+def _wait_for_row_with_customer_spend(
+    usage: BudgetUsageUtils, spend: PersonalSpend, lite_llm_budget_utils
 ) -> tuple[dict | None, float]:
-    """Poll until the row shows the viewer's customer spend measured right after the row.
+    """Poll until the row shows the customer spend read right after it; both re-read each time.
 
-    LiteLLM writes spend in batches and the row catches up only after the ledger collected
-    it, so both sides are read on every attempt: the row first, then the customer spend.
-    Returns ``(row, measured)`` of the last attempt, matched or not.
+    Returns ``(row, customer_spend)`` of the last attempt, matched or not.
     """
     return poll_until(
         lambda: (
             usage.get_row(spend.row_name),
-            spend.customer_spend(lite_llm_budget_utils),
+            lite_llm_budget_utils.get_customer_spend(spend.customer_id),
         ),
         lambda result: result[0] is not None
         and abs(result[0]["current_spending"] - result[1]) <= SPEND_PARITY_TOLERANCE,
-        timeout=STORED_ROW_WAIT_TIMEOUT,
-        interval=STORED_ROW_POLL_INTERVAL,
+        timeout=PERSONAL_ROW_WAIT_TIMEOUT,
+        interval=PERSONAL_ROW_POLL_INTERVAL,
     )
 
 
-def wait_for_viewer_rows_with_own_spend(
-    client, spends: list[ViewerSpend], lite_llm_budget_utils
+def wait_for_personal_rows_with_own_spend(
+    client, spends: list[PersonalSpend], lite_llm_budget_utils
 ) -> list[dict]:
-    """The viewer's row of every spent category, once the API shows the viewer's spend on it."""
+    """The row of every personal budget, once the API shows the user's customer spend on it."""
     usage = BudgetUsageUtils(client)
     rows = []
     for spend in spends:
-        row, measured = _wait_for_row_with_measured_spend(
+        row, customer_spend = _wait_for_row_with_customer_spend(
             usage, spend, lite_llm_budget_utils
         )
         assert_that(
@@ -460,11 +453,11 @@ def wait_for_viewer_rows_with_own_spend(
         )
         assert_that(
             row["current_spending"],
-            close_to(measured, SPEND_PARITY_TOLERANCE),
-            f"Precondition failed: the API does not show the viewer's settled {spend.category} "
+            close_to(customer_spend, SPEND_PARITY_TOLERANCE),
+            f"Precondition failed: the API does not show the user's settled {spend.category} "
             "spend",
         )
-        spend.spend = measured
+        spend.spend = customer_spend
         rows.append(row)
     return rows
 
@@ -474,46 +467,40 @@ def _has_more_than_two_decimals(value: float) -> bool:
     return exact != exact.quantize(Decimal("0.01"))
 
 
-def assert_some_spend_has_more_than_two_decimals(category_rows: list[dict]):
-    """The rounding to cents is only exercised by a spend with more digits than cents."""
+def find_personal_platform_row(rows: list[dict], email: str) -> dict:
+    """The personal platform row: its label is the user's e-mail alone."""
+    platform_row = next((row for row in rows if row["project_name"] == email), None)
     assert_that(
-        [
-            row["project_name"]
-            for row in category_rows
-            if _has_more_than_two_decimals(row["current_spending"])
-        ],
-        is_not(empty()),
-        "Precondition failed: no category spend has more than 2 decimals",
+        platform_row, not_none(), f"The personal platform row {email} is not listed"
     )
-
-
-def find_platform_row(api_rows: list[dict], budget) -> dict:
-    """The platform category row of the project: its label is the project name alone."""
-    return next(row for row in api_rows if row["project_name"] == _project_name(budget))
+    return platform_row
 
 
 def assert_platform_spend_has_more_than_two_decimals(platform_row: dict):
-    """The platform rounding to cents is only exercised by a platform spend below a cent step."""
+    """The rounding to cents is only exercised by a platform spend that is not a whole cent."""
     assert_that(
         _has_more_than_two_decimals(platform_row["current_spending"]),
         equal_to(True),
-        "Precondition failed: the viewer's platform spend "
+        "Precondition failed: the user's platform spend "
         f"{platform_row['current_spending']} has no more than 2 decimals",
     )
 
 
-def assert_category_rows_kept_their_spend(
-    api_rows: list[dict], category_rows: list[dict]
+def assert_api_lists_only_the_personal_rows(
+    api_rows: list[dict], personal_rows: list[dict]
 ):
-    """The rows read after the page opened still carry the settled spend checked before."""
-    by_name = {row["project_name"]: row for row in api_rows}
+    """The API, read after the page opened, lists only the personal rows, with their settled spend.
+
+    Compared regardless of order; the order of the table is checked against the API response.
+    """
     assert_that(
-        [
-            by_name.get(row["project_name"], {}).get("current_spending")
-            for row in category_rows
-        ],
-        equal_to([row["current_spending"] for row in category_rows]),
-        "The viewer's category spend changed while the page was opened",
+        sorted((row["project_name"], row["current_spending"]) for row in api_rows),
+        equal_to(
+            sorted(
+                (row["project_name"], row["current_spending"]) for row in personal_rows
+            )
+        ),
+        "The user's personal rows or their spend changed while the page was opened",
     )
 
 

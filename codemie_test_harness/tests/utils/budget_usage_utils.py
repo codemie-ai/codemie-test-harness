@@ -258,15 +258,12 @@ def generate_member_spend(
     user_id: str,
     category: str = "platform",
     target_spend: float = MIN_VISIBLE_SPEND,
-    client_header: dict | None = None,
 ) -> float:
     """Spend on a project budget category as one of its members, in bounded batches of long requests.
 
-    The requests carry the project header and ``client_header``, the CLI client header by default.
-    With the CLI client header the backend routes them to the project's cli key when the project
-    has a cli budget and to its platform key otherwise; a premium model goes to the premium_models
-    key, and the chrome extension client header to the platform key. ``category`` must name the
-    key that receives them.
+    The requests carry the CLI client and project headers. The backend routes them to the
+    project's cli key when the project has a cli budget and to its platform key otherwise, so
+    ``category`` must name the key that receives them.
 
     Returns the member's LiteLLM customer spend once it stopped changing; it is below
     ``target_spend`` when the stand did not record that much within the bounded batches.
@@ -274,17 +271,105 @@ def generate_member_spend(
     customer_id = MEMBER_OVERRIDE_CUSTOMER_ID_TEMPLATE.format(
         project_name=project_name, category=category, user_id=user_id
     )
-    headers = {**(client_header or CLI_CLIENT_HEADER), CLI_PROJECT_HEADER: project_name}
+    headers = {**CLI_CLIENT_HEADER, CLI_PROJECT_HEADER: project_name}
+    spend = _spend_until_customer_reaches(
+        _proxy_request(proxy_utils, model, headers),
+        lite_llm_budget_utils,
+        customer_id,
+        target_spend,
+    )
+    return _settle_customer_spend(lite_llm_budget_utils, customer_id, spend)
+
+
+def generate_personal_spend(
+    proxy_utils,
+    lite_llm_budget_utils,
+    model: str,
+    customer_id: str,
+    client_header: dict,
+    target_spend: float = MIN_VISIBLE_SPEND,
+) -> float:
+    """Spend on one of the user's personal default budgets, in bounded batches of long requests.
+
+    The requests go to /v1/messages with ``client_header`` and no project header, so the backend
+    charges them to the user's own LiteLLM customer ``customer_id``: the e-mail with the cli or
+    premium budget id appended.
+
+    Returns the customer spend read after the last batch, not settled: generate every category
+    first, then settle each with ``settle_customer_spend``. It is below ``target_spend`` when the
+    stand did not record that much within the bounded batches.
+    """
+    return _spend_until_customer_reaches(
+        _proxy_request(proxy_utils, model, dict(client_header)),
+        lite_llm_budget_utils,
+        customer_id,
+        target_spend,
+    )
+
+
+def generate_personal_assistant_spend(
+    assistant_utils,
+    assistant,
+    lite_llm_budget_utils,
+    customer_id: str,
+    target_spend: float = MIN_VISIBLE_SPEND,
+    max_batches: int = SPEND_MAX_BATCHES,
+) -> float:
+    """Spend on the user's personal platform budget by chatting with its own assistant.
+
+    ``assistant`` belongs to the user's personal project (the e-mail), so the chat is charged to
+    the customer ``customer_id``, the e-mail. Asks in bounded batches of long prompts; returns
+    the customer spend read after the last batch, not settled (see ``generate_personal_spend``).
+    """
+    return _spend_until_customer_reaches(
+        lambda: assistant_utils.ask_assistant(assistant, budget_chat_prompt_bigger()),
+        lite_llm_budget_utils,
+        customer_id,
+        target_spend,
+        max_batches,
+    )
+
+
+def settle_customer_spend(lite_llm_budget_utils, customer_id: str) -> float:
+    """The customer spend once it stopped changing; see ``generate_personal_spend``."""
+    return _settle_customer_spend(
+        lite_llm_budget_utils,
+        customer_id,
+        lite_llm_budget_utils.get_customer_spend(customer_id),
+    )
+
+
+def _proxy_request(proxy_utils, model: str, headers: dict):
+    """One long /v1/messages request with these headers, as a callable for the spend loop."""
+
+    def send():
+        proxy_utils.send_messages_request(
+            model=model,
+            messages=[{"role": "user", "content": budget_chat_prompt_bigger()}],
+            max_tokens=SPEND_REQUEST_MAX_TOKENS,
+            timeout=SPEND_REQUEST_TIMEOUT,
+            extra_headers=headers,
+        ).raise_for_status()
+
+    return send
+
+
+def _spend_until_customer_reaches(
+    send_request,
+    lite_llm_budget_utils,
+    customer_id: str,
+    target_spend: float,
+    max_batches: int = SPEND_MAX_BATCHES,
+) -> float:
+    """Call ``send_request()`` in batches until the customer spend reaches ``target_spend``.
+
+    At most ``max_batches`` batches of SPEND_REQUESTS_PER_BATCH calls; returns the last read
+    customer spend.
+    """
     spend = 0.0
-    for _ in range(SPEND_MAX_BATCHES):
+    for _ in range(max_batches):
         for _ in range(SPEND_REQUESTS_PER_BATCH):
-            proxy_utils.send_messages_request(
-                model=model,
-                messages=[{"role": "user", "content": budget_chat_prompt_bigger()}],
-                max_tokens=SPEND_REQUEST_MAX_TOKENS,
-                timeout=SPEND_REQUEST_TIMEOUT,
-                extra_headers=headers,
-            ).raise_for_status()
+            send_request()
         spend = poll_until(
             lambda: lite_llm_budget_utils.get_customer_spend(customer_id),
             lambda value: value >= target_spend,
@@ -293,6 +378,13 @@ def generate_member_spend(
         )
         if spend >= target_spend:
             break
+    return spend
+
+
+def _settle_customer_spend(
+    lite_llm_budget_utils, customer_id: str, spend: float
+) -> float:
+    """Re-read the customer spend until it is unchanged over SPEND_STABLE_READS reads."""
     unchanged_reads = 0
     for _ in range(SPEND_SETTLE_CHECKS):
         time.sleep(SPEND_POLL_INTERVAL)
