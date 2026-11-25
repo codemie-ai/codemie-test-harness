@@ -586,11 +586,7 @@ empty_credentials_integrations = [
         """,
         marks=[
             pytest.mark.confluence,
-            pytest.mark.project_management,
-            pytest.mark.xfail(
-                reason="assistant response is an empty string",
-                strict=False,
-            ),
+            pytest.mark.project_management
         ],
         id=f"{CredentialTypes.CONFLUENCE}_empty",
     ),
