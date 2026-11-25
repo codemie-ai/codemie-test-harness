@@ -109,6 +109,7 @@ class LoginPage(BasePage):
                 localStorage.setItem('{user_id}_onboarding-visited-pages', '{ONBOARDING_VISITED_PAGES}');
                 localStorage.setItem('{user_id}_codemie-new-workflow-ai-popup', 'false');
                 localStorage.setItem('codemie-new-asst-ai-popup', 'false');
+                localStorage.setItem('codemie-new-skill-ai-popup', 'false');
                 localStorage.setItem('disable-release-popup', 'true');
             }}
         """)

@@ -413,7 +413,10 @@ class DataSourceUtils(BaseUtils):
             if datasource.status == DataSourceStatus.COMPLETED:
                 return datasource
             elif datasource.status == DataSourceStatus.FAILED:
-                raise ApiError(f"Datasource {datasource_id} indexing failed")
+                raise ApiError(
+                    f"Datasource {datasource_id} indexing failed: "
+                    f"{datasource.error_message}"
+                )
         raise TimeoutError("Datasource was not indexed within the timeout period.")
 
     def wait_for_indexing_failure(
