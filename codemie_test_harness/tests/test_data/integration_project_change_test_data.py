@@ -45,6 +45,31 @@ non_owner_caller_test_data = [
 INTEGRATION_UPDATED_MESSAGE = "Specified credentials updated"
 
 
+# Rejection of a one-row move of a row whose stored alias belongs to another subsystem.
+RESERVED_IDENTIFIERS_MESSAGE = "Reserved integration identifiers"
+MANAGED_ALIAS_DETAILS = (
+    "This alias is managed by an internal subsystem and cannot be transferred:"
+)
+
+# Stored aliases the backend treats as subsystem-managed: one per reserved prefix and the exact
+# reserved alias. The user-scope list hides ``__internal__`` rows, so that one is project-scope only.
+project_managed_alias_test_data = [
+    pytest.param("__internal__IDE_abc", id="internal_prefix"),
+    pytest.param(
+        "codemie:project:source:category:premium_models", id="litellm_project_prefix"
+    ),
+    pytest.param("Schedule_my-datasource", id="schedule_prefix"),
+    pytest.param("project_member_budget_tracking_enabled", id="exact_reserved_alias"),
+]
+user_managed_alias_test_data = [
+    pytest.param(
+        "codemie:project:source:category:premium_models", id="litellm_project_prefix"
+    ),
+    pytest.param("Schedule_my-datasource", id="schedule_prefix"),
+]
+SCHEDULE_MANAGED_ALIAS = "Schedule_my-datasource"
+
+
 @dataclass
 class GitDatasourceSource:
     """Repository and matching Git integration credentials for a code datasource."""
