@@ -57,9 +57,13 @@ from codemie_test_harness.tests.utils.admin_project_budget_group_utils import (
 from codemie_test_harness.tests.utils.admin_project_budget_utils import (
     AdminProjectBudgetUtils,
 )
+from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
-from codemie_test_harness.tests.utils.user_lifecycle_utils import new_logged_in_user
+from codemie_test_harness.tests.utils.user_lifecycle_utils import (
+    new_logged_in_user,
+    user_email,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -373,6 +377,51 @@ def platform_budget_id(project_admin_setup, project_admin_setup_client):
     _, group_id, _, _ = project_admin_setup
     group = AdminProjectBudgetGroupUtils(project_admin_setup_client).get_group(group_id)
     return AdminProjectBudgetUtils.budget_ids_by_category(group)["platform"]
+
+
+@pytest.fixture(scope="function")
+def personal_budget_user(keycloak_utils, user_utils, lite_llm_budget_utils):
+    """A fresh platform admin with no project, built like ``admin_user`` of tests/conftest.py.
+
+    Logged in through the SDK (``user.client``); a new user is created for every test.
+
+    Its only budgets are the personal defaults (platform, cli, premium_models). After the user is
+    deleted, the LiteLLM customers that spending on them created are removed, in the order of
+    ``_budget_user`` of tests/budgets/conftest.py. Best effort: never fails the test.
+    """
+    with new_logged_in_user(keycloak_utils, user_email("admin"), admin=True) as user:
+        user_utils.update_admin_user(user.user_id, is_admin=True)
+        email = user.email
+        yield user
+    for customer_id in (
+        email,
+        f"{email}_{DEFAULT_CLI_BUDGET_ID}",
+        f"{email}_{DEFAULT_PREMIUM_BUDGET_ID}",
+    ):
+        try:
+            lite_llm_budget_utils.delete_customer(customer_id)
+        except Exception as e:
+            logger.warning(f"Failed to delete LiteLLM customer {customer_id}: {e}")
+
+
+@pytest.fixture(scope="function")
+def personal_budget_assistant(personal_budget_user, default_llm):
+    """An assistant of ``personal_budget_user`` in its personal project (the e-mail).
+
+    Created with that user's client, as ``user_assistant`` of tests/budgets/conftest.py does, so
+    chatting with it is charged to the user's personal platform budget. Deleted after the test,
+    best effort.
+    """
+    assistant_utils = AssistantUtils(personal_budget_user.client)
+    assistant = assistant_utils.create_assistant(
+        llm_model_type=default_llm.base_name,
+        project_name=personal_budget_user.email,
+    )
+    yield assistant
+    try:
+        assistant_utils.delete_assistant(assistant)
+    except Exception as e:
+        logger.warning(f"Failed to delete assistant {assistant.id}: {e}")
 
 
 @pytest.fixture(autouse=True)

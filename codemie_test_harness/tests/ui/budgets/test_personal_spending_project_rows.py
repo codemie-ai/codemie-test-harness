@@ -172,6 +172,8 @@ def test_personal_spending_shows_combined_project_total_for_user_who_has_not_spe
     )
     spending.should_show_table()
     spending.should_match_budget_usage(api_rows)
+    # Every amount is in cents: a spend with more digits is rounded half up, not shown in full.
+    spending.should_show_amounts_with_two_decimals(api_rows)
 
     # After: only the project percentage moved; the viewer's own spending and Available did not.
     spent_row = find_cli_row(api_rows, scaled_spent_category_budget)

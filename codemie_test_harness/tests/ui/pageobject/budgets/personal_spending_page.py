@@ -74,6 +74,13 @@ class PersonalSpendingPage(BasePage):
     # How long a tooltip that must not appear is given to show up after the hover.
     TOOLTIP_ABSENCE_WINDOW_S = 1.0
     AVAILABLE_PATTERN = re.compile(r"^Available:")
+    # A currency amount as the panel renders it: exactly 2 decimals, or a dash when absent
+    # (src/utils/currency.ts formatCurrency, minimum and maximum fraction digits 2).
+    TWO_DECIMAL_AMOUNT = r"(\$\d{1,3}(,\d{3})*\.\d{2}|-)"
+    SPENDING_TWO_DECIMALS_PATTERN = re.compile(
+        rf"^Your spending: {TWO_DECIMAL_AMOUNT}$"
+    )
+    AVAILABLE_TWO_DECIMALS_PATTERN = re.compile(rf"^Available: {TWO_DECIMAL_AMOUNT}$")
     RESPONSE_TIMEOUT_MS = 30000
 
     def __init__(self, page):
@@ -207,12 +214,19 @@ class PersonalSpendingPage(BasePage):
 
     # ── Formatting, as the panel renders values ──────────────────────────────
 
-    @staticmethod
-    def format_currency(value: float | None) -> str:
-        """Currency text: dollar sign, thousands separators, 2 decimals; a dash when unknown."""
+    @classmethod
+    def format_currency(cls, value: float | None) -> str:
+        """Currency text: dollar sign, thousands separators, 2 decimals; a dash when unknown.
+
+        The panel (src/utils/currency.ts formatCurrency) uses ``toLocaleString('en-US')`` with 2
+        fraction digits, which rounds half up on the shortest decimal form of the number, not on
+        its exact binary value as ``toFixed`` does: 1.005 is $1.01 and 0.0067 is $0.01. Python's
+        ``str`` gives the same shortest form, so the value is rounded from it.
+        """
         if value is None:
             return ABSENT_VALUE_MARKER
-        return f"${value:,.2f}"
+        cents = Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return f"${cents:,}"
 
     @staticmethod
     def format_available(spent: float | None, limit: float | None) -> str:
@@ -223,7 +237,7 @@ class PersonalSpendingPage(BasePage):
 
     @staticmethod
     def _round_half_up(value: float, places: int) -> str:
-        """Round like JS toFixed: half up on the exact binary value of the number.
+        """Round like JS toFixed (the panel's percentage): half up on the exact binary value.
 
         The number goes into ``Decimal`` as it is, not through its shortest decimal form, so a
         value such as 16.95 (stored a little below) is shown as 16.9 with one decimal.
@@ -389,6 +403,23 @@ class PersonalSpendingPage(BasePage):
                 expect(cells.nth(TIME_UNTIL_RESET_CELL)).not_to_have_text(
                     re.compile(r"^-?$")
                 )
+        return self
+
+    @step
+    def should_show_amounts_with_two_decimals(self, api_rows: list[dict]):
+        """Verify every row's 'Your spending' and 'Available' amount has exactly 2 decimals.
+
+        A spend with more digits (0.0067) is rounded to cents ($0.01), never shown in full
+        ($0.0067) nor with significant digits only; an absent amount stays a dash.
+        """
+        for api_row in api_rows:
+            name = api_row["project_name"]
+            expect(self.usage_spending(name)).to_have_text(
+                self.SPENDING_TWO_DECIMALS_PATTERN
+            )
+            expect(self.usage_available(name)).to_have_text(
+                self.AVAILABLE_TWO_DECIMALS_PATTERN
+            )
         return self
 
     @step
