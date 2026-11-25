@@ -623,8 +623,8 @@ def publish_workflow_as_global(workflow_utils):
     for workflow_id in published_ids:
         try:
             workflow_utils.unpublish_workflow_from_marketplace(workflow_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to unpublish workflow {workflow_id}: {e}")
 
 
 @pytest.fixture(scope="session")

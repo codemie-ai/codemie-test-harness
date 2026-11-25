@@ -14,7 +14,7 @@
 
 import time
 
-from hamcrest import assert_that, greater_than_or_equal_to
+from hamcrest import assert_that, empty, greater_than_or_equal_to, has_length
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
@@ -28,6 +28,26 @@ VARIANT_CLASSES = {
 ERROR_TOAST_SELECTOR = f".{VARIANT_CLASSES['error']}"
 ALL_VARIANTS = None  # every toast, including variants not listed above
 CONFIRMATION_VARIANTS = ("success", "info")
+
+# Keeps every toast added to the page after the call, so a check can see toasts that came and
+# went between two assertions. Removed elements keep their text and classes.
+_START_RECORDING_JS = """() => {
+    window.__toastRecorder?.observer.disconnect();
+    const seen = new Set();
+    const collect = (node) => {
+        if (!(node instanceof Element)) return;
+        if (node.matches('.codemie-toast')) seen.add(node);
+        node.querySelectorAll('.codemie-toast').forEach((el) => seen.add(el));
+    };
+    const observer = new MutationObserver((mutations) =>
+        mutations.forEach((m) => m.addedNodes.forEach(collect)));
+    observer.observe(document.body, {childList: true, subtree: true});
+    window.__toastRecorder = {seen, observer};
+}"""
+_RECORDED_JS = """() => window.__toastRecorder
+    ? [...window.__toastRecorder.seen].map((el) => ({
+        classes: [...el.classList], text: el.textContent }))
+    : null"""
 
 
 class Toast:
@@ -162,11 +182,52 @@ class Toast:
             raise RuntimeError("call should_show_only_one first on this Toast instance")
         toast = self._with_text(text, (variant,), exact=True)
         elapsed_ms = (time.monotonic() - self.shown_at) * 1000
-        expect(toast).to_have_count(0, timeout=max(max_open_ms - elapsed_ms, 1))
+        expect(
+            toast,
+            f"The '{variant}' toast is still open {max_open_ms} ms after it was seen",
+        ).to_have_count(0, timeout=max(max_open_ms - elapsed_ms, 1))
         open_ms = (time.monotonic() - self.shown_at) * 1000
         assert_that(
             open_ms,
             greater_than_or_equal_to(min_open_ms),
             f"The '{variant}' toast closed after {open_ms:.0f} ms",
+        )
+        return self
+
+    @step
+    def start_recording(self):
+        """Keep every toast added to the page from now on, for the `should_have_recorded_*`
+        checks. A page navigation drops the recording."""
+        self.page.evaluate(_START_RECORDING_JS)
+        return self
+
+    def _recorded(self) -> list[dict]:
+        recorded = self.page.evaluate(_RECORDED_JS)
+        if recorded is None:
+            raise RuntimeError(
+                "no toast recording on this page: call start_recording first, "
+                "and do not navigate away before the check"
+            )
+        return recorded
+
+    @step
+    def should_have_recorded_none_with(self, text: str):
+        """No toast added since `start_recording` showed the text, even one already closed."""
+        matching = [
+            toast["text"] for toast in self._recorded() if text in toast["text"]
+        ]
+        assert_that(matching, empty(), f"Toasts showing '{text}' were shown")
+        return self
+
+    @step
+    def should_have_recorded_one(self, variant: str):
+        """Exactly one toast of the variant was added since `start_recording`, even if it has
+        closed since."""
+        css_class = VARIANT_CLASSES[variant]
+        matching = [
+            toast["text"] for toast in self._recorded() if css_class in toast["classes"]
+        ]
+        assert_that(
+            matching, has_length(1), f"'{variant}' toasts shown since recording started"
         )
         return self

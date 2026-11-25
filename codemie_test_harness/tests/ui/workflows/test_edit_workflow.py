@@ -437,15 +437,17 @@ def test_save_global_workflow_shows_owner_integration_warning(
     edit_page = EditWorkflowPage(page)
     edit_page.navigate_to(workflow.id)
     edit_page.should_be_on_edit_workflow_page()
+    edit_page.toast.start_recording()
     edit_page.click_save()
 
-    toast = edit_page.toast
-    toast.should_show_only_one(OWNER_INTEGRATION_TOAST, "warn")
-    toast.should_show(WORKFLOW_UPDATED_TOAST)
-    toast.should_not_show(OWNER_INTEGRATION_RAW_MESSAGE)
-    toast.should_close_between(
+    edit_page.toast.should_show_only_one(OWNER_INTEGRATION_TOAST, "warn")
+    edit_page.toast.should_show(WORKFLOW_UPDATED_TOAST)
+    edit_page.toast.should_close_between(
         OWNER_INTEGRATION_TOAST,
         "warn",
         OWNER_INTEGRATION_TOAST_MIN_OPEN_MS,
         OWNER_INTEGRATION_TOAST_MAX_OPEN_MS,
     )
+    # Checked over the whole save, so a toast shown late or already closed still counts.
+    edit_page.toast.should_have_recorded_none_with(OWNER_INTEGRATION_RAW_MESSAGE)
+    edit_page.toast.should_have_recorded_one("warn")

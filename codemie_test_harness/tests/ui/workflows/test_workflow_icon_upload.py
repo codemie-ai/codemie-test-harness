@@ -42,10 +42,11 @@ from codemie_test_harness.tests.ui.pageobject.workflows.workflows_page import (
 from codemie_test_harness.tests.ui.test_data.workflow_node_state_settings_test_data import (
     build_simple_assistant_workflow_yaml,
 )
+from codemie_test_harness.tests.ui.test_data.workflows_test_data import (
+    WORKFLOW_UPDATED_TOAST,
+)
 from codemie_test_harness.tests.utils.base_utils import wait_for_entity
 
-WORKFLOW_CREATED_TOAST = "Workflow has been created successfully!"
-WORKFLOW_UPDATED_TOAST = "Workflow has been updated successfully!"
 OVERSIZED_ICON_BYTES = 600 * 1024
 SIZE_LIMIT_ERROR = "File size exceeds 512KB limit"
 UNSUPPORTED_FILE_ERROR = (
