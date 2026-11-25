@@ -52,6 +52,11 @@ STANDARD_TABS_PATTERN = re.compile(
 )
 
 
+# A formatted tile value: digits with locale group/decimal separators, an optional
+# percent sign (formatMetricValue: toLocaleString, or toFixed(2) + "%").
+HEADROOM_TILE_NUMBER = re.compile(r"^\s*\d[\d,.\s\u00a0\u202f]*%?\s*$")
+
+
 class AnalyticsPage(BasePage):
     """Analytics Dashboard page object."""
 
@@ -266,21 +271,31 @@ class AnalyticsPage(BasePage):
             re.compile(rf"^\s*{re.escape(label)}\s*$", re.IGNORECASE)
         ).first
 
+    def headroom_summary_tile_value(self, label: str) -> Locator:
+        """Value of one summary tile: the paragraph after the row that holds its label
+        (MetricCard renders the label row, then the formatted value).
+        """
+        return self.headroom_summary_tile_label(label).locator(
+            "xpath=../following-sibling::p[1]"
+        )
+
     @step
     def should_show_headroom_section(
         self, widget_titles: list[str], summary_labels: list[str]
     ):
         """Verify the Context Compression section, its widgets and the summary tiles.
 
-        Each tile shows a number; zero values are allowed (a stand with no compressed
-        request shows zeros).
+        Each tile shows a number of its own; zero values are allowed (a stand with no
+        compressed request shows zeros), the absent-value marker '-' is not.
         """
         expect(self.headroom_section_heading).to_be_visible(timeout=30000)
         for title in widget_titles:
             expect(self.headroom_widget_heading(title)).to_be_visible()
         for label in summary_labels:
             expect(self.headroom_summary_tile_label(label)).to_be_visible()
-        expect(self.headroom_summary_card).to_contain_text(re.compile(r"\d"))
+            expect(self.headroom_summary_tile_value(label)).to_have_text(
+                HEADROOM_TILE_NUMBER
+            )
         return self
 
     @step

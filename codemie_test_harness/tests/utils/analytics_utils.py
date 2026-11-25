@@ -122,7 +122,7 @@ class AnalyticsUtils(BaseUtils):
 
         Args:
             **kwargs: Query parameters (time_period, start_date, end_date, users, projects);
-                ``users`` takes user e-mails, comma-separated
+                ``users`` takes platform user ids, comma-separated
 
         Returns:
             SummariesResponse with the Headroom savings metrics

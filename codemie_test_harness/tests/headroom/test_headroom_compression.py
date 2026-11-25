@@ -61,6 +61,11 @@ STRATEGIES = [
 ]
 
 
+# Analytics reads are scoped to the test user (``users=current_user_id``): on a shared
+# stand another user's Headroom traffic would otherwise raise the totals and let the
+# "grew past the baseline" checks pass without this test's own chat or run.
+
+
 def _saved_tokens(metrics: dict) -> int:
     """Tokens Headroom saved in a conversation; the field is absent when it saved none."""
     return metrics.get("headroom_tokens_saved") or 0
@@ -79,8 +84,9 @@ def test_assistant_chat_with_headroom_reports_saved_tokens(
     assistant_utils,
     analytics_utils,
     default_llm,
+    current_user_id,
 ):
-    baseline = analytics_utils.get_headroom_by_strategy()
+    baseline = analytics_utils.get_headroom_by_strategy(users=current_user_id)
     baseline_requests = strategy_metric(baseline, strategy, "request_count")
     baseline_saved = strategy_metric(baseline, strategy, "tokens_saved")
 
@@ -116,7 +122,7 @@ def test_assistant_chat_with_headroom_reports_saved_tokens(
     )
 
     by_strategy = poll_until(
-        analytics_utils.get_headroom_by_strategy,
+        lambda: analytics_utils.get_headroom_by_strategy(users=current_user_id),
         lambda response: strategy_metric(response, strategy, "request_count")
         > baseline_requests
         and strategy_metric(response, strategy, "tokens_saved") > baseline_saved,
@@ -147,11 +153,14 @@ def test_workflow_run_with_headroom_block_adds_to_headroom_savings(
     workflow_with_virtual_assistant,
     workflow_utils,
     analytics_utils,
+    current_user_id,
 ):
-    baseline = analytics_utils.get_headroom_summary()
+    baseline = analytics_utils.get_headroom_summary(users=current_user_id)
     baseline_requests = summary_metric(baseline, "request_count")
     baseline_saved = summary_metric(baseline, "tokens_saved")
-    baseline_by_strategy = analytics_utils.get_headroom_by_strategy()
+    baseline_by_strategy = analytics_utils.get_headroom_by_strategy(
+        users=current_user_id
+    )
     baseline_strategy_requests = strategy_metric(
         baseline_by_strategy, strategy, "request_count"
     )
@@ -171,7 +180,7 @@ def test_workflow_run_with_headroom_block_adds_to_headroom_savings(
     assert_that(output, has_length(greater_than(0)), "Workflow run gave no output")
 
     summary = poll_until(
-        analytics_utils.get_headroom_summary,
+        lambda: analytics_utils.get_headroom_summary(users=current_user_id),
         lambda response: summary_metric(response, "request_count") > baseline_requests
         and summary_metric(response, "tokens_saved") > baseline_saved,
         timeout=ANALYTICS_POLL_TIMEOUT,
@@ -189,7 +198,7 @@ def test_workflow_run_with_headroom_block_adds_to_headroom_savings(
     )
 
     by_strategy = poll_until(
-        analytics_utils.get_headroom_by_strategy,
+        lambda: analytics_utils.get_headroom_by_strategy(users=current_user_id),
         lambda response: strategy_metric(response, strategy, "request_count")
         > baseline_strategy_requests
         and strategy_metric(response, strategy, "tokens_saved")

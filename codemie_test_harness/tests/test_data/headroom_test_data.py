@@ -287,10 +287,10 @@ POLL_INTERVAL = 5
 # Analytics shape (service/analytics/handlers/headroom_handler.py)
 # ---------------------------------------------------------------------------------------------
 
-# Mode the summary reports once the period holds Headroom events: the backend sets one of
-# sdk, sidecar or mixed (headroom_handler.py, _active_mode). The target stand runs the
-# in-process SDK; the live probe's summary read "sdk".
-EXPECTED_HEADROOM_MODE = "sdk"
+# Modes the summary can report once the period holds Headroom events: one of sdk or
+# sidecar (HEADROOM_MODE of the stand), or mixed when the period saw both
+# (headroom_handler.py, _active_mode).
+HEADROOM_MODES = ["sdk", "sidecar", "mixed"]
 
 SUMMARY_METRIC_IDS = [
     "tokens_original",
@@ -333,9 +333,12 @@ def workflows_with_ids(workflows, ids) -> dict:
     return {workflow.id: workflow for workflow in workflows if workflow.id in ids}
 
 
-def summary_metric(response, metric_id: str):
-    """Value of one metric of a Headroom summary response, or None when it is absent."""
+def summary_metric(response, metric_id: str) -> int:
+    """Value of one numeric metric of a Headroom summary response; 0 when it is absent.
+
+    Coalesces like ``strategy_metric``: an empty period may omit a metric or carry None.
+    """
     for metric in response.data.metrics:
         if metric.id == metric_id:
-            return metric.value
-    return None
+            return metric.value or 0
+    return 0

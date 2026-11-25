@@ -35,20 +35,6 @@ from codemie_test_harness.tests.ui.test_data.headroom_test_data import (
 )
 
 
-@pytest.fixture
-def ui_created_assistant_names(assistant_utils):
-    """Names of assistants a test creates through the UI; deleted through the API after it."""
-    names = []
-    yield names
-    for name in names:
-        try:
-            assistant_utils.delete_assistant(
-                assistant_utils.get_assistant_by_name(name)
-            )
-        except Exception:
-            pass
-
-
 # @case headroom-per-assistant-workflow-configuration_TC_005
 @pytest.mark.assistant
 @pytest.mark.ui

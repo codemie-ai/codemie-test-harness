@@ -141,13 +141,13 @@ def test_assistant_with_unknown_headroom_strategy_is_rejected(assistant_utils):
 
 
 # @case headroom-per-assistant-workflow-configuration_TC_004
-@pytest.mark.workflow
-@pytest.mark.api
 @pytest.mark.parametrize(
     "invalid",
     list(INVALID_WORKFLOW_HEADROOM.values()),
     ids=list(INVALID_WORKFLOW_HEADROOM.keys()),
 )
+@pytest.mark.workflow
+@pytest.mark.api
 def test_workflow_with_invalid_headroom_block_is_rejected(
     workflow_utils, default_llm, invalid
 ):

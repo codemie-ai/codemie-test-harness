@@ -405,6 +405,12 @@ def client():
 
 
 @pytest.fixture(scope="session")
+def current_user_id(client):
+    """Platform user id of the user the default ``client`` is logged in as."""
+    return client.users.about_me().user_id
+
+
+@pytest.fixture(scope="session")
 def resolver_runtime_capabilities(request):
     """Runtime feature-flag components ({id: enabled}) read once from GET /v1/config."""
     return request.config.pluginmanager.get_plugin("capability-gate").capabilities

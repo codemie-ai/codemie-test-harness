@@ -24,18 +24,18 @@ from codemie_sdk.models.analytics import (
 from hamcrest import (
     any_of,
     assert_that,
-    equal_to,
     greater_than,
     has_items,
     has_length,
     instance_of,
+    is_in,
     only_contains,
 )
 
 from codemie_test_harness.tests.test_data.headroom_test_data import (
     BY_STRATEGY_COLUMN_IDS,
     CHAT_HEADROOM_AGGRESSIVE,
-    EXPECTED_HEADROOM_MODE,
+    HEADROOM_MODES,
     POLL_INTERVAL,
     SUMMARY_METRIC_IDS,
     SUMMARY_POLL_TIMEOUT,
@@ -51,9 +51,11 @@ from codemie_test_harness.tests.utils.base_utils import poll_until
 @pytest.mark.not_for_parallel_run
 @pytest.mark.api
 def test_headroom_summary_reports_savings_and_mode_after_a_compressed_chat(
-    analytics_utils, assistant_factory, assistant_utils, default_llm
+    analytics_utils, assistant_factory, assistant_utils, default_llm, current_user_id
 ):
-    baseline = analytics_utils.get_headroom_summary()
+    # Scoped to the test user: other users' Headroom traffic on a shared stand would
+    # raise the stand-wide totals without this chat being counted.
+    baseline = analytics_utils.get_headroom_summary(users=current_user_id)
     baseline_requests = summary_metric(baseline, "request_count")
     baseline_saved = summary_metric(baseline, "tokens_saved")
 
@@ -66,7 +68,7 @@ def test_headroom_summary_reports_savings_and_mode_after_a_compressed_chat(
     assert_that(answer, has_length(greater_than(0)), "Assistant gave no answer")
 
     response = poll_until(
-        analytics_utils.get_headroom_summary,
+        lambda: analytics_utils.get_headroom_summary(users=current_user_id),
         lambda summary: summary_metric(summary, "request_count") > baseline_requests
         and summary_metric(summary, "tokens_saved") > baseline_saved,
         timeout=SUMMARY_POLL_TIMEOUT,
@@ -98,14 +100,12 @@ def test_headroom_summary_reports_savings_and_mode_after_a_compressed_chat(
     )
     assert_that(
         values.get("mode"),
-        equal_to(EXPECTED_HEADROOM_MODE),
+        is_in(HEADROOM_MODES),
         "Headroom summary does not report the active compression mode",
     )
 
 
 # @case headroom-per-assistant-workflow-configuration_TC_001
-@pytest.mark.analytics
-@pytest.mark.api
 @pytest.mark.parametrize(
     "endpoint_method, column_ids",
     [
@@ -114,6 +114,8 @@ def test_headroom_summary_reports_savings_and_mode_after_a_compressed_chat(
     ],
     ids=["by_strategy", "timeseries"],
 )
+@pytest.mark.analytics
+@pytest.mark.api
 def test_headroom_tabular_endpoints_return_their_columns(
     analytics_utils, endpoint_method, column_ids
 ):
