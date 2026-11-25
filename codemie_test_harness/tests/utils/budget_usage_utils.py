@@ -18,6 +18,8 @@ import logging
 import time
 from dataclasses import dataclass, field
 
+from codemie_sdk.models.assistant import AssistantChatRequest
+
 from codemie_test_harness.tests.test_data.budget_test_data import (
     CLI_CLIENT_HEADER,
     CLI_PROJECT_HEADER,
@@ -322,7 +324,7 @@ def generate_personal_assistant_spend(
     the customer spend read after the last batch, not settled (see ``generate_personal_spend``).
     """
     return _spend_until_customer_reaches(
-        lambda: assistant_utils.ask_assistant(assistant, budget_chat_prompt_bigger()),
+        _assistant_chat(assistant_utils, assistant),
         lite_llm_budget_utils,
         customer_id,
         target_spend,
@@ -337,6 +339,29 @@ def settle_customer_spend(lite_llm_budget_utils, customer_id: str) -> float:
         customer_id,
         lite_llm_budget_utils.get_customer_spend(customer_id),
     )
+
+
+def _assistant_chat(assistant_utils, assistant):
+    """One long chat with ``assistant``, as a callable for the spend loop.
+
+    Fails on the first chat the backend reports as unsuccessful, so a misconfigured model or an
+    exhausted budget stops the loop with its own error rather than a spend precondition later.
+    """
+
+    def send():
+        prompt = budget_chat_prompt_bigger()
+        response = assistant_utils.send_chat_request(
+            assistant,
+            AssistantChatRequest(
+                text=prompt, content_raw=f"<p>{prompt}</p>", stream=False
+            ),
+        )
+        assert response.success, (
+            f"Chat with assistant {assistant.id} failed while generating platform spend: "
+            f"{response.agent_error or response.generated}"
+        )
+
+    return send
 
 
 def _proxy_request(proxy_utils, model: str, headers: dict):

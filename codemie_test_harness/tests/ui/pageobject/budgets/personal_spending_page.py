@@ -219,7 +219,8 @@ class PersonalSpendingPage(BasePage):
         """Currency text: dollar sign, thousands separators, 2 decimals; a dash when unknown.
 
         Rounded half up like the panel (src/utils/currency.ts formatCurrency): 0.0067 is $0.01
-        and 0.005 is $0.01, where Python's own rounding of the float would give $0.00 for 0.005.
+        and an exact binary tie such as 0.125 is $0.13, where Python's own rounding (half to
+        even) would give $0.12.
         """
         if value is None:
             return ABSENT_VALUE_MARKER

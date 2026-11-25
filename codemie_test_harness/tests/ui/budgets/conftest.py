@@ -62,7 +62,6 @@ from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
 from codemie_test_harness.tests.utils.user_lifecycle_utils import (
     new_logged_in_user,
-    user_email,
 )
 
 
@@ -380,18 +379,17 @@ def platform_budget_id(project_admin_setup, project_admin_setup_client):
 
 
 @pytest.fixture(scope="function")
-def personal_budget_user(keycloak_utils, lite_llm_budget_utils):
-    """A fresh platform user with the admin role and no project; yields a LoggedInUser.
+def personal_budget_user(admin_user, lite_llm_budget_utils):
+    """``admin_user`` of tests/conftest.py: a fresh platform admin with no project.
 
     Logged in through the SDK (``user.client``); a new user is created for every test.
 
-    Its only budgets are the personal defaults (platform, cli, premium_models). After the user is
-    deleted, the LiteLLM customers that spending on them created are removed, as in
-    ``_budget_user`` of tests/budgets/conftest.py. Best effort: never fails the test.
+    Its only budgets are the personal defaults (platform, cli, premium_models). After the test,
+    the LiteLLM customers that spending on them created are removed, as in ``_budget_user`` of
+    tests/budgets/conftest.py. Best effort: never fails the test.
     """
-    email = user_email("budget_ui")
-    with new_logged_in_user(keycloak_utils, email, admin=True) as user:
-        yield user
+    email = admin_user.email
+    yield admin_user
     for customer_id in (
         email,
         f"{email}_{DEFAULT_CLI_BUDGET_ID}",
