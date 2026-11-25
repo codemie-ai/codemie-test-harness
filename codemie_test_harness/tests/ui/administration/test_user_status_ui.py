@@ -28,7 +28,6 @@ from codemie_test_harness.tests.ui.pageobject.administration.user_management_pag
 
 @pytest.mark.user
 @pytest.mark.ui
-@pytest.mark.prod_regression
 @pytest.mark.oss_standalone
 def test_deactivate_user_from_user_management_with_confirmation(
     page, user_utils, admin_user
@@ -64,7 +63,6 @@ def test_deactivate_user_from_user_management_with_confirmation(
 
 @pytest.mark.user
 @pytest.mark.ui
-@pytest.mark.prod_regression
 @pytest.mark.oss_standalone
 def test_reactivate_user_from_user_management_with_confirmation(
     page, user_utils, admin_user
@@ -102,7 +100,6 @@ def test_reactivate_user_from_user_management_with_confirmation(
 
 @pytest.mark.user
 @pytest.mark.ui
-@pytest.mark.prod_regression
 @pytest.mark.oss_standalone
 def test_user_management_shows_backend_error_when_status_change_fails(
     page, user_utils, admin_user

@@ -48,6 +48,7 @@ from codemie_test_harness.tests.ui.pageobject.analytics.usage_attribution_table 
 )
 from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
     INSIGHTS_SEEDED_RUN_COUNTS,
+    INSIGHTS_TIME_PERIOD,
 )
 from codemie_test_harness.tests.ui.test_data.cli_analytics_tool_success_test_data import (
     TOOL_SUCCESS_CASES,
@@ -168,6 +169,17 @@ def insights_activity(
 def analytics_page(page) -> AnalyticsPage:
     """The Analytics page, open on its default tab."""
     return AnalyticsPage(page).navigate_to()
+
+
+@pytest.fixture
+def recent_insights_page(page) -> AnalyticsPage:
+    """The Analytics page filtered to the last hour.
+
+    Unfiltered Insights tables aggregate the whole platform's usage and can take minutes
+    to load on a busy environment; the last hour still holds the runs ``insights_activity``
+    has just made and loads in seconds.
+    """
+    return AnalyticsPage(page).navigate_to(time_period=INSIGHTS_TIME_PERIOD)
 
 
 @pytest.fixture
