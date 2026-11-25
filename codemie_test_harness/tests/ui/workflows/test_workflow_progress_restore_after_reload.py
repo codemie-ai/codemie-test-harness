@@ -98,11 +98,11 @@ def test_answer_node_shows_in_progress_thought_card_after_reload(
         chat_page = ChatPage(page)
         chat_page.navigate_to(conversation_id)
 
-        chat_page.should_have_in_progress_thought_visible()
+        chat_page.should_have_in_progress_thought_visible(timeout=30000)
     finally:
         try:
             workflow_utils.wait_for_completion(
-                service=executions_service, _id=execution.execution_id, timeout=60
+                service=executions_service, _id=execution.execution_id, timeout=180
             )
         except Exception:
             pass

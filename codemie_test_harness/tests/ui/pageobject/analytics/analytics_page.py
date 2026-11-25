@@ -144,11 +144,17 @@ class AnalyticsPage(BasePage):
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @step
-    def navigate_to(self):
-        """Navigate to the Analytics page and wait for the dashboard to render."""
-        self.page.goto(self.PATH)
-        self.page.wait_for_load_state("networkidle", timeout=30000)
-        expect(self.page_heading).to_be_visible(timeout=15000)
+    def navigate_to(self, time_period: str | None = None):
+        """Navigate to the Analytics page and wait for the dashboard to render.
+
+        ``time_period`` (e.g. ``"last_hour"``) is passed as the page's URL filter, which
+        takes precedence over the filters saved in the browser.
+        """
+        path = f"{self.PATH}?time_period={time_period}" if time_period else self.PATH
+        # No "networkidle" wait: the dashboard widgets keep requesting data, so on a busy
+        # environment the network never goes idle. Widgets wait for their own content.
+        self.page.goto(path, wait_until="domcontentloaded")
+        expect(self.page_heading).to_be_visible(timeout=30000)
         return self
 
     @step

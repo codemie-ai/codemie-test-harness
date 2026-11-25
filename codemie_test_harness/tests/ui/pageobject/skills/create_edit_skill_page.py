@@ -180,7 +180,9 @@ class CreateEditSkillPage(BasePage):
         """Navigate to the Create Skill page."""
         self.page.goto(self.page_url)
         self.wait_for_page_load()
-        self.create_manually_button.click()
+        # The login suppresses the "Generate Skill with AI" dialog; dismiss it if it shows anyway
+        if self.generate_with_ai_dialog.is_visible():
+            self.create_manually_button.click()
         return self
 
     @step("Navigate to Edit Skill page")
