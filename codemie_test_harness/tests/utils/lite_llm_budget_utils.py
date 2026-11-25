@@ -26,12 +26,46 @@ _BUDGET_ID_POLL_TIMEOUT = 10
 # so waiting for a charge needs a longer window than the usual 120s spend polls.
 _CHARGE_POLL_TIMEOUT = 240
 _CHARGE_GRACE = 30
+# (connect, read) seconds for the route price read: it runs in module-fixture setup,
+# which the pytest timeout (timeout_func_only) does not cover.
+_ROUTE_PRICES_TIMEOUT = (10, 30)
 
 
 class LiteLLMBudgetUtils:
     def __init__(self):
         self._url = CredentialsManager.get_parameter("LITE_LLM_URL")
         self._api_key = CredentialsManager.get_parameter("LITE_LLM_KEY")
+
+    def get_route_prices(self) -> dict[str, tuple[float, float]]:
+        """Price per token (input, output) of every route LiteLLM serves: the exact
+        ``litellm_params.model`` of its deployments, as the proxy reports it in
+        ``x-litellm-model-name``. A route is left out when its deployments are not all
+        priced alike (no price counts as different) or it is priced at zero, as no
+        single price is the one a request on it is charged."""
+        resp = requests.get(
+            f"{self._url}/model/info",
+            headers={"Authorization": f"Bearer {self._api_key}"},
+            verify=VERIFY_SSL,
+            timeout=_ROUTE_PRICES_TIMEOUT,
+        )
+        resp.raise_for_status()
+        prices: dict[str, set[tuple[float | None, float | None]]] = {}
+        for deployment in resp.json()["data"]:
+            route = (deployment.get("litellm_params") or {}).get("model")
+            info = deployment.get("model_info") or {}
+            if isinstance(route, str) and route:
+                prices.setdefault(route, set()).add(
+                    (
+                        info.get("input_cost_per_token"),
+                        info.get("output_cost_per_token"),
+                    )
+                )
+        return {
+            route: next(iter(route_prices))
+            for route, route_prices in prices.items()
+            if len(route_prices) == 1
+            and all(price for price in next(iter(route_prices)))
+        }
 
     def get_customer_info(self, email: str) -> dict | None:
         resp = requests.get(
