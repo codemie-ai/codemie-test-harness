@@ -300,25 +300,6 @@ class BaseWorkflowFormPage(BasePage):
         self.tool_node_button.click()
 
     @step
-    def add_tool_node_and_open_config_panel(self):
-        """Add a tool node to the canvas, click it and wait for its config panel.
-
-        Returns:
-            ToolNodeConfigPanel: The config panel component instance.
-        """
-        from codemie_test_harness.tests.ui.pageobject.workflows.tool_node_config_panel import (
-            ToolNodeConfigPanel,
-        )
-
-        self.add_tool_node()
-        tool_node = self.canvas.get_by_text("Tool_1")
-        tool_node.wait_for(state="visible", timeout=5000)
-        tool_node.click()
-        panel = ToolNodeConfigPanel(self.page)
-        panel.should_be_visible()
-        return panel
-
-    @step
     def add_custom_node(self):
         """Add custom node to canvas by clicking it in palette (no custom node type is chosen yet)."""
         self.custom_node_button.click()
