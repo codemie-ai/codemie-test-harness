@@ -675,7 +675,17 @@ class AnalyticsUtils(BaseUtils):
         assert_not_discarded(result, f"CLI analytics batch for project {project!r}")
 
     def ingest_cli_otlp_logs(self, payload: dict, project: str | None = None) -> None:
-        """Send OTLP logs (JSON form) as the client's own user (see ingest_cli_event_hooks).
+        """Send OTLP logs (JSON form) as the client's own user (see ingest_cli_event_hooks)."""
+        self._ingest_cli_otlp("logs", payload, project)
+
+    def ingest_cli_otlp_traces(self, payload: dict, project: str | None = None) -> None:
+        """Send OTLP traces (JSON form) as the client's own user, like the logs."""
+        self._ingest_cli_otlp("traces", payload, project)
+
+    def _ingest_cli_otlp(
+        self, signal: str, payload: dict, project: str | None = None
+    ) -> None:
+        """Send one OTLP signal (JSON form) as the client's own user.
 
         Posted raw, because the SDK method returns nothing that could show a discard. Like
         the hook events, ``project_context_required`` is retried for the cache propagation
@@ -687,11 +697,11 @@ class AnalyticsUtils(BaseUtils):
             """The reply and its parsed discard; no discard for a non-200 reply,
             which assert_accepted then fails on its status."""
             response = IngestClient(self.client).post_signal(
-                "logs", body, CT_JSON, project=project
+                signal, body, CT_JSON, project=project
             )
             if response.status_code != 200:
                 return response, None
-            return response, parse_discard_response(response, "logs", CT_JSON)
+            return response, parse_discard_response(response, signal, CT_JSON)
 
         response, discard = poll_until(
             _send,
@@ -701,9 +711,9 @@ class AnalyticsUtils(BaseUtils):
             interval=2,
         )
         if discard is None:
-            assert_accepted(response, "logs", CT_JSON)
+            assert_accepted(response, signal, CT_JSON)
         else:
-            assert_nothing_discarded(response, "logs", discard)
+            assert_nothing_discarded(response, signal, discard)
 
     def get_cli_analytics_cost(self, **filters) -> CliAnalyticsCostResponse:
         """Totals. filters: start_date, end_date, time_period, users, projects."""

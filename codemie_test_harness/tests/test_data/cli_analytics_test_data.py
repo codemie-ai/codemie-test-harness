@@ -347,6 +347,17 @@ WINDOW_UTC_OFFSETS = [0, 2, -5]
 # ── Seeded sessions ──────────────────────────────────────────────────────────
 
 
+@dataclass(frozen=True)
+class MainRequest:
+    """A model request of the main thread, unrelated to any skill: its own request and
+    prompt identity, sent ``after`` the session start."""
+
+    after: timedelta
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+
+
 @dataclass
 class CliSessionSeed:
     """One CLI session to ingest: a session start plus a single model request.
@@ -373,6 +384,22 @@ class CliSessionSeed:
     cost_usd: float | None = None
     model: str = SEED_MODEL
     skill_name: str | None = None
+    # How the skill started: "command" is the bare dispatch the delivery-framework
+    # seeds use; "slash" is what Claude Code reports for a skill the user typed as
+    # /skill (a UserPromptExpansion dispatch plus a user_prompt log naming the
+    # command); "tool" is a Skill tool call the model made, reported as an OTLP trace span
+    # only (a hook-only Skill call draws no timeline bar).
+    skill_start: str = "command"
+    # A slash command that is not a skill: the user typed /name and nothing else
+    # about it is reported (no skill dispatch).
+    command_name: str | None = None
+    # With a slash-started skill and a cost: the model request the skill earned,
+    # sent this long after the dispatch under the dispatch's prompt and attributed
+    # to the skill, so the skill bar carries its cost, tokens and duration.
+    skill_request_after: timedelta | None = None
+    # Work of the main thread in the same session, apart from the skill's request: it
+    # has its own prompt and request ids and is not attributed to the skill.
+    main_request: MainRequest | None = None
     session_id: str = field(
         default_factory=lambda: f"autotest-cli-{uuid.uuid4().hex[:12]}"
     )
@@ -412,21 +439,61 @@ class CliSessionSeed:
                     "event_id": f"end:{self.session_id}",
                 }
             )
-        if self.skill_name:
-            events.append(
-                {
-                    **envelope,
-                    "type": "agent.skill.dispatch",
-                    "event_id": f"skill:{self.session_id}:{self.skill_name}",
-                    "prompt_id": f"prompt-{self.session_id}",
-                    "skill_name": self.skill_name,
-                    "command_name": self.skill_name,
-                    "command_source": "plugin",
-                }
-            )
+        if self.skill_name and self.skill_start != "tool":
+            events.append(self._skill_event(envelope))
         if self.cost_usd is None:
             events.append(self._usage_event(envelope))
+        if self.skill_request_after is not None:
+            events.append(
+                {
+                    **self._usage_event(envelope),
+                    "timestamp": to_iso(self._request_at(), self.utc_offset_hours),
+                    "platform": "claude-code",
+                    "scope_kind": "skill",
+                    "scope_name": self.skill_name,
+                }
+            )
+        if self.main_request is not None:
+            events.append(
+                {
+                    **self._usage_event(envelope),
+                    "timestamp": to_iso(
+                        self.started_at + self.main_request.after, self.utc_offset_hours
+                    ),
+                    "event_id": f"usage:{self.session_id}:main:{self.model}",
+                    "request_id": self._main_request_id,
+                    "message_id": f"msg_main_{self.session_id}",
+                    "platform": "claude-code",
+                    "input_tokens": self.main_request.input_tokens,
+                    "output_tokens": self.main_request.output_tokens,
+                }
+            )
         return events
+
+    @property
+    def _main_request_id(self) -> str:
+        return f"req_main_{self.session_id}"
+
+    def _request_at(self) -> datetime:
+        return self.started_at + (self.skill_request_after or timedelta(0))
+
+    def _skill_event(self, envelope: dict) -> dict:
+        event = {
+            **envelope,
+            "type": "agent.skill.dispatch",
+            "event_id": f"skill:{self.session_id}:{self.skill_name}",
+            "prompt_id": f"prompt-{self.session_id}",
+            "skill_name": self.skill_name,
+            "command_name": self.skill_name,
+            "command_source": "plugin",
+        }
+        if self.skill_start == "slash":
+            event.update(
+                hook_event_name="UserPromptExpansion",
+                expansion_type="slash_command",
+                platform="claude-code",
+            )
+        return event
 
     def _usage_event(self, envelope: dict) -> dict:
         return {
@@ -458,28 +525,56 @@ class CliSessionSeed:
 
     def otlp_logs(self, user_email: str) -> dict | None:
         """OTLP logs (JSON form) for ``POST /v1/analytics/cli-analytics/logs``: the
-        request with its cost, or None for a seed without a cost."""
-        if self.cost_usd is None:
+        request with its cost (when the seed has one) and, for a slash-started skill,
+        the user_prompt that names the typed command; None when there is neither."""
+        records = []
+        if self.cost_usd is not None:
+            records.append(
+                self._api_request_record(
+                    user_email,
+                    request_id=f"req_{self.session_id}",
+                    prompt_id=(
+                        f"prompt-{self.session_id}"
+                        if self.skill_request_after is not None
+                        else None
+                    ),
+                    tokens=(self.input_tokens, self.output_tokens),
+                    cost_usd=self.cost_usd,
+                    at=self._request_at(),
+                )
+            )
+        if self.main_request is not None:
+            records.append(
+                self._api_request_record(
+                    user_email,
+                    request_id=self._main_request_id,
+                    prompt_id=f"prompt-main-{self.session_id}",
+                    tokens=(
+                        self.main_request.input_tokens,
+                        self.main_request.output_tokens,
+                    ),
+                    cost_usd=self.main_request.cost_usd,
+                    at=self.started_at + self.main_request.after,
+                )
+            )
+        if self.command_name:
+            records.append(
+                self._log_record(
+                    "user_prompt",
+                    {"command_name": {"stringValue": self.command_name}},
+                    user_email,
+                )
+            )
+        if self.skill_name and self.skill_start == "slash":
+            records.append(
+                self._log_record(
+                    "user_prompt",
+                    {"command_name": {"stringValue": self.skill_name}},
+                    user_email,
+                )
+            )
+        if not records:
             return None
-        attributes = {
-            "event.name": {"stringValue": "api_request"},
-            "session.id": {"stringValue": self.session_id},
-            "user.email": {"stringValue": user_email},
-            "model": {"stringValue": self.model},
-            "request_id": {"stringValue": f"req_{self.session_id}"},
-            "cost_usd": {"doubleValue": self.cost_usd},
-            "input_tokens": {"intValue": str(self.input_tokens)},
-            "output_tokens": {"intValue": str(self.output_tokens)},
-            "cache_read_tokens": {"intValue": "0"},
-            "cache_creation_tokens": {"intValue": "0"},
-        }
-        record = {
-            "timeUnixNano": str(int(self.started_at.timestamp()) * 10**9),
-            "body": {"stringValue": "claude_code.api_request"},
-            "attributes": [
-                {"key": key, "value": value} for key, value in attributes.items()
-            ],
-        }
         return {
             "resourceLogs": [
                 {
@@ -491,9 +586,123 @@ class CliSessionSeed:
                             }
                         ]
                     },
-                    "scopeLogs": [{"logRecords": [record]}],
+                    "scopeLogs": [{"logRecords": records}],
                 }
             ]
+        }
+
+    def otlp_traces(self, user_email: str) -> dict | None:
+        """OTLP traces (JSON form) for ``POST /v1/analytics/cli-analytics/traces``: the
+        Skill tool span (inside its interaction span) of a skill the model started;
+        None for every other seed."""
+        if not (self.skill_name and self.skill_start == "tool"):
+            return None
+        # Ids come from the session id, not from chance: the backend identifies a span
+        # by its trace and span id, so a resend of the same seed must replay the spans
+        # it sent, not add new ones.
+        trace_id = self._span_identity("trace")
+        interaction_id = self._span_identity("interaction")[:16]
+        tool_id = self._span_identity("skill-tool")[:16]
+        start = int(self.started_at.timestamp()) * 10**9
+        common = {
+            "session.id": self.session_id,
+            "user.email": user_email,
+        }
+
+        def span(span_id, name, attrs, parent, begin, end):
+            return {
+                "traceId": trace_id,
+                "spanId": span_id,
+                **({"parentSpanId": parent} if parent else {}),
+                "name": name,
+                "startTimeUnixNano": str(begin),
+                "endTimeUnixNano": str(end),
+                "attributes": [
+                    {"key": k, "value": {"stringValue": v}}
+                    for k, v in {**common, **attrs}.items()
+                ],
+                "status": {"code": 0},
+            }
+
+        spans = [
+            span(
+                interaction_id,
+                "claude_code.interaction",
+                {},
+                None,
+                start,
+                start + 60 * 10**9,
+            ),
+            span(
+                tool_id,
+                "claude_code.tool",
+                {
+                    "tool_name": "Skill",
+                    "skill_name": self.skill_name,
+                },
+                interaction_id,
+                start + 10**9,
+                start + 5 * 10**9,
+            ),
+        ]
+        return {
+            "resourceSpans": [
+                {
+                    "resource": {
+                        "attributes": [
+                            {
+                                "key": "service.name",
+                                "value": {"stringValue": "claude-code"},
+                            }
+                        ]
+                    },
+                    "scopeSpans": [{"spans": spans}],
+                }
+            ]
+        }
+
+    def _span_identity(self, part: str) -> str:
+        """32 hex characters, the same for the same session and part."""
+        return uuid.uuid5(uuid.NAMESPACE_URL, f"{self.session_id}/{part}").hex
+
+    def _api_request_record(
+        self,
+        user_email: str,
+        request_id: str,
+        prompt_id: str | None,
+        tokens: tuple[int, int],
+        cost_usd: float,
+        at: datetime,
+    ) -> dict:
+        return self._log_record(
+            "api_request",
+            {
+                **({"prompt.id": {"stringValue": prompt_id}} if prompt_id else {}),
+                "model": {"stringValue": self.model},
+                "request_id": {"stringValue": request_id},
+                "cost_usd": {"doubleValue": cost_usd},
+                "input_tokens": {"intValue": str(tokens[0])},
+                "output_tokens": {"intValue": str(tokens[1])},
+                "cache_read_tokens": {"intValue": "0"},
+                "cache_creation_tokens": {"intValue": "0"},
+            },
+            user_email,
+            at=at,
+        )
+
+    def _log_record(
+        self, event_name: str, extra: dict, user_email: str, at: datetime | None = None
+    ) -> dict:
+        attributes = {
+            "event.name": {"stringValue": event_name},
+            "session.id": {"stringValue": self.session_id},
+            "user.email": {"stringValue": user_email},
+            **extra,
+        }
+        return {
+            "timeUnixNano": str(int((at or self.started_at).timestamp()) * 10**9),
+            "body": {"stringValue": f"claude_code.{event_name}"},
+            "attributes": [{"key": k, "value": v} for k, v in attributes.items()],
         }
 
 
@@ -739,3 +948,81 @@ def get_delivery_framework_session_seeds() -> dict[str | None, CliSessionSeed]:
         )
         for index, skill in enumerate(skills)
     }
+
+
+# ── Skills started as a slash command or through the Skill tool ──────────────
+
+SLASH_SKILL_KEY = "slash_skill"
+TOOL_SKILL_KEY = "tool_skill"
+
+
+def get_slash_skill_session_seeds() -> list[CliSessionSeed]:
+    """Two sessions of one plugin: one skill typed as a slash command, one started by
+    the model through the Skill tool. Each session also has an ordinary slash command
+    in its log batch: when it is listed, the batch is processed, so a skill missing from
+    Slash Commands is a finding, not a delay. Names are unique per call so counts never
+    mix with data other runs left on the stand."""
+    suffix = uuid.uuid4().hex[:8]
+    return [
+        CliSessionSeed(
+            key=SLASH_SKILL_KEY,
+            started_at=seed_day_start() + timedelta(hours=11),
+            input_tokens=1000,
+            output_tokens=10,
+            skill_name=f"autotest-plugin:slash-{suffix}",
+            skill_start="slash",
+            command_name=f"autotest-cmd-slash-{suffix}",
+        ),
+        CliSessionSeed(
+            key=TOOL_SKILL_KEY,
+            started_at=seed_day_start() + timedelta(hours=12),
+            input_tokens=2000,
+            output_tokens=20,
+            skill_name=f"autotest-plugin:tool-{suffix}",
+            skill_start="tool",
+            command_name=f"autotest-cmd-tool-{suffix}",
+        ),
+    ]
+
+
+PLAIN_COMMAND_KEY = "plain_command"
+SKILL_COST_KEY = "slash_skill_with_cost"
+SLASH_SKILL_REQUEST_DELAY = timedelta(seconds=30)
+MAIN_REQUEST_DELAY = timedelta(seconds=120)
+SESSION_DURATION = timedelta(minutes=5)
+
+
+def get_plain_command_session_seed() -> CliSessionSeed:
+    """A session where the user typed a slash command that is no skill and no
+    built-in; the name is unique per call."""
+    return CliSessionSeed(
+        key=PLAIN_COMMAND_KEY,
+        started_at=seed_day_start() + timedelta(hours=13),
+        input_tokens=1000,
+        output_tokens=10,
+        command_name=f"autotest-cmd-{uuid.uuid4().hex[:8]}",
+    )
+
+
+def get_slash_skill_cost_session_seed(model: str) -> CliSessionSeed:
+    """A slash-started skill that earned one model request of a catalog-priced model,
+    in a session that also did unrelated main-thread work: the skill bar must carry
+    only its own request's tokens, catalog money and time, not the session's."""
+    return CliSessionSeed(
+        key=SKILL_COST_KEY,
+        started_at=seed_day_start() + timedelta(hours=14),
+        input_tokens=1500,
+        output_tokens=150,
+        model=model,
+        cost_usd=0.5,
+        skill_name=f"autotest-plugin:costly-{uuid.uuid4().hex[:8]}",
+        skill_start="slash",
+        skill_request_after=SLASH_SKILL_REQUEST_DELAY,
+        main_request=MainRequest(
+            after=MAIN_REQUEST_DELAY,
+            input_tokens=700,
+            output_tokens=70,
+            cost_usd=2.0,
+        ),
+        duration=SESSION_DURATION,
+    )
