@@ -30,11 +30,13 @@ from codemie_test_harness.tests.ui.test_data.analytics_test_data import (
 @pytest.mark.analytics
 @pytest.mark.ui
 def test_insights_assistants_chats_rows_ordered_by_total_cost(
-    insights_activity, analytics_page
+    insights_activity, recent_insights_page
 ):
     """Assistants Chats rows are ordered by Total Cost ($) descending, equal costs in any order."""
     # @case insights-page-fix-sorting-and_TC_001
-    widget = InsightsTableWidget(analytics_page.page, ASSISTANTS_CHATS_TABLE).open()
+    widget = InsightsTableWidget(
+        recent_insights_page.page, ASSISTANTS_CHATS_TABLE
+    ).open()
 
     widget.should_list_rows_with_different_costs()
     widget.should_order_rows_by_cost_descending()
@@ -44,11 +46,11 @@ def test_insights_assistants_chats_rows_ordered_by_total_cost(
 @pytest.mark.ui
 @pytest.mark.prod_regression
 def test_insights_workflows_rows_ordered_by_total_cost(
-    insights_activity, analytics_page
+    insights_activity, recent_insights_page
 ):
     """Workflows rows are ordered by Total Cost ($) descending, rows without a cost left out."""
     # @case insights-page-change-sorting_TC_002
-    widget = InsightsTableWidget(analytics_page.page, WORKFLOWS_TABLE).open()
+    widget = InsightsTableWidget(recent_insights_page.page, WORKFLOWS_TABLE).open()
 
     widget.should_list_rows_with_different_costs()
     widget.should_order_rows_by_cost_descending()
@@ -62,11 +64,11 @@ def test_insights_workflows_rows_ordered_by_total_cost(
 )
 @pytest.mark.ui
 def test_insights_top_usage_rows_ordered_by_invocations_then_name(
-    insights_activity, analytics_page, table
+    insights_activity, recent_insights_page, table
 ):
     """Top usage rows are ordered by Invocations descending, then by name ascending."""
     # @case insights-page-change-sorting_TC_001
-    widget = InsightsTableWidget(analytics_page.page, table).open()
+    widget = InsightsTableWidget(recent_insights_page.page, table).open()
 
     widget.should_list_rows_with_different_counts()
     widget.should_order_rows_by_count_then_name()
@@ -80,11 +82,11 @@ def test_insights_top_usage_rows_ordered_by_invocations_then_name(
 )
 @pytest.mark.ui
 def test_insights_table_footer_shows_labelled_aligned_totals(
-    insights_activity, analytics_page, table
+    insights_activity, recent_insights_page, table
 ):
     """The totals footer reads Total, sits in the table columns and shows its numbers on one line."""
     # @case insights-page-fix-sorting-and_TC_003
-    widget = InsightsTableWidget(analytics_page.page, table).open()
+    widget = InsightsTableWidget(recent_insights_page.page, table).open()
 
     widget.should_label_footer_total()
     widget.should_align_footer_with_columns()
