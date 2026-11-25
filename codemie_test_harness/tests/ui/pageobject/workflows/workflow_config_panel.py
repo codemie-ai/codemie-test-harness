@@ -565,7 +565,7 @@ class WorkflowConfigPanel:
     def save_configuration(self):
         """Save the panel and wait for its confirmation; the panel closes."""
         self.save_button.click()
-        Toast(self.page).should_show_success("Workflow configuration has been saved")
+        Toast(self.page).should_show("Workflow configuration has been saved", ("info",))
         self.wait_for_closed()
 
     # ------ Footer Button Actions ------

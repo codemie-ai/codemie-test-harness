@@ -1242,7 +1242,7 @@ class CreateEditAssistantPage(BasePage):
 
     @property
     def headroom_section_title(self) -> Locator:
-        """'Context compression (Headroom)' section title (Extra configuration accordion).
+        """'Context compression (Headroom)' section title (Context & Data Sources accordion).
 
         Rendered only while the features:headroom flag is on.
         """
@@ -1255,8 +1255,8 @@ class CreateEditAssistantPage(BasePage):
 
     @step
     def open_headroom_settings(self) -> HeadroomSettings:
-        """Expand 'Extra configuration' and return the Headroom controls once shown."""
-        self.expand_extra_configuration()
+        """Expand 'Context & Data Sources' and return the Headroom controls once shown."""
+        self.expand_context_data_sources()
         expect(self.headroom_section_title).to_be_visible()
         self.headroom.should_be_visible()
         return self.headroom

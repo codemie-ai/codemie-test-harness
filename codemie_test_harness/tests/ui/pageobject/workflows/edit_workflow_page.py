@@ -57,7 +57,7 @@ class EditWorkflowPage(BaseWorkflowFormPage):
     def save_workflow(self):
         """Save the workflow from the header and wait for the update confirmation."""
         self.click_save()
-        self.toast.should_show_success("Workflow has been updated successfully!")
+        self.toast.should_show("Workflow has been updated successfully!", ("info",))
         return self
 
     # ====================

@@ -22,6 +22,7 @@ from codemie_sdk.models.analytics import (
     TabularResponse,
 )
 from hamcrest import (
+    any_of,
     assert_that,
     equal_to,
     greater_than,
@@ -82,7 +83,7 @@ def test_headroom_summary_reports_savings_and_mode_after_a_compressed_chat(
     values = {metric.id: metric.value for metric in response.data.metrics}
     assert_that(
         [values[metric_id] for metric_id in SUMMARY_METRIC_IDS],
-        only_contains(instance_of((int, float))),
+        only_contains(any_of(instance_of(int), instance_of(float))),
         "Headroom summary savings metrics do not carry numbers",
     )
     assert_that(
