@@ -60,6 +60,9 @@ from codemie_test_harness.tests.test_data.customer_config_test_data import (
     get_web_search_settings_data,
 )
 from codemie_test_harness.tests.test_data.file_test_data import file_test_data
+from codemie_test_harness.tests.test_data.marketplace_test_data import (
+    COMPLETE_CATEGORIES,
+)
 from codemie_test_harness.tests.test_data.marketplace_thresholds_test_data import (
     MARKETPLACE_THRESHOLDS_COMPONENT_ID,
 )
@@ -555,6 +558,73 @@ def customer_config_utils(client):
 @pytest.fixture(scope="session")
 def workflow_utils(client):
     return WorkflowUtils(client)
+
+
+@pytest.fixture(scope="module")
+def create_script_workflow(workflow_utils):
+    """Factory ``(tools, states, assistants=None) -> workflow``; every workflow is deleted at module end."""
+    created = []
+
+    def _create(tools, states, assistants=None):
+        workflow_yaml = WorkflowYamlModel(
+            enable_summarization_node=False,
+            tools=tools,
+            assistants=assistants or [],
+            states=states,
+        )
+        workflow = workflow_utils.create_workflow(
+            workflow_name=get_random_name(),
+            workflow_type=WorkflowMode.SEQUENTIAL,
+            shared=True,
+            workflow_yaml=prepare_yaml_content(
+                workflow_yaml.model_dump(exclude_none=True)
+            ),
+        )
+        created.append(workflow)
+        return workflow
+
+    yield _create
+    for workflow in created:
+        workflow_utils.delete_workflow(workflow)
+
+
+@pytest.fixture(scope="session")
+def jira_user_integration(client):
+    """One USER-type Jira integration of the running user, shared by all tests of the run.
+
+    A single integration for the whole run keeps tests that run side by side from deleting the
+    integration another test is calling through."""
+    integration_utils = IntegrationUtils(client)
+    integration = integration_utils.create_user_integration(
+        CredentialTypes.JIRA, CredentialsManager.jira_credentials()
+    )
+    yield integration
+    integration_utils.delete_integration(integration)
+
+
+@pytest.fixture
+def publish_workflow_as_global(workflow_utils):
+    """Factory ``(workflow_id, categories=None) -> dict``; publishes a workflow to the
+    marketplace, which is the only way the public API sets ``is_global=True``.
+
+    Unpublishes every workflow it published at teardown, so ``is_global`` reverts even
+    when the test fails.
+    """
+    published_ids: list[str] = []
+
+    def _publish(workflow_id: str, categories: Optional[list[str]] = None) -> dict:
+        response = workflow_utils.publish_workflow_to_marketplace(
+            workflow_id, categories or [COMPLETE_CATEGORIES]
+        )
+        published_ids.append(workflow_id)
+        return response
+
+    yield _publish
+    for workflow_id in published_ids:
+        try:
+            workflow_utils.unpublish_workflow_from_marketplace(workflow_id)
+        except Exception:
+            pass
 
 
 @pytest.fixture(scope="session")

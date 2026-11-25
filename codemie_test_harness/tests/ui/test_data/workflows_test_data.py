@@ -71,3 +71,16 @@ class WorkflowCategoriesUiDataFactory:
             with_category_name=f"{prefix}-with-cat",
             without_category_name=f"{prefix}-no-cat",
         )
+
+
+# Saving a global workflow whose script step may call generic_jira_tool through the author's own
+# integration: the editor shows this one warning toast, kept open for 8 s (3 s is the default).
+WORKFLOW_UPDATED_TOAST = "Workflow has been updated successfully!"
+OWNER_INTEGRATION_TOAST = (
+    "Saved. Script steps run these tools under the workflow author's integration "
+    "for everyone who runs the workflow: generic_jira_tool."
+)
+# Part of the backend's raw warning message, which no toast may show.
+OWNER_INTEGRATION_RAW_MESSAGE = "runs under the workflow author's integration ("
+OWNER_INTEGRATION_TOAST_MIN_OPEN_MS = 5_000
+OWNER_INTEGRATION_TOAST_MAX_OPEN_MS = 9_000

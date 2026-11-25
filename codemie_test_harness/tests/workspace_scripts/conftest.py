@@ -15,33 +15,22 @@
 """Fixtures for workspace-script tests."""
 
 import uuid
-from typing import Optional
 
 import pytest
 from codemie_sdk.models.assistant import ToolDetails, ToolKitDetails
 from codemie_sdk.models.integration import CredentialTypes
-from codemie_sdk.models.workflow import WorkflowMode
 
 from codemie_test_harness.tests.enums.tools import AgentWorkspaceTool, Toolkit
-
-from codemie_test_harness.tests.test_data.marketplace_test_data import (
-    COMPLETE_CATEGORIES,
-)
 from codemie_test_harness.tests.test_data.workspace_script_test_data import (
     FEATURE_COMPONENT_ID,
 )
 from codemie_test_harness.tests.utils.skill_utils import SkillsUtils
-from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
 from codemie_test_harness.tests.utils.workspace_script_utils import (
     parse_file_token,
     unique_script_name,
     upload_text_file,
-)
-from codemie_test_harness.tests.utils.yaml_utils import (
-    WorkflowYamlModel,
-    prepare_yaml_content,
 )
 
 
@@ -50,34 +39,6 @@ def require_script_tool_calling(resolver_runtime_capabilities):
     """Skip the module when the environment has the workspace script bridge switched off."""
     if not resolver_runtime_capabilities.get(FEATURE_COMPONENT_ID):
         pytest.skip(f"{FEATURE_COMPONENT_ID} is disabled in this environment")
-
-
-@pytest.fixture(scope="module")
-def create_script_workflow(workflow_utils):
-    """Factory ``(tools, states, assistants=None) -> workflow``; every workflow is deleted at module end."""
-    created = []
-
-    def _create(tools, states, assistants=None):
-        workflow_yaml = WorkflowYamlModel(
-            enable_summarization_node=False,
-            tools=tools,
-            assistants=assistants or [],
-            states=states,
-        )
-        workflow = workflow_utils.create_workflow(
-            workflow_name=get_random_name(),
-            workflow_type=WorkflowMode.SEQUENTIAL,
-            shared=True,
-            workflow_yaml=prepare_yaml_content(
-                workflow_yaml.model_dump(exclude_none=True)
-            ),
-        )
-        created.append(workflow)
-        return workflow
-
-    yield _create
-    for workflow in created:
-        workflow_utils.delete_workflow(workflow)
 
 
 @pytest.fixture(scope="module")
@@ -100,20 +61,6 @@ def own_file_owner(client):
 
 
 @pytest.fixture(scope="session")
-def jira_user_integration(client):
-    """One USER-type Jira integration of the running user, shared by all tests of the run.
-
-    A single integration for the whole run keeps tests that run side by side from deleting the
-    integration another test is calling through."""
-    integration_utils = IntegrationUtils(client)
-    integration = integration_utils.create_user_integration(
-        CredentialTypes.JIRA, CredentialsManager.jira_credentials()
-    )
-    yield integration
-    integration_utils.delete_integration(integration)
-
-
-@pytest.fixture(scope="session")
 def jira_user_integration_runner(regular_client):
     """One USER-type Jira integration of the regular (non-creator) test user, shared by the run.
 
@@ -126,31 +73,6 @@ def jira_user_integration_runner(regular_client):
     )
     yield integration
     integration_utils.delete_integration(integration)
-
-
-@pytest.fixture
-def publish_workflow_as_global(workflow_utils):
-    """Factory ``(workflow_id, categories=None) -> dict``; publishes a workflow to the
-    marketplace, which is the only way the public API sets ``is_global=True``.
-
-    Unpublishes every workflow it published at teardown, so ``is_global`` reverts even
-    when the test fails.
-    """
-    published_ids: list[str] = []
-
-    def _publish(workflow_id: str, categories: Optional[list[str]] = None) -> dict:
-        response = workflow_utils.publish_workflow_to_marketplace(
-            workflow_id, categories or [COMPLETE_CATEGORIES]
-        )
-        published_ids.append(workflow_id)
-        return response
-
-    yield _publish
-    for workflow_id in published_ids:
-        try:
-            workflow_utils.unpublish_workflow_from_marketplace(workflow_id)
-        except Exception:
-            pass
 
 
 @pytest.fixture

@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+
+from hamcrest import assert_that, greater_than_or_equal_to
 from playwright.sync_api import Locator, expect
 from reportportal_client import step
 
@@ -20,6 +23,7 @@ VARIANT_CLASSES = {
     "success": "codemie-toast-success",
     "info": "codemie-toast-info",
     "error": "codemie-toast-err",
+    "warn": "codemie-toast-warn",
 }
 ERROR_TOAST_SELECTOR = f".{VARIANT_CLASSES['error']}"
 ALL_VARIANTS = None  # every toast, including variants not listed above
@@ -35,6 +39,7 @@ class Toast:
 
     def __init__(self, page):
         self.page = page
+        self.shown_at = None
 
     @property
     def all_toasts(self) -> Locator:
@@ -130,4 +135,38 @@ class Toast:
         if move_cursor_away:
             self.page.mouse.move(0, 0)
         expect(self.all_toasts).to_have_count(0, timeout=timeout)
+        return self
+
+    @step
+    def should_show_only_one(self, text: str, variant: str):
+        """Exactly one toast of the variant is open, and its whole text is `text`.
+
+        Once the toast is seen, the cursor moves off the toasts, as hovering a toast holds it
+        open, and the moment it was seen is kept for `should_close_between`.
+        """
+        toast = self._with_text(text, (variant,), exact=True)
+        expect(toast.first).to_be_visible(timeout=TOAST_TIMEOUT_MS)
+        self.shown_at = time.monotonic()
+        self.page.mouse.move(0, 0)
+        expect(self._toasts((variant,))).to_have_count(1)
+        expect(toast).to_have_count(1)
+        return self
+
+    @step
+    def should_close_between(
+        self, text: str, variant: str, min_open_ms: int, max_open_ms: int
+    ):
+        """The toast seen by `should_show_only_one` stays open at least `min_open_ms` and
+        closes by itself within `max_open_ms` of being seen."""
+        if self.shown_at is None:
+            raise RuntimeError("call should_show_only_one first on this Toast instance")
+        toast = self._with_text(text, (variant,), exact=True)
+        elapsed_ms = (time.monotonic() - self.shown_at) * 1000
+        expect(toast).to_have_count(0, timeout=max(max_open_ms - elapsed_ms, 1))
+        open_ms = (time.monotonic() - self.shown_at) * 1000
+        assert_that(
+            open_ms,
+            greater_than_or_equal_to(min_open_ms),
+            f"The '{variant}' toast closed after {open_ms:.0f} ms",
+        )
         return self
