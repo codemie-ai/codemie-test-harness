@@ -921,6 +921,13 @@ class CreateEditDatasourcePage(BasePage):
         return self
 
     @step
+    def should_see_repo_link_placeholder(self, placeholder: str):
+        """Verify the Repository Link input is visible and shows the given placeholder."""
+        expect(self.repo_link_input).to_be_visible()
+        expect(self.repo_link_input).to_have_attribute("placeholder", placeholder)
+        return self
+
+    @step
     def select_embeddings_model(self, value: str):
         self.embeddings_model_dropdown.click()
         self.dropdown_values(value).click()

@@ -23,6 +23,7 @@ from codemie_test_harness.tests.ui.pageobject.datasources.datasource_page import
 from codemie_test_harness.tests.ui.test_data.datasource_test_data import (
     DataSourceStatus,
     DataSourceFilterType,
+    GIT_REPO_LINK_PLACEHOLDER,
     UPDATE_SUBTITLE_DATASOURCE,
     UPDATE_TITLE_DATASOURCE,
 )
@@ -112,6 +113,10 @@ def test_edit_datasource(
     )
     edit_page.selector.should_see_disabled_multiselect(PROJECT)
     edit_page.should_see_disabled_name_input(datasource.name)
+
+    if datasource_type == DataSourceFilterType.CODE:
+        # @case git-datasource-form-repository-link_TC_002
+        edit_page.should_see_repo_link_placeholder(GIT_REPO_LINK_PLACEHOLDER)
 
     if reindex_type is not None:
         edit_page.should_see_save_reindex_button()
