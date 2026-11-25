@@ -145,6 +145,43 @@ class ToolNodeConfigPanel(BasePage):
         return self.tool_configuration_region.get_by_text("Field is required")
 
     @property
+    def folder_argument_input(self) -> Locator:
+        """ "Folder" text argument of the Exchange "Read messages" tool."""
+        return self.tool_configuration_region.get_by_role("textbox", name="Folder")
+
+    @property
+    def start_argument_input(self) -> Locator:
+        """ "Start" number argument (spinbutton) of the Exchange "Read messages" tool."""
+        return self.tool_configuration_region.get_by_role("spinbutton", name="Start")
+
+    @property
+    def count_argument_input(self) -> Locator:
+        """ "Count" number argument (spinbutton) of the Exchange "Read messages" tool."""
+        return self.tool_configuration_region.get_by_role("spinbutton", name="Count")
+
+    @property
+    def required_value_errors(self) -> Locator:
+        """Every inline "Field is required" message in the Tool Configuration region."""
+        return self.tool_configuration_region.get_by_text(
+            "Field is required", exact=True
+        )
+
+    @property
+    def start_argument_error(self) -> Locator:
+        """Innermost Tool Configuration container holding both the "Start" input and a
+        "Field is required" message, i.e. the error rendered under the Start field.
+
+        Containers are matched in document order, so the deepest common ancestor of the
+        input and its message is the last match.
+        """
+        return (
+            self.tool_configuration_region.locator("div")
+            .filter(has=self.page.get_by_role("spinbutton", name="Start"))
+            .filter(has=self.page.get_by_text("Field is required", exact=True))
+            .last
+        )
+
+    @property
     def integration_dropdown_trigger(self) -> Locator:
         """Toolkit-level integration dropdown trigger.
 
@@ -199,6 +236,33 @@ class ToolNodeConfigPanel(BasePage):
     def should_have_to_argument_error(self):
         """Assert Save was refused with the "To" field's inline required-value error."""
         expect(self.to_argument_error).to_be_visible()
+        return self
+
+    @step
+    def should_have_read_messages_arguments_required(self):
+        """Assert the Exchange "Read messages" tool shows Folder, Start and Count, each
+        marked required (aria-required="true")."""
+        for argument_input in (
+            self.folder_argument_input,
+            self.start_argument_input,
+            self.count_argument_input,
+        ):
+            expect(argument_input).to_be_visible()
+            expect(argument_input).to_have_attribute("aria-required", "true")
+        return self
+
+    @step
+    def should_have_start_argument_error(self):
+        """Assert Save was refused with exactly one required-value error, rendered under
+        the empty "Start" field."""
+        expect(self.required_value_errors).to_have_count(1)
+        expect(self.start_argument_error).to_be_visible()
+        return self
+
+    @step
+    def should_not_have_required_value_error(self):
+        """Assert no "Field is required" message is left in the Tool Configuration region."""
+        expect(self.required_value_errors).to_have_count(0)
         return self
 
     @step
@@ -373,6 +437,25 @@ class ToolNodeConfigPanel(BasePage):
         """Append one row to the "To" list argument and fill it with the given value."""
         self.to_argument_add_button.click()
         self.to_argument_row_input.fill(value)
+        return self
+
+    @step
+    def fill_folder_argument(self, value: str):
+        """Fill the "Folder" argument."""
+        self.folder_argument_input.fill(value)
+        return self
+
+    @step
+    def fill_count_argument(self, value: int):
+        """Fill the "Count" number argument."""
+        self.count_argument_input.fill(str(value))
+        return self
+
+    @step
+    def fill_start_argument(self, value: int):
+        """Fill the "Start" number argument, then move focus out of the field."""
+        self.start_argument_input.fill(str(value))
+        self.start_argument_input.press("Tab")
         return self
 
     @step
