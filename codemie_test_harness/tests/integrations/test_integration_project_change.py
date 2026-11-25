@@ -16,7 +16,7 @@
 
 PUT /v1/settings/project/{id} and PUT /v1/settings/user/{id} move the integration to the
 ``project_name`` of the request while keeping its id. Covers TC_002, TC_003, TC_004, TC_006
-and TC_007.
+and TC_007, plus the refusal to move a subsystem-managed row.
 """
 
 import time
@@ -44,11 +44,16 @@ from codemie_test_harness.tests.test_data.integration_project_change_test_data i
     ACCESS_DENIED_DETAILS,
     ALIAS_COLLISION_DETAILS,
     INTEGRATION_UPDATED_MESSAGE,
+    MANAGED_ALIAS_DETAILS,
     NOT_OWNER_ACCESS_DENIED_MESSAGE,
     NOT_OWNER_UPDATE_DETAILS,
+    RESERVED_IDENTIFIERS_MESSAGE,
+    SCHEDULE_MANAGED_ALIAS,
     git_datasource_source,
     non_owner_caller_test_data,
     project_change_scope_test_data,
+    project_managed_alias_test_data,
+    user_managed_alias_test_data,
 )
 from codemie_test_harness.tests.utils.base_utils import (
     assert_error_details,
@@ -611,4 +616,186 @@ def test_convert_personal_integration_to_project_denied_for_non_owner_allowed_fo
         ),
         has_item(personal.id),
         "Integration is not a project integration after the owner converted it.",
+    )
+
+
+def _assert_managed_move_refused(
+    response, integration_utils, setting_type, created, source, target, alias
+):
+    """The move got 422 'Reserved integration identifiers' naming ``alias``; the row stayed in its source project."""
+    assert_error_details(
+        response,
+        422,
+        RESERVED_IDENTIFIERS_MESSAGE,
+        field="message",
+    )
+    assert_error_details(response, 422, f"{MANAGED_ALIAS_DETAILS} {alias}")
+    stayed = integration_utils.get_integration_by_project_and_alias(
+        source.name, alias, setting_type
+    )
+    assert_that(
+        stayed,
+        not_none(),
+        f"Managed integration '{alias}' is no longer in its source project after the refused move.",
+    )
+    assert_that(
+        stayed.id,
+        equal_to(created.id),
+        "Managed integration id changed after the refused move.",
+    )
+    assert_that(
+        integration_utils.list_integration_ids_in_project(target.name, setting_type),
+        is_not(has_item(created.id)),
+        "Managed integration reached the target project despite the refusal.",
+    )
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.parametrize("managed_alias", project_managed_alias_test_data)
+@pytest.mark.oss_standalone
+@pytest.mark.api
+def test_change_project_of_managed_integration_refused_on_project_route(
+    project, integration_utils, create_integration_in_project, managed_alias
+):
+    # @case one-row-transfer-subsystem-rows_TC_001
+    """PUT /v1/settings/project with a changed project_name on a subsystem-managed row gives 422; the row stays."""
+    source = project()
+    target = project()
+    created = create_integration_in_project(source.name, alias=managed_alias)
+
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
+        integration_utils.update_integration(
+            _integration_request(
+                target.name, managed_alias, IntegrationType.PROJECT, created.id
+            )
+        )
+
+    _assert_managed_move_refused(
+        exc_info.value.response,
+        integration_utils,
+        IntegrationType.PROJECT,
+        created,
+        source,
+        target,
+        managed_alias,
+    )
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.parametrize("managed_alias", user_managed_alias_test_data)
+@pytest.mark.oss_standalone
+@pytest.mark.api
+def test_change_project_of_managed_integration_refused_on_user_route(
+    project, integration_utils, create_integration_in_project, managed_alias
+):
+    # @case one-row-transfer-subsystem-rows_TC_002
+    """PUT /v1/settings/user with a changed project_name on a subsystem-managed row gives 422; the row stays."""
+    source = project()
+    target = project()
+    created = create_integration_in_project(
+        source.name, alias=managed_alias, setting_type=IntegrationType.USER
+    )
+
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
+        integration_utils.update_integration(
+            _integration_request(
+                target.name, managed_alias, IntegrationType.USER, created.id
+            )
+        )
+
+    _assert_managed_move_refused(
+        exc_info.value.response,
+        integration_utils,
+        IntegrationType.USER,
+        created,
+        source,
+        target,
+        managed_alias,
+    )
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.oss_standalone
+@pytest.mark.api
+def test_change_project_and_rename_of_managed_integration_refused(
+    project, integration_utils, create_integration_in_project
+):
+    # @case one-row-transfer-subsystem-rows_TC_003
+    """Renaming a managed row to an ordinary alias in the same PUT that changes the project is still refused."""
+    source = project()
+    target = project()
+    new_alias = get_random_name()
+    created = create_integration_in_project(source.name, alias=SCHEDULE_MANAGED_ALIAS)
+
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
+        integration_utils.update_integration(
+            _integration_request(
+                target.name, new_alias, IntegrationType.PROJECT, created.id
+            )
+        )
+
+    _assert_managed_move_refused(
+        exc_info.value.response,
+        integration_utils,
+        IntegrationType.PROJECT,
+        created,
+        source,
+        target,
+        SCHEDULE_MANAGED_ALIAS,
+    )
+    assert_that(
+        integration_utils.get_integration_by_project_and_alias(
+            target.name, new_alias, IntegrationType.PROJECT
+        ),
+        none(),
+        "Managed integration was renamed into the target project despite the refusal.",
+    )
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.parametrize("setting_type", project_change_scope_test_data)
+@pytest.mark.oss_standalone
+@pytest.mark.api
+def test_update_managed_integration_keeping_project_succeeds(
+    project, integration_utils, create_integration_in_project, setting_type
+):
+    # @case one-row-transfer-subsystem-rows_TC_004
+    """PUT on a subsystem-managed row with the same project_name is not refused and the row stays in its project."""
+    source = project()
+    created = create_integration_in_project(
+        source.name, alias=SCHEDULE_MANAGED_ALIAS, setting_type=setting_type
+    )
+
+    response = integration_utils.update_integration(
+        _integration_request(source.name, created.alias, setting_type, created.id)
+    )
+
+    assert_that(
+        response["message"],
+        equal_to(INTEGRATION_UPDATED_MESSAGE),
+        "In-place update of a managed row was not accepted.",
+    )
+    updated = integration_utils.get_integration_by_id(created.id, setting_type)
+    assert_that(
+        updated,
+        not_none(),
+        "Managed integration disappeared after the in-place update.",
+    )
+    assert_that(
+        updated.project_name,
+        equal_to(source.name),
+        "Managed integration changed project during an in-place update.",
+    )
+    assert_that(
+        updated.alias,
+        equal_to(SCHEDULE_MANAGED_ALIAS),
+        "Managed integration alias changed during an in-place update.",
     )
