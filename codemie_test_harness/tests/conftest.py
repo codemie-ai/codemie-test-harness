@@ -182,6 +182,7 @@ from codemie_test_harness.tests.utils.marketplace_management_utils import (
     personal_project_of,
     MarketplaceManagementUtils,
     MarketplaceSubmitter,
+    delete_submitter_assistant,
     poll_marketplace_listing,
 )
 from codemie_test_harness.tests.utils.notification_utils import (
@@ -3193,28 +3194,13 @@ def marketplace_submitter(request, default_llm, marketplace_core_gates):
         )
 
 
-def _delete_submitter_assistant(submitter, admin_client, assistant_id) -> None:
-    """Delete an assistant of the submitter in any review state (pending, rejected, approved).
-
-    The owner deletes it; the admin client is the fallback. A failure of both is logged as
-    an error, because the assistant is then left behind.
-    """
-    try:
-        submitter.assistant_utils.delete_assistant_by_id(assistant_id)
-    except Exception:
-        try:
-            admin_client.assistants.delete(assistant_id)
-        except Exception as e:
-            logger.error(f"Failed to delete assistant {assistant_id}: {e}")
-
-
 @pytest.fixture
 def marketplace_assistants_to_delete(marketplace_submitter, client):
     """Collects the assistants a test creates for the submitter and deletes them on teardown."""
     created = []
     yield created
     for assistant in created:
-        _delete_submitter_assistant(marketplace_submitter, client, assistant.id)
+        delete_submitter_assistant(marketplace_submitter, client, assistant.id)
 
 
 @pytest.fixture
@@ -3224,7 +3210,7 @@ def delete_marketplace_assistant(
     """Deletes an assistant right away (for one that is public) and drops it from the teardown list."""
 
     def _delete(assistant) -> None:
-        _delete_submitter_assistant(marketplace_submitter, client, assistant.id)
+        delete_submitter_assistant(marketplace_submitter, client, assistant.id)
         marketplace_assistants_to_delete.remove(assistant)
 
     return _delete
