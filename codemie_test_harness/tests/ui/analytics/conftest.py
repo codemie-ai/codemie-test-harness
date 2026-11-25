@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 import pytest
+from hamcrest import assert_that, is_
 
 # The CLI Analytics fixtures of the API suite: the UI tests seed the same sessions through them.
 from codemie_test_harness.tests.analytics.conftest import (  # noqa: F401
@@ -146,6 +147,13 @@ def catalog_priced_model(client):
     return model
 
 
+def _lists_models(row, models: list[str]) -> bool:
+    """Whether the session row names every model; it joins their names with ", "."""
+    return row is not None and set(models) <= {
+        name.strip() for name in row.model_name.split(",")
+    }
+
+
 @pytest.fixture
 def seed_pricing_session(
     analytics_utils, admin_utils, project_utils, catalog_priced_model
@@ -172,13 +180,16 @@ def seed_pricing_session(
             )
         session_id = seeds[0].session_id
         analytics_utils.wait_for_cli_session(session_id)
-        poll_until(
+        row = poll_until(
             lambda: analytics_utils.find_cli_analytics_session(session_id),
-            # The row joins the session's model names with ", "; compare whole names.
-            lambda row: row is not None
-            and set(models) <= {name.strip() for name in row.model_name.split(",")},
+            lambda row: _lists_models(row, models),
             timeout=120,
             interval=5,
+        )
+        assert_that(
+            _lists_models(row, models),
+            is_(True),
+            f"session {session_id} not rolled up with models {models}; last row: {row}",
         )
         priced = [s for s in seeds if s.model == catalog_priced_model.base_name]
         unpriced = [s for s in seeds if s.model != catalog_priced_model.base_name]

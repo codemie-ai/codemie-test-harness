@@ -80,13 +80,24 @@ class CLIAnalyticsCostPage(CLIAnalyticsPage):
         return self.section_panel.get_by_title(f"{model}:")
 
     @property
-    def user_row(self) -> Locator:
+    def only_user_row(self) -> Locator:
         """The row of the only user of the selection in the 'All Users' table."""
         return self.users_data_rows.first
 
     def project_row(self, project: str) -> Locator:
         """Row of the project in the Repositories section."""
         return self.section_panel.get_by_role("row").filter(has_text=project)
+
+    def est_cost_cell(self, row: Locator) -> Locator:
+        """'Est. Cost' cell of a row of the open section's table (Users or Repositories).
+
+        The position is read from the column header, as ``user_cell`` does: the cells carry no
+        data-testid. The cell holds the amount and its marker.
+        """
+        index = self.users_header(self.EST_COST).evaluate(
+            "header => Array.from(header.parentElement.children).indexOf(header)"
+        )
+        return row.get_by_role("cell").nth(index)
 
     # ── Actions ──────────────────────────────────────────────────────────────────
 
@@ -255,80 +266,71 @@ class CLIAnalyticsCostPage(CLIAnalyticsPage):
         ).to_have_count(0)
         return self
 
-    @step
-    def should_mark_user_cost_partial(self, amount: str, model: str):
-        """Assert the Users table row shows the priced amount, marked as a partial estimate."""
+    def _should_list_one_user(self):
         expect(self.users_data_rows, "Users should list the one sender").to_have_count(
             1, timeout=15000
         )
-        expect(
-            self.user_row, f"The user's cost should read '{amount}'"
-        ).to_contain_text(amount)
-        expect(
-            self.cost_marker(self.user_row, PARTIAL_ESTIMATE_NOTICE, model),
-            f"The user's cost should carry the partial estimate marker naming {model}",
-        ).to_have_count(1)
+
+    @step
+    def should_mark_user_cost_partial(self, amount: str, model: str):
+        """Assert the Users table row shows the priced amount, marked as a partial estimate."""
+        self._should_list_one_user()
+        self._should_have_value_and_marker(
+            self.est_cost_cell(self.only_user_row),
+            amount,
+            PARTIAL_ESTIMATE_NOTICE,
+            model,
+        )
         return self
 
     @step
     def should_not_mark_user_cost(self, amount: str):
         """Assert the Users table row shows the amount with no marker."""
-        expect(self.users_data_rows, "Users should list the one sender").to_have_count(
-            1, timeout=15000
+        self._should_list_one_user()
+        self._should_have_value_without_marker(
+            self.est_cost_cell(self.only_user_row), amount
         )
-        expect(
-            self.user_row, f"The user's cost should read '{amount}'"
-        ).to_contain_text(amount)
-        expect(
-            self.any_cost_marker(self.user_row),
-            "The user's complete cost should carry no marker",
-        ).to_have_count(0)
         return self
 
     @step
     def should_mark_user_cost_unknown(self, model: str):
-        """Assert the Users table row shows an unknown cost naming the model."""
-        expect(self.users_data_rows, "Users should list the one sender").to_have_count(
-            1, timeout=15000
+        """Assert the Users table row shows an unknown cost, not $0.00, naming the model."""
+        self._should_list_one_user()
+        self._should_have_value_and_marker(
+            self.est_cost_cell(self.only_user_row),
+            UNKNOWN_COST_VALUE,
+            COST_UNKNOWN_NOTICE,
+            model,
         )
-        expect(
-            self.cost_marker(self.user_row, COST_UNKNOWN_NOTICE, model),
-            f"The user's cost should carry the cost unknown marker naming {model}",
-        ).to_have_count(1)
         return self
 
     @step
     def should_mark_project_cost_partial(self, project: str, amount: str, model: str):
         """Assert the Repositories row of the project is the priced amount, marked as partial."""
-        row = self.project_row(project)
-        expect(row, f"The project's cost should read '{amount}'").to_contain_text(
-            amount, timeout=15000
+        self._should_have_value_and_marker(
+            self.est_cost_cell(self.project_row(project)),
+            amount,
+            PARTIAL_ESTIMATE_NOTICE,
+            model,
         )
-        expect(
-            self.cost_marker(row, PARTIAL_ESTIMATE_NOTICE, model),
-            f"The project's cost should carry the partial estimate marker naming {model}",
-        ).to_have_count(1)
         return self
 
     @step
     def should_not_mark_project_cost(self, project: str, amount: str):
         """Assert the Repositories row of the project is the amount, with no marker."""
-        row = self.project_row(project)
-        expect(row, f"The project's cost should read '{amount}'").to_contain_text(
-            amount, timeout=15000
+        self._should_have_value_without_marker(
+            self.est_cost_cell(self.project_row(project)), amount
         )
-        expect(
-            self.any_cost_marker(row),
-            "The project's complete cost should carry no marker",
-        ).to_have_count(0)
         return self
 
     @step
     def should_mark_project_cost_unknown(self, project: str, model: str):
-        """Assert the Repositories row of the project has an unknown cost naming the model."""
-        row = self.project_row(project)
-        expect(
-            self.cost_marker(row, COST_UNKNOWN_NOTICE, model),
-            f"The project's cost should carry the cost unknown marker naming {model}",
-        ).to_have_count(1, timeout=15000)
+        """Assert the Repositories row of the project has an unknown cost, not $0.00, naming the
+        model."""
+        self._should_have_value_and_marker(
+            self.est_cost_cell(self.project_row(project)),
+            UNKNOWN_COST_VALUE,
+            COST_UNKNOWN_NOTICE,
+            model,
+        )
         return self
