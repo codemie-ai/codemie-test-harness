@@ -35,6 +35,18 @@ from codemie_test_harness.tests.utils.hosted_application_utils import (
 )
 
 
+@pytest.fixture(autouse=True)
+def allow_local_network_access(context):
+    """Let the viewer frame load application content served from a private address.
+
+    Where the content domain resolves to a private address and the UI to a public one,
+    Chromium's Local Network Access check blocks the frame (ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS)
+    and the viewer reports the application as unavailable. A real browser asks the user;
+    granting the permission is the test's answer to that prompt.
+    """
+    context.grant_permissions(["local-network-access"])
+
+
 @pytest.fixture
 def ui_owner_apps(client):
     """Hosted-application helper of the signed-in UI user; deletes what the test created."""

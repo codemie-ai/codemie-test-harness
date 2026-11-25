@@ -14,7 +14,7 @@
 
 """UI tests for the project-count badge of the Cost Centers management list.
 
-For a platform admin the badge of a row is a link named 'Projects' to Projects management
+For a platform admin, maintainer or auditor the badge of a row is a link named 'Projects' to Projects management
 filtered to that cost center. Both screens are shown only with the `features:costCenters`
 flag on, which these tests expect on the target environment.
 
@@ -122,25 +122,30 @@ def test_cost_center_filter_set_by_badge_can_be_changed_and_cleared(
     projects_page.should_list_more_than(1)
 
 
-# Intended behaviour: an auditor-only user can open the Cost Centers list and, like an admin or
-# maintainer, sees the project-count badge as a link to Projects management filtered to the cost
-# center. Today the list cannot be read by an auditor-only user, so the test is expected to fail;
-# strict, so it turns red once access is fixed and this marker has to come off.
-@pytest.mark.xfail(
-    reason="Auditor-only user has no read access to cost centers", strict=True
-)
+# An auditor-only user can open the Cost Centers list and, like an admin or maintainer, sees the
+# project-count badge as a link to Projects management filtered to the cost center. The link
+# opens the page with the cost center selected in the filter, listing its projects, or the empty
+# state (and no error alert) for a cost center without projects.
 @pytest.mark.auditor
 @pytest.mark.project
 @pytest.mark.ui
 @pytest.mark.parametrize("acting_credentials", ["cli_auditor"], indirect=True)
-@pytest.mark.parametrize("cost_center_with_projects", [1], indirect=True)
+@pytest.mark.parametrize("cost_center_with_projects", PROJECT_COUNTS, indirect=True)
 def test_auditor_sees_project_count_as_link_to_filtered_projects(
     page, cost_center_with_projects
 ):
     # @case cost-center-project-count-redirect_TC_003
+    # @case auditor-cost-center-project-link_TC_001
     linked = cost_center_with_projects
     cost_centers_page = CostCentersManagementPage(page).navigate_to()
 
     cost_centers_page.should_show_project_count_link(
         linked.name, linked.project_count, linked.id
     )
+    cost_centers_page.click_project_count_badge(linked.name)
+
+    projects_page = ProjectManagementPage(page)
+    projects_page.should_be_open()
+    projects_page.should_have_cost_center_in_url(linked.id)
+    projects_page.should_show_selected_cost_centers([linked.name])
+    projects_page.should_list_cost_center_projects(linked.project_names)

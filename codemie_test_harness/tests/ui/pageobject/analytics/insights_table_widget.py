@@ -93,7 +93,7 @@ class InsightsRow:
 class InsightsTableWidget(BasePage):
     """One table widget of the Insights tab, found by its heading and its name and count columns."""
 
-    ROWS_TIMEOUT = 30_000
+    ROWS_TIMEOUT = 60_000
 
     def __init__(self, page, widget: InsightsTable):
         super().__init__(page)

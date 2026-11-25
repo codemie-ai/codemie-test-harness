@@ -15,7 +15,7 @@
 import re
 from typing import Optional
 
-from hamcrest import assert_that, is_not, empty, matches_regexp
+from hamcrest import assert_that, is_, is_not, empty, matches_regexp
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, expect
 from reportportal_client import step
 
@@ -61,10 +61,6 @@ class CreateEditDatasourcePage(BasePage):
     """Create Data Source page object with property-based element locators."""
 
     page_url = "/data-sources/create"
-
-    # How long to wait for the create form to auto-select a single eligible
-    # integration before concluding that none was selected.
-    INTEGRATION_AUTOSELECT_WAIT_MS = 5000
 
     # How long to wait for the one-time 'Guided Tour Available' dialog on the edit form.
     GUIDED_TOUR_WAIT_MS = 3000
@@ -610,31 +606,6 @@ class CreateEditDatasourcePage(BasePage):
         return self
 
     @step
-    def clear_integration_if_selected(self):
-        """Leave the integration empty on the create form.
-
-        On create, a single eligible integration is auto-selected once the
-        settings load, so the form may or may not hold a value. Wait a bounded
-        time for the clear icon: when it shows up, clear the selection and
-        confirm the placeholder. When it never does, re-read the form: if the
-        integration dropdown is rendered, it must show the placeholder (a late
-        auto-select fails here instead of letting the test go on with an
-        integration selected); if no dropdown is rendered at all (the form
-        offers only "Add User Integration"), there is nothing to clear.
-        """
-        try:
-            self.integration_clear_icon.wait_for(
-                state="visible", timeout=self.INTEGRATION_AUTOSELECT_WAIT_MS
-            )
-        except PlaywrightTimeoutError:
-            if self.integration_input.count() > 0:
-                self.should_see_integration_empty()
-            return self
-        self.clear_integration()
-        self.should_see_integration_empty()
-        return self
-
-    @step
     def click_create(self):
         self.create_button.click()
         return self
@@ -669,6 +640,26 @@ class CreateEditDatasourcePage(BasePage):
         for it to re-enable confirms the update has been applied before the next step.
         """
         self.refresh_integrations_button.click()
+        expect(self.refresh_integrations_button).to_be_enabled(timeout=30000)
+        return self
+
+    @step
+    def reload_integration_settings(self):
+        """Re-fetch the integration settings and wait until the form has applied them.
+
+        The create form picks its integration options, and any auto-selection,
+        from the settings list. Clicking Refresh sends
+        GET .../v1/settings/user/available; waiting for that response and for the
+        button to re-enable gives a definite "settings loaded" point, so a check
+        made afterwards cannot run before an auto-select would have fired.
+        """
+        with self.page.expect_response(
+            lambda response: response.request.method == "GET"
+            and re.search(r"/v1/settings/user/available/?(\?|$)", response.url),
+            timeout=30000,
+        ) as response_info:
+            self.refresh_integrations_button.click()
+        assert_that(response_info.value.ok, is_(True))
         expect(self.refresh_integrations_button).to_be_enabled(timeout=30000)
         return self
 
@@ -721,7 +712,7 @@ class CreateEditDatasourcePage(BasePage):
         summarization_method: Optional[str] = None,
         embeddings_model: Optional[str] = None,
         integration: Optional[str] = None,
-        clear_integration: bool = False,
+        expect_empty_integration: bool = False,
     ):
         """
         Creates a Git DataSource with required and optional fields.
@@ -729,15 +720,17 @@ class CreateEditDatasourcePage(BasePage):
         Args:
             integration: Alias to pick in the integration dropdown; the pick is
                 verified to stick before the form is submitted.
-            clear_integration: When True, make sure the integration is empty
-                (clears an auto-selected one). Cannot be combined with `integration`.
+            expect_empty_integration: When True, assert the form leaves the
+                integration empty: after the integration settings have loaded,
+                the dropdown still shows its placeholder (Git is never
+                auto-selected). Cannot be combined with `integration`.
 
         Raises:
-            ValueError: if both `integration` and `clear_integration` are given.
+            ValueError: if both `integration` and `expect_empty_integration` are given.
         """
-        if integration and clear_integration:
+        if integration and expect_empty_integration:
             raise ValueError(
-                "create_git_datasource: `integration` and `clear_integration=True` "
+                "create_git_datasource: `integration` and `expect_empty_integration=True` "
                 "contradict each other; pass only one of them"
             )
         name = self._base_create_datasource(
@@ -745,8 +738,9 @@ class CreateEditDatasourcePage(BasePage):
         )
         if integration:
             self.should_see_selected_integration(integration)
-        if clear_integration:
-            self.clear_integration_if_selected()
+        if expect_empty_integration:
+            self.reload_integration_settings()
+            self.should_see_integration_left_empty()
         if repo_link:
             self.fill_repo_link(repo_link)
         if branch:
@@ -918,6 +912,13 @@ class CreateEditDatasourcePage(BasePage):
         expect(self.files_filter_input).to_have_attribute(
             "placeholder", re.compile(rf"^{re.escape(line)}$", re.MULTILINE)
         )
+        return self
+
+    @step
+    def should_see_repo_link_placeholder(self, placeholder: str):
+        """Verify the Repository Link input is visible and shows the given placeholder."""
+        expect(self.repo_link_input).to_be_visible()
+        expect(self.repo_link_input).to_have_attribute("placeholder", placeholder)
         return self
 
     @step
@@ -1257,6 +1258,23 @@ class CreateEditDatasourcePage(BasePage):
         expect(self.integration_dropdown).to_have_text(
             re.compile(rf"^{re.escape(integration)}(\s*\((project|user)\))?$")
         )
+        return self
+
+    @step
+    def should_see_integration_left_empty(self):
+        """Assert the Git create form holds no integration once its settings have loaded.
+
+        Call after `reload_integration_settings()`. The integration section then
+        renders either the dropdown (eligible integrations exist) or only the
+        "Add User Integration" button (none exist). Wait for one of them; when the
+        dropdown is rendered it must show its placeholder, so an auto-selected
+        alias fails here. The button-only state is empty by definition.
+        """
+        expect(
+            self.integration_input.or_(self.add_integration_button).first
+        ).to_be_visible()
+        if self.integration_input.is_visible():
+            self.should_see_integration_empty()
         return self
 
     @step
