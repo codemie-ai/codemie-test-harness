@@ -21,6 +21,7 @@ import uuid
 
 import pytest
 from codemie_sdk import HeadroomStrategy
+from codemie_sdk.models.conversation import ConversationMetrics
 from hamcrest import assert_that, equal_to, greater_than, has_length
 
 from codemie_test_harness.tests.test_data.headroom_test_data import (
@@ -66,9 +67,9 @@ STRATEGIES = [
 # "grew past the baseline" checks pass without this test's own chat or run.
 
 
-def _saved_tokens(metrics: dict) -> int:
-    """Tokens Headroom saved in a conversation; the field is absent when it saved none."""
-    return metrics.get("headroom_tokens_saved") or 0
+def _saved_tokens(metrics: ConversationMetrics) -> int:
+    """Tokens Headroom saved in a conversation; the field is None when it saved none."""
+    return metrics.headroom_tokens_saved or 0
 
 
 # @case headroom-per-assistant-workflow-configuration_TC_009
@@ -116,7 +117,7 @@ def test_assistant_chat_with_headroom_reports_saved_tokens(
         f"Conversation metrics report no Headroom savings: {metrics}",
     )
     assert_that(
-        metrics.get("headroom_tokens_original") or 0,
+        metrics.headroom_tokens_original or 0,
         greater_than(saved),
         f"Headroom original tokens are not above the saved tokens: {metrics}",
     )

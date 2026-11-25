@@ -29,6 +29,7 @@ from codemie_sdk.models.assistant import (
     ReactionRequest,
     ToolPermissionsConfig,
 )
+from codemie_sdk.models.conversation import ConversationMetrics
 from codemie_test_harness.tests import (
     API_DOMAIN,
     LANGFUSE_TRACES_ENABLED,
@@ -597,17 +598,13 @@ class AssistantUtils(BaseUtils):
             ),
         )
 
-    def get_conversation_metrics(self, conversation_id: str) -> dict:
-        """Body of ``GET /v1/assistants/metrics/{conversation_id}`` (chat usage totals).
+    def get_conversation_metrics(self, conversation_id: str) -> ConversationMetrics:
+        """Token and cost totals of a conversation (``GET /v1/assistants/metrics/{id}``).
 
-        The SDK has no method for this route, so it goes through the raw request
-        handler, like ``get_assistant_by_slug_response``. The Headroom fields
-        (``headroom_tokens_saved``, ``headroom_tokens_original``) are present only
-        when Headroom saved tokens in the conversation.
+        The Headroom fields (``headroom_tokens_saved``, ``headroom_tokens_original``)
+        are set only when Headroom saved tokens in the conversation.
         """
-        response = self._raw_api().get(f"/v1/assistants/metrics/{conversation_id}")
-        response.raise_for_status()
-        return response.json()
+        return self.client.assistants.get_conversation_metrics(conversation_id)
 
     def update_assistant_disabled_context_tools(
         self, assistant_id: str, disabled_context_tools: list[str]
