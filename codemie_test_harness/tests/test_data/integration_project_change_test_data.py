@@ -20,6 +20,7 @@ from typing import List
 import pytest
 
 from codemie_sdk.models.integration import CredentialValues, IntegrationType
+from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 
 # TC_002 -- the PUT endpoint differs per scope (/v1/settings/project vs /v1/settings/user).
@@ -31,9 +32,44 @@ project_change_scope_test_data = [
 # Messages the backend returns for the rejected project changes.
 ACCESS_DENIED_DETAILS = "You do not have sufficient permissions to access the project"
 ALIAS_COLLISION_DETAILS = "There are more than one settings with the alias named"
+NOT_OWNER_ACCESS_DENIED_MESSAGE = "Access denied"
+NOT_OWNER_UPDATE_DETAILS = "to update this entity"
+
+# Fixture names of callers who are not the owner of a personal integration; resolved lazily so
+# each caller is only created for its own case.
+non_owner_caller_test_data = [
+    pytest.param("project_admin_non_owner_utils", id="project_admin"),
+    pytest.param("platform_admin_non_owner_utils", id="platform_admin"),
+]
 
 # Message returned by a successful PUT /v1/settings/{project|user}/{id}.
 INTEGRATION_UPDATED_MESSAGE = "Specified credentials updated"
+
+
+# Rejection of a one-row move of a row whose stored alias belongs to another subsystem.
+RESERVED_IDENTIFIERS_MESSAGE = "Reserved integration identifiers"
+MANAGED_ALIAS_DETAILS = (
+    "This alias is managed by an internal subsystem and cannot be transferred:"
+)
+
+# Stored aliases the backend treats as subsystem-managed: one per reserved prefix and the exact
+# reserved alias (which must stay literal). The user-scope list hides ``__internal__`` rows, so that
+# one is project-scope only.
+INTERNAL_MANAGED_ALIAS = f"__internal__{get_random_name()}"
+LITELLM_MANAGED_ALIAS = f"codemie:project:{get_random_name()}:category:premium_models"
+SCHEDULE_MANAGED_ALIAS = f"Schedule_{get_random_name()}"
+EXACT_RESERVED_ALIAS = "project_member_budget_tracking_enabled"
+
+project_managed_alias_test_data = [
+    pytest.param(INTERNAL_MANAGED_ALIAS, id="internal_prefix"),
+    pytest.param(LITELLM_MANAGED_ALIAS, id="litellm_project_prefix"),
+    pytest.param(SCHEDULE_MANAGED_ALIAS, id="schedule_prefix"),
+    pytest.param(EXACT_RESERVED_ALIAS, id="exact_reserved_alias"),
+]
+user_managed_alias_test_data = [
+    pytest.param(LITELLM_MANAGED_ALIAS, id="litellm_project_prefix"),
+    pytest.param(SCHEDULE_MANAGED_ALIAS, id="schedule_prefix"),
+]
 
 
 @dataclass

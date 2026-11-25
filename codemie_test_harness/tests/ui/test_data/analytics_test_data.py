@@ -31,6 +31,10 @@ class CLIAnalyticsSection(StrEnum):
     SESSIONS = "Sessions"
 
 
+# Em dash (U+2014): what a CLI Analytics Tool Success shows when there are no tool calls.
+TOOL_SUCCESS_DASH = "—"
+
+
 @dataclass(frozen=True)
 class InsightsTable:
     """A table widget of Analytics > Insights.
@@ -81,3 +85,6 @@ INSIGHTS_FOOTER_LABEL = "Total"
 # Runs the Insights activity fixture starts per assistant and per workflow: the counts differ, so
 # the tables list rows with different message counts, run counts and costs.
 INSIGHTS_SEEDED_RUN_COUNTS = (1, 2)
+# The Insights table tests open the page on this period: it holds the runs just seeded
+# and keeps the platform-wide tables fast to load.
+INSIGHTS_TIME_PERIOD = "last_hour"

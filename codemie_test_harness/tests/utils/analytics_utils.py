@@ -39,6 +39,7 @@ from codemie_sdk.models.analytics import (
     UsersListResponse,
 )
 
+from hamcrest import assert_that, equal_to
 from requests import HTTPError
 
 from codemie_test_harness.otlp_builder import build_hook_events
@@ -55,6 +56,7 @@ from codemie_test_harness.tests.test_data.assistants_requests_analytics_test_dat
 from .base_utils import BaseUtils, poll_until
 from .cli_analytics_api_utils import (
     CT_JSON,
+    CliAnalyticsApi,
     IngestClient,
     assert_accepted,
     assert_not_discarded,
@@ -114,6 +116,44 @@ class AnalyticsUtils(BaseUtils):
         """
         params = AnalyticsQueryParams(**kwargs) if kwargs else None
         return self.client.analytics.get_summaries(params)
+
+    def get_headroom_summary(self, **kwargs) -> SummariesResponse:
+        """Get Headroom (context compression) summary metrics.
+
+        Args:
+            **kwargs: Query parameters (time_period, start_date, end_date, users, projects);
+                ``users`` takes platform user ids, comma-separated
+
+        Returns:
+            SummariesResponse with the Headroom savings metrics
+        """
+        params = AnalyticsQueryParams(**kwargs) if kwargs else None
+        return self.client.analytics.get_headroom_summary(params)
+
+    def get_headroom_timeseries(self, **kwargs) -> TabularResponse:
+        """Get Headroom savings per time bucket.
+
+        Args:
+            **kwargs: Query parameters (time_period, start_date, end_date, users, projects)
+
+        Returns:
+            TabularResponse with one row per time bucket
+        """
+        params = AnalyticsQueryParams(**kwargs) if kwargs else None
+        return self.client.analytics.get_headroom_timeseries(params)
+
+    def get_headroom_by_strategy(self, **kwargs) -> TabularResponse:
+        """Get Headroom savings broken down by compression strategy.
+
+        Args:
+            **kwargs: Query parameters (time_period, start_date, end_date, users, projects,
+                page, per_page)
+
+        Returns:
+            TabularResponse with one row per strategy
+        """
+        params = PaginatedAnalyticsQueryParams(**kwargs) if kwargs else None
+        return self.client.analytics.get_headroom_by_strategy(params)
 
     def get_cli_summary(self, **kwargs) -> SummariesResponse:
         """Get CLI-specific summary metrics.
@@ -704,6 +744,78 @@ class AnalyticsUtils(BaseUtils):
             assert_accepted(response, "logs", CT_JSON)
         else:
             assert_nothing_discarded(response, "logs", discard)
+
+    def ingest_cli_otlp_traces(self, payload: dict, project: str | None = None) -> None:
+        """Send OTLP traces (JSON form) as the client's own user (see ingest_cli_otlp_logs)."""
+        body = json.dumps(payload).encode()
+
+        def _send():
+            response = IngestClient(self.client).post_signal(
+                "traces", body, CT_JSON, project=project
+            )
+            if response.status_code != 200:
+                return response, None
+            return response, parse_discard_response(response, "traces", CT_JSON)
+
+        response, discard = poll_until(
+            _send,
+            lambda reply: reply[1] is None
+            or reply[1].reason != "project_context_required",
+            timeout=CLI_PROJECT_CONTEXT_TIMEOUT,
+            interval=2,
+        )
+        if discard is None:
+            assert_accepted(response, "traces", CT_JSON)
+        else:
+            assert_nothing_discarded(response, "traces", discard)
+
+    def get_cli_session_turns(self, trace_id: str) -> int | None:
+        """Turns of a session from the raw session detail, or None while the session is
+        not rolled up or the detail has no `turns`. The SDK model does not carry the
+        field, so the raw JSON is read."""
+        response = CliAnalyticsApi(self.client).request(
+            "GET", f"/v1/analytics/cli-analytics/sessions/{trace_id}"
+        )
+        if response.status_code == 404:
+            return None
+        assert_that(
+            response.status_code,
+            equal_to(200),
+            f"session detail of {trace_id}: {response.text[:200]}",
+        )
+        return response.json().get("data", {}).get("turns")
+
+    def get_cli_session_unpriced_models(self, trace_id: str) -> list[str] | None:
+        """Models of a session the platform catalog has no price for
+        (``metadata.unpriced_models`` of the raw session detail), or None while the
+        session is not rolled up or the detail has no such field. The SDK model does not
+        carry the field, so the raw JSON is read."""
+        response = CliAnalyticsApi(self.client).request(
+            "GET", f"/v1/analytics/cli-analytics/sessions/{trace_id}"
+        )
+        if response.status_code == 404:
+            return None
+        assert_that(
+            response.status_code,
+            equal_to(200),
+            f"session detail of {trace_id}: {response.text[:200]}",
+        )
+        return response.json().get("metadata", {}).get("unpriced_models")
+
+    def wait_for_cli_session_turns(
+        self,
+        trace_id: str,
+        reached: Callable[[int], bool],
+        timeout: float = CLI_SESSION_ROLLUP_TIMEOUT,
+    ) -> int | None:
+        """Poll the turns of a session until `reached(turns)` holds. Returns the last
+        value whether or not it held; the caller asserts."""
+        return poll_until(
+            lambda: self.get_cli_session_turns(trace_id),
+            lambda turns: turns is not None and reached(turns),
+            timeout=timeout,
+            interval=5,
+        )
 
     def get_cli_analytics_cost(self, **filters) -> CliAnalyticsCostResponse:
         """Totals. filters: start_date, end_date, time_period, users, projects."""

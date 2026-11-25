@@ -213,7 +213,7 @@ class SkillsPage(BasePage):
     @property
     def publish_button(self) -> Locator:
         """Publish button in confirmation dialog"""
-        return self.page.get_by_role("button", name="Publish")
+        return self.page.get_by_role("button", name="Publish", exact=True)
 
     @property
     def cancel_button(self) -> Locator:
