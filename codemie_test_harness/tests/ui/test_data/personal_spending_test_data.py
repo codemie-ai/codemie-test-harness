@@ -126,13 +126,10 @@ PERSONAL_BUDGETS = (
     ),
 )
 
-# Platform spend comes from assistant chat, cheaper per call than the 2000-token /v1/messages
-# request of the other two categories: an answer to the 1000-word prompt is about 1300 output
-# tokens, roughly two thirds of it (an estimate, not measured). The /v1/messages bounds allow
-# SPEND_MAX_BATCHES (3) x SPEND_REQUESTS_PER_BATCH (5) = 15 calls to reach MIN_VISIBLE_SPEND
-# (0.006); two thirds of the cost per call needs about 23, so the platform batch bound is 5
-# batches, 25 assistant calls at most. The loop stops as soon as the spend reaches 0.006.
-PLATFORM_ASSISTANT_SPEND_MAX_BATCHES = 5
+# Spend per call, measured on the preview stand (2026-11-25, logged by the spend loop): platform
+# assistant chat 0.020, cli 0.017, premium_models 0.041. One batch of SPEND_REQUESTS_PER_BATCH (5)
+# calls reaches MIN_VISIBLE_SPEND (0.006) about 15 times over, so every category uses the shared
+# SPEND_MAX_BATCHES bound and the loop stops after its first batch.
 
 # A personal row shows the customer spend about 15 seconds after LiteLLM records it; the wait
 # re-reads both sides at this interval, with a timeout well above that delay.

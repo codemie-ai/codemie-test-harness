@@ -218,13 +218,15 @@ class PersonalSpendingPage(BasePage):
     def format_currency(cls, value: float | None) -> str:
         """Currency text: dollar sign, thousands separators, 2 decimals; a dash when unknown.
 
-        Rounded half up like the panel (src/utils/currency.ts formatCurrency): 0.0067 is $0.01
-        and an exact binary tie such as 0.125 is $0.13, where Python's own rounding (half to
-        even) would give $0.12.
+        The panel (src/utils/currency.ts formatCurrency) uses ``toLocaleString('en-US')`` with 2
+        fraction digits, which rounds half up on the shortest decimal form of the number, not on
+        its exact binary value as ``toFixed`` does: 1.005 is $1.01 and 0.0067 is $0.01. Python's
+        ``str`` gives the same shortest form, so the value is rounded from it.
         """
         if value is None:
             return ABSENT_VALUE_MARKER
-        return f"${Decimal(cls._round_half_up(value, 2)):,}"
+        cents = Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return f"${cents:,}"
 
     @staticmethod
     def format_available(spent: float | None, limit: float | None) -> str:
@@ -235,7 +237,7 @@ class PersonalSpendingPage(BasePage):
 
     @staticmethod
     def _round_half_up(value: float, places: int) -> str:
-        """Round like JS toFixed: half up on the exact binary value of the number.
+        """Round like JS toFixed (the panel's percentage): half up on the exact binary value.
 
         The number goes into ``Decimal`` as it is, not through its shortest decimal form, so a
         value such as 16.95 (stored a little below) is shown as 16.9 with one decimal.

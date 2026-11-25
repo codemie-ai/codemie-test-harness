@@ -392,7 +392,7 @@ def _spend_until_customer_reaches(
     customer spend.
     """
     spend = 0.0
-    for _ in range(max_batches):
+    for batch in range(1, max_batches + 1):
         for _ in range(SPEND_REQUESTS_PER_BATCH):
             send_request()
         spend = poll_until(
@@ -400,6 +400,11 @@ def _spend_until_customer_reaches(
             lambda value: value >= target_spend,
             timeout=SPEND_POLL_TIMEOUT,
             interval=SPEND_POLL_INTERVAL,
+        )
+        calls = batch * SPEND_REQUESTS_PER_BATCH
+        logger.info(
+            f"Spend of {customer_id} after {calls} calls: {spend} "
+            f"({spend / calls:.6f} per call, target {target_spend})"
         )
         if spend >= target_spend:
             break

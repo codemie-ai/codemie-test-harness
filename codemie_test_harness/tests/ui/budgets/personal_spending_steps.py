@@ -48,7 +48,6 @@ from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import 
     HIDDEN_COLUMN_ID,
     HIDDEN_COLUMN_IDS,
     PERSONAL_BUDGETS,
-    PLATFORM_ASSISTANT_SPEND_MAX_BATCHES,
     PERSONAL_ROW_POLL_INTERVAL,
     PERSONAL_ROW_WAIT_TIMEOUT,
     SPENT_CATEGORY,
@@ -386,7 +385,6 @@ def generate_personal_spend_on_every_category(
                 assistant,
                 lite_llm_budget_utils,
                 customer_id,
-                max_batches=PLATFORM_ASSISTANT_SPEND_MAX_BATCHES,
             )
         else:
             generate_personal_spend(
@@ -432,6 +430,7 @@ def _wait_for_row_with_customer_spend(
             lite_llm_budget_utils.get_customer_spend(spend.customer_id),
         ),
         lambda result: result[0] is not None
+        and result[0]["current_spending"] is not None
         and abs(result[0]["current_spending"] - result[1]) <= SPEND_PARITY_TOLERANCE,
         timeout=PERSONAL_ROW_WAIT_TIMEOUT,
         interval=PERSONAL_ROW_POLL_INTERVAL,
@@ -491,17 +490,23 @@ def assert_api_lists_only_the_personal_rows(
 ):
     """The API, read after the page opened, lists only the personal rows, with their settled spend.
 
+    The spend is compared within ``SPEND_PARITY_TOLERANCE``: the row cache refreshes about every
+    15 seconds, so a re-read may differ from the polled value by more than float noise.
+
     Compared regardless of order; the order of the table is checked against the API response.
     """
     assert_that(
-        sorted((row["project_name"], row["current_spending"]) for row in api_rows),
-        equal_to(
-            sorted(
-                (row["project_name"], row["current_spending"]) for row in personal_rows
-            )
-        ),
-        "The user's personal rows or their spend changed while the page was opened",
+        sorted(row["project_name"] for row in api_rows),
+        equal_to(sorted(row["project_name"] for row in personal_rows)),
+        "The API lists other rows than the user's personal ones",
     )
+    settled = {row["project_name"]: row["current_spending"] for row in personal_rows}
+    for row in api_rows:
+        assert_that(
+            row["current_spending"],
+            close_to(settled[row["project_name"]], SPEND_PARITY_TOLERANCE),
+            f"The spend of {row['project_name']} changed while the page was opened",
+        )
 
 
 # ---------------------------------------------------------------------------
