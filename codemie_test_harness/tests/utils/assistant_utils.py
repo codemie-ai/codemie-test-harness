@@ -200,8 +200,12 @@ class AssistantUtils(BaseUtils):
         return_stream_metadata=False,
         attributes=None,
         save_history=None,
+        add_request_uuid=True,
     ):
-        user_prompt = f"{user_prompt}; REQUEST_UUID: {uuid.uuid4()};"
+        # The unique suffix busts prompt caching. Pass add_request_uuid=False when the
+        # message must reach the model exactly as given (e.g. a message that is only JSON).
+        if add_request_uuid:
+            user_prompt = f"{user_prompt}; REQUEST_UUID: {uuid.uuid4()};"
         chat_request = AssistantChatRequest(
             content_raw=f"<p>{user_prompt}</p>",
             text=user_prompt,

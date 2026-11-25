@@ -14,12 +14,15 @@
 
 """Configs, messages and expected values for the Headroom (context compression) tests."""
 
+import json
 import re
 from dataclasses import dataclass
 
 import yaml
 from codemie_sdk import HeadroomConfig, HeadroomStrategy
+from codemie_sdk.models.assistant import ToolDetails, ToolKitDetails
 
+from codemie_test_harness.tests.enums.tools import PlatformTool, Toolkit
 from codemie_test_harness.tests.test_data.workflow_validation_messages import (
     INVALID_YAML_PROVIDED,
 )
@@ -48,9 +51,21 @@ CHAT_HEADROOM_AGGRESSIVE = HeadroomConfig(
     strategy=HeadroomStrategy.AGGRESSIVE,
 )
 
+
+def chat_headroom(strategy: HeadroomStrategy) -> HeadroomConfig:
+    """Compression on for user input and tool outputs with the given strategy."""
+    return CHAT_HEADROOM_AGGRESSIVE.model_copy(update={"strategy": strategy})
+
+
 # Top-level ``headroom:`` blocks of a workflow YAML (schema $defs.HeadroomOverride).
 WORKFLOW_HEADROOM_BALANCED = {"enabled": True, "strategy": "balanced"}
 WORKFLOW_HEADROOM_AGGRESSIVE = {"enabled": True, "strategy": "aggressive"}
+
+
+def workflow_headroom(strategy: HeadroomStrategy) -> dict:
+    """Top-level ``headroom:`` block that turns compression on with the given strategy."""
+    return {"enabled": True, "strategy": strategy.value}
+
 
 # ---------------------------------------------------------------------------------------------
 # Invalid values
@@ -155,8 +170,111 @@ def repetitive_log_prompt() -> str:
     return "Summarise this service log in one sentence:\n" + "\n".join(lines)
 
 
+# The lossless strategy compresses structured data only: it saves tokens when the user
+# message is nothing but a pretty-printed JSON array (developer confirmation), and saved
+# none on the repetitive log above.
+JSON_RECORD_COUNT = 60
+
+
+def json_array_prompt() -> str:
+    """A user message that is only a pretty-printed JSON array of 60 user records."""
+    records = [
+        {
+            "id": i,
+            "name": f"user-{i}",
+            "email": f"user{i}@example.com",
+            "status": "active" if i % 2 == 0 else "inactive",
+            "score": (i * 37) % 101,
+        }
+        for i in range(JSON_RECORD_COUNT)
+    ]
+    return json.dumps(records, indent=2)
+
+
 # Workflow node task that hands the long input to the assistant.
 WORKFLOW_TASK = "Summarise the user input in one sentence."
+
+# ---------------------------------------------------------------------------------------------
+# Compress user input / Compress tool outputs flags
+# ---------------------------------------------------------------------------------------------
+
+# Only a HumanMessage (compress_user_messages) or a ToolMessage (compress_tool_outputs)
+# may take compressed text; system prompts and assistant replies never do
+# (service/headroom/hook.py, _is_compressible). All four fields are always sent.
+HEADROOM_USER_INPUT_ONLY = HeadroomConfig(
+    enabled=True,
+    compress_user_messages=True,
+    compress_tool_outputs=False,
+    strategy=HeadroomStrategy.AGGRESSIVE,
+)
+HEADROOM_TOOL_OUTPUTS_ONLY = HeadroomConfig(
+    enabled=True,
+    compress_user_messages=False,
+    compress_tool_outputs=True,
+    strategy=HeadroomStrategy.AGGRESSIVE,
+)
+
+# get_assistants (Platform Tools) returns a large tool output - 20 assistants with their
+# details - from a short user message (developer confirmation; the code executor was
+# unsuitable: the stand's validator rejected the code the model passed).
+GET_ASSISTANTS_TOOLKITS = [
+    ToolKitDetails(
+        toolkit=Toolkit.PLATFORM_TOOLS.value,
+        tools=[ToolDetails(name=PlatformTool.GET_ASSISTANTS.value)],
+    )
+]
+LARGE_TOOL_OUTPUT_PROMPT = (
+    "Call get_assistants exactly once with scope 'visible_to_user', limit 20 and "
+    "offset 0. Do not call any other tool. Then tell me how many of the returned "
+    "assistants have a name starting with 'a', and list the first 5 names."
+)
+DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant."
+
+
+@dataclass(frozen=True)
+class CompressFlagsScenario:
+    """An assistant config and the chat that exercises one message kind."""
+
+    headroom: HeadroomConfig
+    system_prompt: str
+    toolkits: list
+    prompt: str
+    # Tools the chat must have run (assert_tool_triggered): none for a plain message.
+    expected_tools: tuple = ()
+
+
+# The flag of the long message kind is on: Headroom saves tokens.
+USER_INPUT_ON_LONG_USER_MESSAGE = CompressFlagsScenario(
+    headroom=HEADROOM_USER_INPUT_ONLY,
+    system_prompt=DEFAULT_SYSTEM_PROMPT,
+    toolkits=[],
+    prompt=repetitive_log_prompt(),
+)
+TOOL_OUTPUTS_ON_LARGE_TOOL_OUTPUT = CompressFlagsScenario(
+    headroom=HEADROOM_TOOL_OUTPUTS_ONLY,
+    system_prompt=DEFAULT_SYSTEM_PROMPT,
+    toolkits=GET_ASSISTANTS_TOOLKITS,
+    prompt=LARGE_TOOL_OUTPUT_PROMPT,
+    expected_tools=(PlatformTool.GET_ASSISTANTS,),
+)
+# The flag of the long message kind is off: nothing is compressed.
+USER_INPUT_OFF_LONG_USER_MESSAGE = CompressFlagsScenario(
+    headroom=HEADROOM_TOOL_OUTPUTS_ONLY,
+    system_prompt=DEFAULT_SYSTEM_PROMPT,
+    toolkits=[],
+    prompt=repetitive_log_prompt(),
+)
+TOOL_OUTPUTS_OFF_LARGE_TOOL_OUTPUT = CompressFlagsScenario(
+    headroom=HEADROOM_USER_INPUT_ONLY,
+    system_prompt=DEFAULT_SYSTEM_PROMPT,
+    toolkits=GET_ASSISTANTS_TOOLKITS,
+    prompt=LARGE_TOOL_OUTPUT_PROMPT,
+    expected_tools=(PlatformTool.GET_ASSISTANTS,),
+)
+
+# How long a chat with nothing to compress is watched for savings. The live probe saw a
+# compressed chat's metrics at once and none for an uncompressed one within 30 s.
+NO_SAVINGS_WINDOW = 30
 
 # Analytics ingestion of a compression event took under 20 s in the live probe.
 ANALYTICS_POLL_TIMEOUT = 90
@@ -197,6 +315,17 @@ TIMESERIES_COLUMN_IDS = [
     "tokens_compacted",
     "tokens_saved",
 ]
+
+
+def strategy_metric(response, strategy: HeadroomStrategy, column: str) -> int:
+    """One column of the by-strategy row of ``strategy``; 0 while the strategy has no row.
+
+    Rows are keyed by the strategy value (headroom_handler.py, _parse_terms_result).
+    """
+    for row in response.data.rows:
+        if row.get("strategy") == strategy.value:
+            return row.get(column) or 0
+    return 0
 
 
 def workflows_with_ids(workflows, ids) -> dict:

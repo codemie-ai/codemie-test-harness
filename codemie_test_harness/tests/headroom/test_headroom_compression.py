@@ -20,45 +20,90 @@ Needs a stand with the features:headroom flag on and HEADROOM_MODE sdk or sideca
 import uuid
 
 import pytest
-from hamcrest import assert_that, greater_than, has_length
+from codemie_sdk import HeadroomStrategy
+from hamcrest import assert_that, equal_to, greater_than, has_length
 
 from codemie_test_harness.tests.test_data.headroom_test_data import (
     ANALYTICS_POLL_TIMEOUT,
-    CHAT_HEADROOM_AGGRESSIVE,
     METRICS_POLL_TIMEOUT,
+    NO_SAVINGS_WINDOW,
     POLL_INTERVAL,
-    WORKFLOW_HEADROOM_AGGRESSIVE,
+    TOOL_OUTPUTS_OFF_LARGE_TOOL_OUTPUT,
+    TOOL_OUTPUTS_ON_LARGE_TOOL_OUTPUT,
+    USER_INPUT_OFF_LONG_USER_MESSAGE,
+    USER_INPUT_ON_LONG_USER_MESSAGE,
     WORKFLOW_TASK,
+    chat_headroom,
+    json_array_prompt,
     repetitive_log_prompt,
+    strategy_metric,
     summary_metric,
+    workflow_headroom,
 )
-from codemie_test_harness.tests.utils.base_utils import get_random_name, poll_until
+from codemie_test_harness.tests.utils.base_utils import (
+    assert_tool_triggered,
+    get_random_name,
+    poll_until,
+)
+
+# Each strategy is its own test: no ordering across strategies is asserted. Lossless
+# compresses pure JSON content only, so it gets a message that is only a JSON array and
+# is sent without the REQUEST_UUID suffix (with the suffix it saves nothing). The third
+# value says whether the harness appends that suffix.
+STRATEGIES = [
+    pytest.param(HeadroomStrategy.LOSSLESS, json_array_prompt(), False, id="lossless"),
+    pytest.param(
+        HeadroomStrategy.BALANCED, repetitive_log_prompt(), True, id="balanced"
+    ),
+    pytest.param(
+        HeadroomStrategy.AGGRESSIVE, repetitive_log_prompt(), True, id="aggressive"
+    ),
+]
+
+
+def _saved_tokens(metrics: dict) -> int:
+    """Tokens Headroom saved in a conversation; the field is absent when it saved none."""
+    return metrics.get("headroom_tokens_saved") or 0
 
 
 # @case headroom-per-assistant-workflow-configuration_TC_009
+@pytest.mark.parametrize("strategy, prompt, add_request_uuid", STRATEGIES)
 @pytest.mark.assistant
 @pytest.mark.not_for_parallel_run
 @pytest.mark.api
 def test_assistant_chat_with_headroom_reports_saved_tokens(
-    assistant_factory, assistant_utils, default_llm
+    strategy,
+    prompt,
+    add_request_uuid,
+    assistant_factory,
+    assistant_utils,
+    analytics_utils,
+    default_llm,
 ):
+    baseline = analytics_utils.get_headroom_by_strategy()
+    baseline_requests = strategy_metric(baseline, strategy, "request_count")
+    baseline_saved = strategy_metric(baseline, strategy, "tokens_saved")
+
     assistant = assistant_factory.create(
-        llm_model_type=default_llm.base_name, headroom_config=CHAT_HEADROOM_AGGRESSIVE
+        llm_model_type=default_llm.base_name, headroom_config=chat_headroom(strategy)
     )
     conversation_id = str(uuid.uuid4())
 
     answer = assistant_utils.ask_assistant(
-        assistant, repetitive_log_prompt(), conversation_id=conversation_id
+        assistant,
+        prompt,
+        conversation_id=conversation_id,
+        add_request_uuid=add_request_uuid,
     )
     assert_that(answer, has_length(greater_than(0)), "Assistant gave no answer")
 
     metrics = poll_until(
         lambda: assistant_utils.get_conversation_metrics(conversation_id),
-        lambda body: (body.get("headroom_tokens_saved") or 0) > 0,
+        lambda body: _saved_tokens(body) > 0,
         timeout=METRICS_POLL_TIMEOUT,
         interval=POLL_INTERVAL,
     )
-    saved = metrics.get("headroom_tokens_saved") or 0
+    saved = _saved_tokens(metrics)
     assert_that(
         saved,
         greater_than(0),
@@ -70,24 +115,58 @@ def test_assistant_chat_with_headroom_reports_saved_tokens(
         f"Headroom original tokens are not above the saved tokens: {metrics}",
     )
 
+    by_strategy = poll_until(
+        analytics_utils.get_headroom_by_strategy,
+        lambda response: strategy_metric(response, strategy, "request_count")
+        > baseline_requests
+        and strategy_metric(response, strategy, "tokens_saved") > baseline_saved,
+        timeout=ANALYTICS_POLL_TIMEOUT,
+        interval=POLL_INTERVAL,
+    )
+    assert_that(
+        strategy_metric(by_strategy, strategy, "request_count"),
+        greater_than(baseline_requests),
+        f"Savings by strategy did not count the chat under {strategy.value}",
+    )
+    assert_that(
+        strategy_metric(by_strategy, strategy, "tokens_saved"),
+        greater_than(baseline_saved),
+        f"Savings by strategy did not add the chat's saved tokens to {strategy.value}",
+    )
+
 
 # @case headroom-per-assistant-workflow-configuration_TC_010
+@pytest.mark.parametrize("strategy, prompt, add_request_uuid", STRATEGIES)
 @pytest.mark.workflow
 @pytest.mark.not_for_parallel_run
 @pytest.mark.api
 def test_workflow_run_with_headroom_block_adds_to_headroom_savings(
-    workflow_with_virtual_assistant, workflow_utils, analytics_utils
+    strategy,
+    prompt,
+    add_request_uuid,
+    workflow_with_virtual_assistant,
+    workflow_utils,
+    analytics_utils,
 ):
     baseline = analytics_utils.get_headroom_summary()
     baseline_requests = summary_metric(baseline, "request_count")
     baseline_saved = summary_metric(baseline, "tokens_saved")
+    baseline_by_strategy = analytics_utils.get_headroom_by_strategy()
+    baseline_strategy_requests = strategy_metric(
+        baseline_by_strategy, strategy, "request_count"
+    )
+    baseline_strategy_saved = strategy_metric(
+        baseline_by_strategy, strategy, "tokens_saved"
+    )
 
     state_name = get_random_name()
     workflow = workflow_with_virtual_assistant(
-        state_name, task=WORKFLOW_TASK, headroom=WORKFLOW_HEADROOM_AGGRESSIVE
+        state_name, task=WORKFLOW_TASK, headroom=workflow_headroom(strategy)
     )
+    # modify_prompt=False leaves a JSON array as given; the run puts it in its own
+    # HumanMessage, apart from the node task (workflow.py, LangGraphAgent._get_inputs).
     output = workflow_utils.execute_workflow(
-        workflow.id, state_name, user_input=repetitive_log_prompt()
+        workflow.id, state_name, user_input=prompt, modify_prompt=add_request_uuid
     )
     assert_that(output, has_length(greater_than(0)), "Workflow run gave no output")
 
@@ -107,4 +186,121 @@ def test_workflow_run_with_headroom_block_adds_to_headroom_savings(
         summary_metric(summary, "tokens_saved"),
         greater_than(baseline_saved),
         "Headroom saved tokens did not grow after the workflow run",
+    )
+
+    by_strategy = poll_until(
+        analytics_utils.get_headroom_by_strategy,
+        lambda response: strategy_metric(response, strategy, "request_count")
+        > baseline_strategy_requests
+        and strategy_metric(response, strategy, "tokens_saved")
+        > baseline_strategy_saved,
+        timeout=ANALYTICS_POLL_TIMEOUT,
+        interval=POLL_INTERVAL,
+    )
+    assert_that(
+        strategy_metric(by_strategy, strategy, "request_count"),
+        greater_than(baseline_strategy_requests),
+        f"Savings by strategy did not count the workflow run under {strategy.value}",
+    )
+    assert_that(
+        strategy_metric(by_strategy, strategy, "tokens_saved"),
+        greater_than(baseline_strategy_saved),
+        f"Savings by strategy did not add the run's saved tokens to {strategy.value}",
+    )
+
+
+# @case headroom-per-assistant-workflow-configuration_TC_018
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        pytest.param(USER_INPUT_ON_LONG_USER_MESSAGE, id="user_input_on-long_message"),
+        pytest.param(
+            TOOL_OUTPUTS_ON_LARGE_TOOL_OUTPUT, id="tool_outputs_on-large_tool_output"
+        ),
+    ],
+)
+@pytest.mark.assistant
+@pytest.mark.not_for_parallel_run
+@pytest.mark.api
+def test_headroom_compresses_the_message_kind_its_flag_turns_on(
+    scenario, assistant_factory, assistant_utils, default_llm
+):
+    assistant = assistant_factory.create(
+        llm_model_type=default_llm.base_name,
+        system_prompt=scenario.system_prompt,
+        toolkits=scenario.toolkits,
+        headroom_config=scenario.headroom,
+    )
+    conversation_id = str(uuid.uuid4())
+
+    answer, triggered_tools = assistant_utils.ask_assistant(
+        assistant,
+        scenario.prompt,
+        conversation_id=conversation_id,
+        minimal_response=False,
+    )
+    assert_that(answer, has_length(greater_than(0)), "Assistant gave no answer")
+    # The tool-output cases mean something only when the tool actually ran.
+    assert_tool_triggered(scenario.expected_tools, triggered_tools)
+
+    metrics = poll_until(
+        lambda: assistant_utils.get_conversation_metrics(conversation_id),
+        lambda body: _saved_tokens(body) > 0,
+        timeout=METRICS_POLL_TIMEOUT,
+        interval=POLL_INTERVAL,
+    )
+    assert_that(
+        _saved_tokens(metrics),
+        greater_than(0),
+        f"Headroom saved nothing on the message kind its flag turns on: {metrics}",
+    )
+
+
+# @case headroom-per-assistant-workflow-configuration_TC_018
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        pytest.param(
+            USER_INPUT_OFF_LONG_USER_MESSAGE, id="user_input_off-long_message"
+        ),
+        pytest.param(
+            TOOL_OUTPUTS_OFF_LARGE_TOOL_OUTPUT, id="tool_outputs_off-large_tool_output"
+        ),
+    ],
+)
+@pytest.mark.assistant
+@pytest.mark.not_for_parallel_run
+@pytest.mark.api
+def test_headroom_leaves_the_message_kind_its_flag_turns_off(
+    scenario, assistant_factory, assistant_utils, default_llm
+):
+    assistant = assistant_factory.create(
+        llm_model_type=default_llm.base_name,
+        system_prompt=scenario.system_prompt,
+        toolkits=scenario.toolkits,
+        headroom_config=scenario.headroom,
+    )
+    conversation_id = str(uuid.uuid4())
+
+    answer, triggered_tools = assistant_utils.ask_assistant(
+        assistant,
+        scenario.prompt,
+        conversation_id=conversation_id,
+        minimal_response=False,
+    )
+    assert_that(answer, has_length(greater_than(0)), "Assistant gave no answer")
+    # The tool-output cases mean something only when the tool actually ran.
+    assert_tool_triggered(scenario.expected_tools, triggered_tools)
+
+    # Watch the window a compressed chat would have reported savings in.
+    metrics = poll_until(
+        lambda: assistant_utils.get_conversation_metrics(conversation_id),
+        lambda body: _saved_tokens(body) > 0,
+        timeout=NO_SAVINGS_WINDOW,
+        interval=POLL_INTERVAL,
+    )
+    assert_that(
+        _saved_tokens(metrics),
+        equal_to(0),
+        f"Headroom saved tokens on a message kind its flag turns off: {metrics}",
     )

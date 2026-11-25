@@ -24,10 +24,12 @@ from codemie_test_harness.tests.ui.pageobject.assistants.create_edit_assistant_p
     CreateEditAssistantPage,
 )
 from codemie_test_harness.tests.ui.test_data.assistant_test_data import (
+    AssistantPopUpMessages,
     get_minimal_assistant_data,
 )
 from codemie_test_harness.tests.ui.test_data.headroom_test_data import (
     DEFAULT_STRATEGY,
+    FORM_HEADROOM_EDITED,
     FORM_HEADROOM_SAVED,
     STRATEGY_AGGRESSIVE,
 )
@@ -83,9 +85,33 @@ def test_assistant_form_configures_headroom_for_one_assistant(
 
     assistants_page.search_assistants(test_data.name)
     edit_page = assistants_page.click_assistant_edit(test_data.name)
-    edit_page.open_headroom_settings().should_have_settings(
+    headroom = edit_page.open_headroom_settings()
+    headroom.should_have_settings(
         enabled=True,
         compress_user_input=False,
         compress_tool_outputs=True,
+        strategy=STRATEGY_AGGRESSIVE,
+    )
+
+    # Flip both checkboxes: 'Compress tool outputs' off, 'Compress user input' on.
+    headroom.set_compress_tool_outputs(False)
+    headroom.set_compress_user_input(True)
+    edit_page.click_save()
+    assistants_page.should_see_updating_popup(
+        AssistantPopUpMessages.ASSISTANT_UPDATED_SUCCESS.value
+    )
+    assert_that(
+        assistant_utils.get_assistant_by_id(saved.id).headroom_config,
+        equal_to(FORM_HEADROOM_EDITED),
+        "Assistant edited in the form does not store the changed Headroom checkboxes",
+    )
+
+    assistants_page.navigate_to()
+    assistants_page.search_assistants(test_data.name)
+    edit_page = assistants_page.click_assistant_edit(test_data.name)
+    edit_page.open_headroom_settings().should_have_settings(
+        enabled=True,
+        compress_user_input=True,
+        compress_tool_outputs=False,
         strategy=STRATEGY_AGGRESSIVE,
     )

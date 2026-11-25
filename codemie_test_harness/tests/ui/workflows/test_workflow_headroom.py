@@ -49,6 +49,11 @@ def test_workflow_editor_saves_headroom_at_workflow_scope(
 
     headroom.set_enabled(True)
     headroom.select_strategy(STRATEGY_LOSSLESS)
+    # A workflow control writes its field only once touched (HeadroomPanel.tsx): toggle
+    # 'Compress user input' off and on so it is stored as true, and turn tool outputs off.
+    headroom.set_compress_user_input(False)
+    headroom.set_compress_user_input(True)
+    headroom.set_compress_tool_outputs(False)
     config_panel.save_configuration()
     edit_page.save_workflow()
 
@@ -64,9 +69,27 @@ def test_workflow_editor_saves_headroom_at_workflow_scope(
         "Workflow saved from the editor does not store the Lossless strategy",
     )
     assert_that(
+        stored.compress_user_messages,
+        is_(True),
+        "Workflow saved from the editor does not store 'Compress user input' on",
+    )
+    assert_that(
+        stored.compress_tool_outputs,
+        is_(False),
+        "Workflow saved from the editor does not store 'Compress tool outputs' off",
+    )
+    assert_that(
         workflow_utils.get_workflow(other.id).headroom_config,
         none(),
         "Saving one workflow's Headroom settings changed another workflow",
+    )
+
+    edit_page.navigate_to(target.id)
+    edit_page.open_workflow_config_panel().open_headroom_settings().should_have_settings(
+        enabled=True,
+        compress_user_input=True,
+        compress_tool_outputs=False,
+        strategy=STRATEGY_LOSSLESS,
     )
 
 

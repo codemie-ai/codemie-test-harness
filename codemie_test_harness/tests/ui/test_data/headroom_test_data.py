@@ -33,6 +33,11 @@ FORM_HEADROOM_SAVED = HeadroomConfig(
     strategy=HeadroomStrategy.AGGRESSIVE,
 )
 
+# The same assistant edited to the opposite flags: user input on, tool outputs off.
+FORM_HEADROOM_EDITED = FORM_HEADROOM_SAVED.model_copy(
+    update={"compress_user_messages": True, "compress_tool_outputs": False}
+)
+
 # Analytics Insights tab: Headroom widgets and summary tiles (backend headroom_handler.py
 # labels; the UI shows the tile labels in upper case).
 HEADROOM_WIDGET_TITLES = [
