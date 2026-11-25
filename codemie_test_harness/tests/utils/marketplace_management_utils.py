@@ -34,6 +34,8 @@ from codemie_sdk.models.assistant import (
 )
 from codemie_sdk.models.marketplace_management import (
     MarketplaceAssistantsResponse,
+    MarketplaceAuditStatus,
+    MarketplaceCleanupResponse,
     MarketplaceForcePublishResponse,
     MarketplaceOverview,
     MarketplacePendingResponse,
@@ -55,6 +57,12 @@ from codemie_test_harness.tests.utils.http_utils import RequestHandler
 
 _BASE_PATH = "/v1/marketplace-management/entities"
 PAGE_SIZE = 100
+CLEANUP_PAGE_SIZE = 200
+# A full audit takes minutes and has no server-side timeout; the admin UI polls it for up to 30 minutes.
+AUDIT_TIMEOUT = 1800.0
+AUDIT_POLL_INTERVAL = 5.0
+AUDIT_START_ATTEMPTS = 3
+HTTP_CONFLICT = 409
 CONFIG_PATH = "/v1/marketplace-management/entities/assistants/config"
 CORE_GATES_COMPONENT_ID = "marketplaceCoreGates"
 # Fields of the gates section of the audit config. The PUT body is not partial: it
@@ -202,6 +210,59 @@ class MarketplaceManagementUtils(BaseUtils):
     def list_all_marketplace_assistants(self, status: Optional[str] = None) -> list:
         return self._collect_pages(
             lambda page: self.get_marketplace_assistants(status=status, page=page)
+        )
+
+    # ---- cleanup list and audit run ----------------------------------------
+
+    def get_cleanup(self, **filters) -> MarketplaceCleanupResponse:
+        """One page of the Cleanup list (the SDK defaults apply to what ``filters`` leaves out)."""
+        return self._service.list_cleanup(**filters)
+
+    def list_all_cleanup(self, **filters) -> list:
+        """Every row of the Cleanup list over all pages; ``total`` counts the whole filtered set."""
+        items: list = []
+        page = 1
+        while True:
+            result = self._service.list_cleanup(
+                page=page, page_size=CLEANUP_PAGE_SIZE, **filters
+            )
+            items.extend(result.items)
+            if page * CLEANUP_PAGE_SIZE >= result.total:
+                return items
+            page += 1
+
+    def wait_for_audit(self, timeout: float = AUDIT_TIMEOUT) -> MarketplaceAuditStatus:
+        """Audit status, re-read until no run is active or the timeout ends; the last read is returned."""
+        return poll_until(
+            self._service.get_audit_status,
+            lambda status: not status.is_running,
+            timeout=timeout,
+            interval=AUDIT_POLL_INTERVAL,
+        )
+
+    def run_audit(self, timeout: float = AUDIT_TIMEOUT) -> MarketplaceAuditStatus:
+        """Run an audit that starts after this call and return the status it ended with.
+
+        One run is active per deployment, so a start answered with 409 means another run is
+        in flight. That run may have begun before the caller's data existed, so it is waited
+        out and a fresh run is started instead of being reused. The status is returned
+        without judging it: a caller asserts ``is_running`` and ``error``.
+        """
+        for _ in range(AUDIT_START_ATTEMPTS):
+            try:
+                self._service.start_audit()
+            except requests.HTTPError as error:
+                if (
+                    error.response is None
+                    or error.response.status_code != HTTP_CONFLICT
+                ):
+                    raise
+                self.wait_for_audit(timeout)
+                continue
+            return self.wait_for_audit(timeout)
+        raise RuntimeError(
+            f"an audit could not be started in {AUDIT_START_ATTEMPTS} attempts: "
+            "another run was active every time"
         )
 
     # ---- decisions ---------------------------------------------------------
