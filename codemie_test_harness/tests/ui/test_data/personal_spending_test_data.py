@@ -16,6 +16,17 @@
 
 from dataclasses import dataclass
 
+from codemie_test_harness.tests.test_data.budget_test_data import (
+    CLI_CLIENT_HEADER,
+    DEFAULT_CLI_BUDGET_ID,
+    DEFAULT_PREMIUM_BUDGET_ID,
+    PREMIUM_MODEL,
+)
+from codemie_test_harness.tests.test_data.budget_usage_project_rows_test_data import (
+    CLI_ROW_SUFFIX,
+    PREMIUM_ROW_SUFFIX,
+)
+
 # The panel draws a table only for two or more rows, so the project budget group spans two
 # categories: percentages of the group total, as the budget group distribution endpoint takes them.
 TWO_CATEGORY_DISTRIBUTION = {"platform": 50.0, "cli": 50.0}
@@ -70,3 +81,57 @@ LIMIT_LABEL_ROWS = {
 # category that receives the spend gets a one dollar budget instead. The
 # requests carry the CLI client header, which routes them to the cli key once the project has one.
 SPENT_CATEGORY = "cli"
+
+
+@dataclass(frozen=True)
+class PersonalBudget:
+    """One personal default budget of a user with no project, and how a request lands on it.
+
+    The row is labelled with the user's e-mail plus ``row_suffix``; the spend goes to the LiteLLM
+    customer named by the e-mail plus ``customer_suffix``. ``client_header`` None means the spend
+    comes from chat with the user's personal assistant (POST /v1/assistants/{id}/model), the way
+    tests/budgets/test_personal_budget_spending.py spends on the platform budget; otherwise it is
+    a /v1/messages request with that header and no project header. ``model`` None means the
+    stand's default model; a premium model goes to the premium budget.
+    """
+
+    category: str
+    row_suffix: str
+    customer_suffix: str
+    client_header: dict | None
+    model: str | None
+
+
+PERSONAL_BUDGETS = (
+    PersonalBudget(
+        category="platform",
+        row_suffix="",
+        customer_suffix="",
+        client_header=None,
+        model=None,
+    ),
+    PersonalBudget(
+        category="cli",
+        row_suffix=CLI_ROW_SUFFIX,
+        customer_suffix=f"_{DEFAULT_CLI_BUDGET_ID}",
+        client_header=CLI_CLIENT_HEADER,
+        model=None,
+    ),
+    PersonalBudget(
+        category="premium_models",
+        row_suffix=PREMIUM_ROW_SUFFIX,
+        customer_suffix=f"_{DEFAULT_PREMIUM_BUDGET_ID}",
+        client_header=CLI_CLIENT_HEADER,
+        model=PREMIUM_MODEL,
+    ),
+)
+
+# Spend per call, measured on the preview stand (2026-11-25, logged by the spend loop): platform
+# assistant chat 0.020, cli 0.017, premium_models 0.041. One batch of SPEND_REQUESTS_PER_BATCH (5)
+# calls reaches MIN_VISIBLE_SPEND (0.006) about 15 times over, so every category uses the shared
+# SPEND_MAX_BATCHES bound and the loop stops after its first batch.
+
+# A personal row shows the customer spend about 15 seconds after LiteLLM records it; the wait
+# re-reads both sides at this interval, with a timeout well above that delay.
+PERSONAL_ROW_WAIT_TIMEOUT = 240.0
+PERSONAL_ROW_POLL_INTERVAL = 15.0

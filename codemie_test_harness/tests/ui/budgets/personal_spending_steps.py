@@ -14,12 +14,14 @@
 
 """Scenario steps of the 'Your personal spending' UI tests.
 
-The tests in ``test_personal_spending_project_rows.py`` read as lists of calls to the page object
+The tests in ``test_personal_spending_project_rows.py`` and ``test_personal_spending_categories.py``
+read as lists of calls to the page object
 and to the functions here. These read and check the same user's API response and set up the
 spend; what the page shows is checked by ``PersonalSpendingPage``.
 """
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from hamcrest import (
     assert_that,
@@ -37,6 +39,7 @@ from codemie_test_harness.tests.test_data.budget_usage_project_rows_test_data im
     MIN_VISIBLE_SPEND,
     PERCENT_TOLERANCE,
     SCALED_PROJECT_LIMIT,
+    SPEND_PARITY_TOLERANCE,
 )
 from codemie_test_harness.tests.ui.pageobject.budgets.personal_spending_page import (
     PersonalSpendingPage,
@@ -44,6 +47,9 @@ from codemie_test_harness.tests.ui.pageobject.budgets.personal_spending_page imp
 from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import (
     HIDDEN_COLUMN_ID,
     HIDDEN_COLUMN_IDS,
+    PERSONAL_BUDGETS,
+    PERSONAL_ROW_POLL_INTERVAL,
+    PERSONAL_ROW_WAIT_TIMEOUT,
     SPENT_CATEGORY,
     LimitLabelRow,
 )
@@ -51,9 +57,14 @@ from codemie_test_harness.tests.utils.budget_usage_utils import (
     BudgetUsageUtils,
     expected_total,
     generate_member_spend,
+    generate_personal_assistant_spend,
+    generate_personal_spend,
     row_names,
+    settle_customer_spend,
     wait_for_settled_key_spend,
 )
+from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
+from codemie_test_harness.tests.utils.base_utils import poll_until
 from codemie_test_harness.tests.utils.client_factory import get_client
 from codemie_test_harness.tests.utils.proxy_utils import ProxyUtils
 
@@ -336,6 +347,166 @@ def assert_other_member_spend_moved_only_the_project_percentage(
         greater_than(row_before["total"]),
         "The project percentage must rise with another member's spend",
     )
+
+
+# ---------------------------------------------------------------------------
+# A user with no project: own spend on every personal default budget
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PersonalSpend:
+    """The user's settled LiteLLM customer spend on one personal budget, and the row showing it."""
+
+    category: str
+    row_name: str
+    customer_id: str
+    spend: float
+
+
+def generate_personal_spend_on_every_category(
+    user, assistant, default_llm, lite_llm_budget_utils
+) -> list[PersonalSpend]:
+    """The user spends on its personal platform, cli and premium budgets.
+
+    Platform: chat with ``assistant``, the user's assistant in its personal project. Cli and
+    premium: /v1/messages with the CLI client header and no project header. Every category is
+    spent on first and each customer is settled afterwards, so the returned spend of each
+    category is a value LiteLLM no longer changes.
+    """
+    proxy_utils = ProxyUtils(user.client)
+    assistant_utils = AssistantUtils(user.client)
+    spends = []
+    for budget in PERSONAL_BUDGETS:
+        customer_id = f"{user.email}{budget.customer_suffix}"
+        if budget.client_header is None:
+            generate_personal_assistant_spend(
+                assistant_utils,
+                assistant,
+                lite_llm_budget_utils,
+                customer_id,
+            )
+        else:
+            generate_personal_spend(
+                proxy_utils,
+                lite_llm_budget_utils,
+                budget.model or default_llm.base_name,
+                customer_id,
+                budget.client_header,
+            )
+        spends.append(
+            PersonalSpend(
+                category=budget.category,
+                row_name=f"{user.email}{budget.row_suffix}",
+                customer_id=customer_id,
+                spend=0.0,
+            )
+        )
+    for spend in spends:
+        spend.spend = settle_customer_spend(lite_llm_budget_utils, spend.customer_id)
+    return spends
+
+
+def assert_personal_spend_is_recorded_on_every_category(spends: list[PersonalSpend]):
+    for spend in spends:
+        assert_that(
+            spend.spend,
+            greater_than_or_equal_to(MIN_VISIBLE_SPEND),
+            f"Precondition failed: the stand did not record enough {spend.category} spend "
+            "for the user",
+        )
+
+
+def _wait_for_row_with_customer_spend(
+    usage: BudgetUsageUtils, spend: PersonalSpend, lite_llm_budget_utils
+) -> tuple[dict | None, float]:
+    """Poll until the row shows the customer spend read right after it; both re-read each time.
+
+    Returns ``(row, customer_spend)`` of the last attempt, matched or not.
+    """
+    return poll_until(
+        lambda: (
+            usage.get_row(spend.row_name),
+            lite_llm_budget_utils.get_customer_spend(spend.customer_id),
+        ),
+        lambda result: result[0] is not None
+        and result[0]["current_spending"] is not None
+        and abs(result[0]["current_spending"] - result[1]) <= SPEND_PARITY_TOLERANCE,
+        timeout=PERSONAL_ROW_WAIT_TIMEOUT,
+        interval=PERSONAL_ROW_POLL_INTERVAL,
+    )
+
+
+def wait_for_personal_rows_with_own_spend(
+    client, spends: list[PersonalSpend], lite_llm_budget_utils
+) -> list[dict]:
+    """The row of every personal budget, once the API shows the user's customer spend on it."""
+    usage = BudgetUsageUtils(client)
+    rows = []
+    for spend in spends:
+        row, customer_spend = _wait_for_row_with_customer_spend(
+            usage, spend, lite_llm_budget_utils
+        )
+        assert_that(
+            row, not_none(), f"Precondition failed: {spend.row_name} is not listed"
+        )
+        assert_that(
+            row["current_spending"],
+            close_to(customer_spend, SPEND_PARITY_TOLERANCE),
+            f"Precondition failed: the API does not show the user's settled {spend.category} "
+            "spend",
+        )
+        spend.spend = customer_spend
+        rows.append(row)
+    return rows
+
+
+def _has_more_than_two_decimals(value: float) -> bool:
+    exact = Decimal(str(value))
+    return exact != exact.quantize(Decimal("0.01"))
+
+
+def find_personal_platform_row(rows: list[dict], email: str) -> dict:
+    """The personal platform row: its label is the user's e-mail alone."""
+    platform_row = next((row for row in rows if row["project_name"] == email), None)
+    assert_that(
+        platform_row, not_none(), f"The personal platform row {email} is not listed"
+    )
+    return platform_row
+
+
+def assert_platform_spend_has_more_than_two_decimals(platform_row: dict):
+    """The rounding to cents is only exercised by a platform spend that is not a whole cent."""
+    assert_that(
+        _has_more_than_two_decimals(platform_row["current_spending"]),
+        equal_to(True),
+        "Precondition failed: the user's platform spend "
+        f"{platform_row['current_spending']} has no more than 2 decimals",
+    )
+
+
+def assert_api_lists_only_the_personal_rows(
+    api_rows: list[dict], personal_rows: list[dict]
+):
+    """The API, read after the page opened, lists only the personal rows, with their settled spend.
+
+    The spend is compared within ``SPEND_PARITY_TOLERANCE``: the row cache refreshes about every
+    15 seconds, so a re-read may differ from the polled value by more than float noise.
+
+    Compared regardless of order; the order of the table is checked against the API response.
+    """
+    assert_that(
+        sorted(row["project_name"] for row in api_rows),
+        equal_to(sorted(row["project_name"] for row in personal_rows)),
+        "The API lists other rows than the user's personal ones",
+    )
+    settled = {row["project_name"]: row["current_spending"] for row in personal_rows}
+    for row in api_rows:
+        assert_that(
+            row["current_spending"],
+            close_to(settled[row["project_name"]], SPEND_PARITY_TOLERANCE),
+            f"The spend of {row['project_name']} changed while the page was opened",
+        )
 
 
 # ---------------------------------------------------------------------------
