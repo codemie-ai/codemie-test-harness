@@ -104,6 +104,21 @@ class IntegrationUtils(BaseUtils):
             None,
         )
 
+    def _list_all(
+        self, setting_type: IntegrationType, per_page: int = 200
+    ) -> list[Integration]:
+        """Every integration of this scope visible to the caller, read page by page."""
+        rows: list[Integration] = []
+        page = 0
+        while True:
+            chunk = self.client.integrations.list(
+                setting_type, page=page, per_page=per_page
+            )
+            rows.extend(chunk)
+            if len(chunk) < per_page:
+                return rows
+            page += 1
+
     def get_integration_by_project_and_alias(
         self, project_name: str, alias: str, setting_type: IntegrationType
     ) -> Optional[Integration]:
@@ -115,7 +130,7 @@ class IntegrationUtils(BaseUtils):
         return next(
             (
                 row
-                for row in self.client.integrations.list(setting_type, per_page=200)
+                for row in self._list_all(setting_type)
                 if row.project_name == project_name and row.alias == alias
             ),
             None,
@@ -127,7 +142,7 @@ class IntegrationUtils(BaseUtils):
         """Ids of every listed integration of this scope that belongs to the project."""
         return [
             row.id
-            for row in self.client.integrations.list(setting_type, per_page=200)
+            for row in self._list_all(setting_type)
             if row.project_name == project_name
         ]
 
