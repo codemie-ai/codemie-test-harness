@@ -167,21 +167,6 @@ class ToolNodeConfigPanel(BasePage):
         )
 
     @property
-    def start_argument_error(self) -> Locator:
-        """Innermost Tool Configuration container holding both the "Start" input and a
-        "Field is required" message, i.e. the error rendered under the Start field.
-
-        Containers are matched in document order, so the deepest common ancestor of the
-        input and its message is the last match.
-        """
-        return (
-            self.tool_configuration_region.locator("div")
-            .filter(has=self.page.get_by_role("spinbutton", name="Start"))
-            .filter(has=self.page.get_by_text("Field is required", exact=True))
-            .last
-        )
-
-    @property
     def integration_dropdown_trigger(self) -> Locator:
         """Toolkit-level integration dropdown trigger.
 
@@ -253,10 +238,23 @@ class ToolNodeConfigPanel(BasePage):
 
     @step
     def should_have_start_argument_error(self):
-        """Assert Save was refused with exactly one required-value error, rendered under
-        the empty "Start" field."""
+        """Assert Save was refused with one required-value error, bound to the empty
+        "Start" field, while the filled "Folder" and "Count" fields carry none.
+
+        The form Input links its error message (role="alert") to the input through
+        aria-describedby and sets aria-invalid="true"; without an error it renders no
+        description and aria-invalid="false" (codemie-ui Input / FieldAnnouncer).
+        """
         expect(self.required_value_errors).to_have_count(1)
-        expect(self.start_argument_error).to_be_visible()
+        expect(self.start_argument_input).to_have_attribute("aria-invalid", "true")
+        expect(self.start_argument_input).to_have_accessible_description(
+            "Field is required"
+        )
+        for argument_input in (self.folder_argument_input, self.count_argument_input):
+            expect(argument_input).to_have_attribute("aria-invalid", "false")
+            expect(argument_input).not_to_have_accessible_description(
+                re.compile("Field is required")
+            )
         return self
 
     @step
