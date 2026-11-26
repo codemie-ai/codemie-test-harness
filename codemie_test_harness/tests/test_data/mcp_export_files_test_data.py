@@ -82,6 +82,21 @@ def build_json_file() -> ExportFile:
     )
 
 
+# File names outside Latin script. The artifact token carries the name as UTF-8, so these
+# check that the chip and the download show the decoded name, not the token.
+CYRILLIC_NAME_STEM = "план-отчёт"
+CHINESE_NAME_STEM = "季度报告"
+
+
+def build_non_latin_csv_file(stem: str) -> ExportFile:
+    """A csv file whose name carries `stem` (non-Latin text) after a random prefix."""
+    return ExportFile(
+        name=f"{get_random_name()}-{stem}.csv",
+        content="id,name\n1,alpha\n2,beta",
+        mime_type="text/csv",
+    )
+
+
 def export_prompt(file: ExportFile) -> str:
     """Ask the model to write `file` and export it."""
     return (
