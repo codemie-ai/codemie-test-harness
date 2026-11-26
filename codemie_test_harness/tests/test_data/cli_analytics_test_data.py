@@ -14,6 +14,7 @@
 
 """Test data for CLI Analytics API tests (/v1/analytics/cli-analytics/*)."""
 
+import re
 import uuid
 from dataclasses import dataclass, field, replace
 from datetime import datetime, time, timedelta, timezone
@@ -384,6 +385,9 @@ class CliSessionSeed:
     cache, so the session's context per call is ``cache_read_tokens / requests``, and
     ``cache_creation_5m_tokens`` / ``cache_creation_1h_tokens`` the tokens written to
     it for five minutes and for an hour. A seed with ``cost_usd`` makes one request.
+    With ``usage_row`` that request is also sent as the CLI's usage row, under the same
+    request id, as Claude Code with telemetry on reports it: the OTel record carries the
+    cache writes as one total, the usage row splits them into five-minute and one-hour.
     ``tool_calls_succeeded`` and ``tool_calls_failed`` are the
     tool calls the session makes: each has a tool start, and a tool end when it succeeded or
     a tool error when it failed, so the session counts that many tool calls and a success
@@ -407,6 +411,7 @@ class CliSessionSeed:
     cache_creation_5m_tokens: int = 0
     cache_creation_1h_tokens: int = 0
     requests: int = 1
+    usage_row: bool = False
     tool_calls_succeeded: int = 0
     tool_calls_failed: int = 0
     session_id: str = field(
@@ -473,7 +478,7 @@ class CliSessionSeed:
                     "command_source": "plugin",
                 }
             )
-        if self.cost_usd is None:
+        if self.cost_usd is None or self.usage_row:
             events.extend(self._usage_events(envelope))
         events.extend(self._tool_events(envelope))
         return events
@@ -915,14 +920,20 @@ class CatalogRates:
         )
 
 
-def cache_priced_model(models: list[dict]) -> tuple[str, CatalogRates] | None:
+def cache_priced_model(
+    models: list[dict], name_pattern: str | None = None
+) -> tuple[str, CatalogRates] | None:
     """The enabled, non-router model of a raw ``GET /v1/llm_models`` answer whose
     catalog entry prices every token kind (input, output, cache read, five-minute and
-    one-hour cache write), first by ``base_name``, with its rates."""
+    one-hour cache write), first by ``base_name``, with its rates. With
+    ``name_pattern`` only a ``base_name`` that fully matches that regex qualifies."""
     priced = [
         (model["base_name"], CatalogRates.from_cost(model["cost"]))
         for model in models
-        if model.get("enabled") and not model.get("is_router") and model.get("cost")
+        if model.get("enabled")
+        and not model.get("is_router")
+        and model.get("cost")
+        and (name_pattern is None or re.fullmatch(name_pattern, model["base_name"]))
     ]
     priced = [
         (name, rates)

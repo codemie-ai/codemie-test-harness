@@ -16,30 +16,14 @@
 record): priced from tokens and the model's catalog price, or reported as unpriced."""
 
 import pytest
-from hamcrest import assert_that, close_to, equal_to, greater_than, has_item
+from hamcrest import assert_that, close_to, greater_than, has_item
 
 from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     COST_TOLERANCE,
-    CatalogRates,
-    cache_priced_model,
     get_hooks_only_cost_seeds,
     get_unpriced_model_seed,
     session_catalog_cost,
 )
-from codemie_test_harness.tests.utils.cli_analytics_api_utils import CliAnalyticsApi
-
-
-@pytest.fixture(scope="module")
-def cache_cost_model(client) -> tuple[str, CatalogRates]:
-    """A model the stand's catalog prices for every token kind, cache writes of both
-    durations included, with its rates. The SDK's model list drops the cache rates,
-    so the catalog is read raw."""
-    response = CliAnalyticsApi(client).request("GET", "/v1/llm_models")
-    assert_that(response.status_code, equal_to(200), response.text[:300])
-    model = cache_priced_model(response.json())
-    if model is None:
-        pytest.skip("no LLM in the catalog prices input, output and every cache kind")
-    return model
 
 
 @pytest.fixture(scope="module")
