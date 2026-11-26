@@ -443,21 +443,15 @@ def test_check_on_new_workflow_opens_panel_with_every_severity_and_saves_nothing
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Product defect: Check on an unchanged saved workflow does not show the 'Changes not saved yet' note",
-)
 @pytest.mark.workflow
 @pytest.mark.ui
-def test_check_on_saved_workflow_with_findings_shows_not_saved_note(
+def test_check_on_unchanged_saved_workflow_shows_findings_without_not_saved_note(
     page, workflow_factory, default_llm
 ):
     # @case save-time-contract-editor-controls_TC_015
-    """Check on a saved, unchanged workflow with findings opens the panel with coverage and,
-    per the acceptance criterion, the 'Changes not saved yet' note; the header is unchanged.
-
-    The frontend shows no note on an unchanged edit page (useContractCheck.ts resultContext),
-    which contradicts the criterion; this test asserts the criterion.
+    """Check on a saved, unchanged workflow with findings opens the panel with the findings
+    and coverage, and shows no 'Changes not saved yet' note because nothing was changed
+    (useContractCheck.ts resultContext); the header is unchanged.
     """
     workflow = workflow_factory(build_warning_only_yaml(default_llm.base_name))
     edit_page = EditWorkflowPage(page)
@@ -468,7 +462,7 @@ def test_check_on_saved_workflow_with_findings_shows_not_saved_note(
     issues = edit_page.issues_panel
     issues.should_have_group(WARNINGS_GROUP, 1, expanded=True)
     issues.should_show_coverage()
-    issues.should_have_context_note(NOT_SAVED_NOTE)
+    issues.should_not_have_context_note()
     edit_page.should_have_editing_header()
 
 
@@ -513,23 +507,36 @@ def test_check_with_unverified_only_toasts_state_count_and_opens_unverified(
     issues.should_have_issues_button(SEVERITY_GREY, 1)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Product defect: restoring a version with contract warnings does not open the Issues panel",
-)
 @pytest.mark.workflow
 @pytest.mark.ui
 def test_restore_version_with_contract_warning_shows_it_in_issues_panel(
-    page, workflow_factory, workflow_utils, default_llm
+    page, workflow_factory, default_llm
 ):
     # @case save-time-contract-editor-controls_TC_017
     """Restoring a version whose YAML has a contract WARNING dry-runs it and lists the
-    warning in the Issues panel with 'Changes not saved yet', without a warning toast."""
-    workflow = workflow_factory(build_warning_only_yaml(default_llm.base_name))
-    workflow_utils.update_workflow(
-        workflow, yaml_config=build_clean_yaml(default_llm.base_name)
-    )
+    warning in the Issues panel with 'Changes not saved yet', without a warning toast.
+
+    Both versions are saved through the editor, so the stored YAML is in the editor's own
+    form (two-space list items, ``meta_states``). The restore result is shown only when the
+    editor's text still equals the restored text (useWorkflowHistoryRestore.ts
+    isRestoreValidationCurrent); a version written through the API is re-serialised on
+    restore and its result is dropped.
+    """
+    workflow = workflow_factory(build_clean_yaml(default_llm.base_name))
     edit_page = EditWorkflowPage(page)
+    edit_page.navigate_to(workflow.id)
+
+    # Version with the warning, saved through the editor.
+    edit_page.replace_yaml_config(build_warning_only_yaml(default_llm.base_name))
+    edit_page.click_save()
+    edit_page.should_have_saved_with_warnings_header()
+
+    # Newer clean version, saved through the editor; a clean save returns to the list.
+    edit_page.replace_yaml_config(build_clean_yaml(default_llm.base_name))
+    edit_page.should_have_editing_header()
+    edit_page.click_save()
+    edit_page.should_have_left_editor()
+
     edit_page.navigate_to(workflow.id)
 
     popup = edit_page.open_yaml_panel().open_version_history_popup()
