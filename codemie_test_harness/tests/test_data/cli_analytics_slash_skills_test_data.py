@@ -24,7 +24,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from codemie_test_harness.tests.test_data.cli_analytics_test_data import OWNER, to_iso
+from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
+    OWNER,
+    otlp_attr,
+    otlp_nanos,
+    to_iso,
+)
 
 CLAUDE_CODE = {"platform": "claude-code"}
 
@@ -36,8 +41,9 @@ class Request:
 
     ``scope_kind`` is the attribution the CLI sends: ``skill`` (named after the seed's
     skill) or ``main``. ``agent_id`` is the fork that made the request. With
-    ``span_named`` Claude Code also names the fork on an ``llm_request`` span (a fork a tool call started); without it the request sits among
-    the main thread's and only the CLI's usage row tells whose it is (a foreground fork).
+    ``span_named`` Claude Code also names the fork on an ``llm_request`` span (a fork a
+    tool call started); without it the request sits among the main thread's and only
+    the CLI's usage row tells whose it is (a foreground fork).
     ``request_id`` is empty behind a proxy: the backend then pairs the usage row with the
     record by model and token totals."""
 
@@ -300,7 +306,7 @@ class SlashSkillSeed:
             if request.request_id:
                 attributes["request_id"] = {"stringValue": self.request_id(request)}
             return {
-                "timeUnixNano": _nanos(self._at(request.offset)),
+                "timeUnixNano": otlp_nanos(self._at(request.offset)),
                 "body": {"stringValue": "claude_code.api_request"},
                 "attributes": [{"key": k, "value": v} for k, v in attributes.items()],
                 "traceId": self.trace_id,
@@ -344,7 +350,9 @@ class SlashSkillSeed:
         return {
             "resourceSpans": [
                 {
-                    "resource": {"attributes": [_attr("service.name", "claude-code")]},
+                    "resource": {
+                        "attributes": [otlp_attr("service.name", "claude-code")]
+                    },
                     "scopeSpans": [
                         {
                             "scope": {"name": "com.anthropic.claude_code.tracing"},
@@ -361,11 +369,11 @@ class SlashSkillSeed:
             "spanId": span_id,
             "name": name,
             "kind": 1,
-            "startTimeUnixNano": _nanos(start),
-            "endTimeUnixNano": _nanos(end),
+            "startTimeUnixNano": otlp_nanos(start),
+            "endTimeUnixNano": otlp_nanos(end),
             "attributes": [
-                _attr("session.id", self.session_id),
-                *(_attr(key, value) for key, value in attributes.items()),
+                otlp_attr("session.id", self.session_id),
+                *(otlp_attr(key, value) for key, value in attributes.items()),
             ],
             "status": {"code": 0},
         }
@@ -383,21 +391,27 @@ class SlashSkillSeed:
             sum(r.output_tokens for r in chosen),
         )
 
+    @property
+    def inline_skill_run_ms(self) -> int:
+        """Run of an inline slash skill: from its first slash command to the last request
+        the CLI attributed to the skill."""
+        first_dispatch = min(offset for _, offset in self.dispatches)
+        last_skill_request = max(
+            r.offset for r in self.requests if r.scope_kind == "skill"
+        )
+        return (last_skill_request - first_dispatch) * 1000
 
-def _attr(key: str, value) -> dict:
-    kind = "intValue" if isinstance(value, int) else "stringValue"
-    return {"key": key, "value": {kind: str(value) if kind == "intValue" else value}}
 
-
-def _nanos(moment: datetime) -> str:
-    return str(int(moment.timestamp()) * 10**9)
+def _fork_id() -> str:
+    """A fork agent id of the form Claude Code gives one, new for every seed."""
+    return f"a{uuid.uuid4().hex[:16]}"
 
 
 def _resource_logs(records: list[dict]) -> dict:
     return {
         "resourceLogs": [
             {
-                "resource": {"attributes": [_attr("service.name", "claude-code")]},
+                "resource": {"attributes": [otlp_attr("service.name", "claude-code")]},
                 "scopeLogs": [
                     {
                         "scope": {"name": "com.anthropic.claude_code.events"},
@@ -411,18 +425,16 @@ def _resource_logs(records: list[dict]) -> dict:
 
 # ── A forked skill counts once, as a skill ───────────────────────────────────
 
-SLASH_FORK_ID = "a01e30c7b42a0bdac"
-SKILL_CALL_FORK_ID = "a861e999c42f7f90c"
-
 
 def get_slash_fork_seed(model: str) -> SlashSkillSeed:
     """/forkme: the slash command and its fork's start share the prompt, so they are one
     invocation. The fork runs 40 s and makes one request Claude Code names by its id."""
+    fork_id = _fork_id()
     return SlashSkillSeed(
         key="slash_fork",
         model=model,
         dispatches=((0, 5),),
-        forks=(Fork(SLASH_FORK_ID, prompt=0, start=6, stop=46),),
+        forks=(Fork(fork_id, prompt=0, start=6, stop=46),),
         requests=(
             Request("main", 2, 0, 800, 40),
             Request(
@@ -432,7 +444,7 @@ def get_slash_fork_seed(model: str) -> SlashSkillSeed:
                 1500,
                 120,
                 scope_kind="skill",
-                agent_id=SLASH_FORK_ID,
+                agent_id=fork_id,
                 span_named=True,
             ),
         ),
@@ -442,11 +454,12 @@ def get_slash_fork_seed(model: str) -> SlashSkillSeed:
 def get_skill_call_fork_seed(model: str) -> SlashSkillSeed:
     """The model runs the same skill through the Skill tool: the call and the fork it
     names are one invocation. The fork runs 30 s and makes one request."""
+    fork_id = _fork_id()
     return SlashSkillSeed(
         key="skill_call_fork",
         model=model,
-        skill_calls=((0, 5, SKILL_CALL_FORK_ID),),
-        forks=(Fork(SKILL_CALL_FORK_ID, prompt=0, start=6, stop=36),),
+        skill_calls=((0, 5, fork_id),),
+        forks=(Fork(fork_id, prompt=0, start=6, stop=36),),
         requests=(
             Request("main", 2, 0, 800, 40),
             Request(
@@ -456,7 +469,7 @@ def get_skill_call_fork_seed(model: str) -> SlashSkillSeed:
                 1300,
                 110,
                 scope_kind="skill",
-                agent_id=SKILL_CALL_FORK_ID,
+                agent_id=fork_id,
                 span_named=True,
             ),
         ),
@@ -485,13 +498,9 @@ def get_inline_slash_seed(model: str) -> SlashSkillSeed:
 
 
 INLINE_SKILL_REQUESTS = ("skill-1", "skill-2")
-# From the slash command to the last request attributed to the skill.
-INLINE_SKILL_RUN_MS = 30_000
 
 
 # ── A foreground fork no request names (Claude Code desktop app) ─────────────
-
-FOREGROUND_FORK_ID = "a64521fc54480cb8d"
 
 
 def get_foreground_fork_seed(model: str) -> SlashSkillSeed:
@@ -500,12 +509,13 @@ def get_foreground_fork_seed(model: str) -> SlashSkillSeed:
     its requests. Behind the local proxy no request carries a request id. Only the CLI's
     usage rows, under the fork's agent id, tell its request from the main thread's request
     of the same prompt."""
+    fork_id = _fork_id()
     return SlashSkillSeed(
         key="foreground_fork",
         model=model,
         interaction_span=True,
         dispatches=((0, 5),),
-        forks=(Fork(FOREGROUND_FORK_ID, prompt=0, start=7, stop=25, tagged=False),),
+        forks=(Fork(fork_id, prompt=0, start=7, stop=25, tagged=False),),
         requests=(
             Request(
                 "fork",
@@ -514,7 +524,7 @@ def get_foreground_fork_seed(model: str) -> SlashSkillSeed:
                 1700,
                 180,
                 scope_kind="skill",
-                agent_id=FOREGROUND_FORK_ID,
+                agent_id=fork_id,
                 request_id=False,
             ),
             Request("main", 35, 0, 500, 50, request_id=False),

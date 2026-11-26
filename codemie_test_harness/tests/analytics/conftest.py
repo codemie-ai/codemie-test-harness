@@ -341,7 +341,8 @@ def ingest_cli_sessions(
     cli_analytics_project, cli_analytics_users, user_utils, project_utils
 ):
     """Factory that sends the events of session seeds to a project (the module's
-    project unless another is named), each seed as its own user. It does not wait
+    project unless another is named), each seed as its own user: hook events, OTLP logs
+    and, for a seed with an ``otlp_traces()`` payload, OTLP traces. It does not wait
     for the rollup.
 
     The BE accepts a batch only for an enabled project the sender may use and named in
@@ -368,6 +369,10 @@ def ingest_cli_sessions(
             otlp_logs = seed.otlp_logs(user.email)
             if otlp_logs:
                 user.analytics_utils.ingest_cli_otlp_logs(otlp_logs, project=project)
+            otlp_traces = getattr(seed, "otlp_traces", None)
+            traces = otlp_traces() if otlp_traces else None
+            if traces:
+                user.analytics_utils.ingest_cli_otlp_traces(traces, project=project)
 
     yield _ingest
 
