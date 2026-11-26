@@ -21,6 +21,8 @@ from datetime import datetime, timedelta, timezone
 from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     OWNER,
     SEED_MODEL,
+    otlp_attr,
+    otlp_nanos,
     to_iso,
 )
 
@@ -93,17 +95,6 @@ ANSWERED_TASK_NOTIFICATION = SessionPrompt(
     answered=True,
     typed=False,
 )
-
-
-def _attr(key: str, value) -> dict:
-    kind = "intValue" if isinstance(value, int) else "stringValue"
-    if isinstance(value, float):
-        kind = "doubleValue"
-    return {"key": key, "value": {kind: str(value) if kind == "intValue" else value}}
-
-
-def _nanos(moment: datetime) -> str:
-    return str(int(moment.timestamp()) * 10**9)
 
 
 @dataclass
@@ -238,14 +229,14 @@ class ClaudeCodeTurnsSeed:
         *extra,
     ) -> dict:
         attributes = [
-            _attr("session.id", self.session_id),
-            _attr("event.name", name),
-            _attr("prompt.id", self.prompt_id(index)),
-            _attr("user.email", user_email),
+            otlp_attr("session.id", self.session_id),
+            otlp_attr("event.name", name),
+            otlp_attr("prompt.id", self.prompt_id(index)),
+            otlp_attr("user.email", user_email),
             *extra,
         ]
         return {
-            "timeUnixNano": _nanos(moment),
+            "timeUnixNano": otlp_nanos(moment),
             "body": {"stringValue": f"claude_code.{name}"},
             "attributes": attributes,
             "traceId": self.trace_id,
@@ -264,7 +255,7 @@ class ClaudeCodeTurnsSeed:
                     moment,
                     index,
                     user_email,
-                    _attr("prompt_length", len(prompt.log_body)),
+                    otlp_attr("prompt_length", len(prompt.log_body)),
                 )
             )
             if prompt.answered:
@@ -274,24 +265,26 @@ class ClaudeCodeTurnsSeed:
                         moment + timedelta(seconds=2),
                         index,
                         user_email,
-                        _attr("model", SEED_MODEL),
-                        _attr("request_id", f"req_{self.prompt_id(index)}"),
-                        _attr(
+                        otlp_attr("model", SEED_MODEL),
+                        otlp_attr("request_id", f"req_{self.prompt_id(index)}"),
+                        otlp_attr(
                             "input_tokens",
                             TYPED_INPUT_TOKENS
                             if prompt.typed
                             else INJECTED_INPUT_TOKENS,
                         ),
-                        _attr("output_tokens", 10),
-                        _attr("cache_read_tokens", 0),
-                        _attr("cache_creation_tokens", 0),
-                        _attr("cost_usd", 0.01),
+                        otlp_attr("output_tokens", 10),
+                        otlp_attr("cache_read_tokens", 0),
+                        otlp_attr("cache_creation_tokens", 0),
+                        otlp_attr("cost_usd", 0.01),
                     )
                 )
         return {
             "resourceLogs": [
                 {
-                    "resource": {"attributes": [_attr("service.name", "claude-code")]},
+                    "resource": {
+                        "attributes": [otlp_attr("service.name", "claude-code")]
+                    },
                     "scopeLogs": [
                         {
                             "scope": {"name": "com.anthropic.claude_code.events"},
@@ -313,12 +306,12 @@ class ClaudeCodeTurnsSeed:
                 "spanId": self.span_id(index),
                 "name": "claude_code.interaction",
                 "kind": 1,
-                "startTimeUnixNano": _nanos(moment),
-                "endTimeUnixNano": _nanos(moment + timedelta(seconds=5)),
+                "startTimeUnixNano": otlp_nanos(moment),
+                "endTimeUnixNano": otlp_nanos(moment + timedelta(seconds=5)),
                 "attributes": [
-                    _attr("session.id", self.session_id),
-                    _attr("span.type", "interaction"),
-                    _attr("interaction.sequence", index + 1),
+                    otlp_attr("session.id", self.session_id),
+                    otlp_attr("span.type", "interaction"),
+                    otlp_attr("interaction.sequence", index + 1),
                 ],
                 "status": {"code": 0},
             }
@@ -326,7 +319,9 @@ class ClaudeCodeTurnsSeed:
         return {
             "resourceSpans": [
                 {
-                    "resource": {"attributes": [_attr("service.name", "claude-code")]},
+                    "resource": {
+                        "attributes": [otlp_attr("service.name", "claude-code")]
+                    },
                     "scopeSpans": [
                         {
                             "scope": {"name": "com.anthropic.claude_code.tracing"},
