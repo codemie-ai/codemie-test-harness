@@ -60,6 +60,9 @@ from codemie_test_harness.tests.test_data.customer_config_test_data import (
     get_web_search_settings_data,
 )
 from codemie_test_harness.tests.test_data.file_test_data import file_test_data
+from codemie_test_harness.tests.test_data.marketplace_test_data import (
+    COMPLETE_CATEGORIES,
+)
 from codemie_test_harness.tests.test_data.marketplace_thresholds_test_data import (
     MARKETPLACE_THRESHOLDS_COMPONENT_ID,
 )
@@ -182,6 +185,7 @@ from codemie_test_harness.tests.utils.marketplace_management_utils import (
     personal_project_of,
     MarketplaceManagementUtils,
     MarketplaceSubmitter,
+    delete_submitter_assistant,
     poll_marketplace_listing,
 )
 from codemie_test_harness.tests.utils.notification_utils import (
@@ -405,6 +409,12 @@ def client():
 
 
 @pytest.fixture(scope="session")
+def current_user_id(client):
+    """Platform user id of the user the default ``client`` is logged in as."""
+    return client.users.about_me().user_id
+
+
+@pytest.fixture(scope="session")
 def resolver_runtime_capabilities(request):
     """Runtime feature-flag components ({id: enabled}) read once from GET /v1/config."""
     return request.config.pluginmanager.get_plugin("capability-gate").capabilities
@@ -555,6 +565,73 @@ def customer_config_utils(client):
 @pytest.fixture(scope="session")
 def workflow_utils(client):
     return WorkflowUtils(client)
+
+
+@pytest.fixture(scope="module")
+def create_script_workflow(workflow_utils):
+    """Factory ``(tools, states, assistants=None) -> workflow``; every workflow is deleted at module end."""
+    created = []
+
+    def _create(tools, states, assistants=None):
+        workflow_yaml = WorkflowYamlModel(
+            enable_summarization_node=False,
+            tools=tools,
+            assistants=assistants or [],
+            states=states,
+        )
+        workflow = workflow_utils.create_workflow(
+            workflow_name=get_random_name(),
+            workflow_type=WorkflowMode.SEQUENTIAL,
+            shared=True,
+            workflow_yaml=prepare_yaml_content(
+                workflow_yaml.model_dump(exclude_none=True)
+            ),
+        )
+        created.append(workflow)
+        return workflow
+
+    yield _create
+    for workflow in created:
+        workflow_utils.delete_workflow(workflow)
+
+
+@pytest.fixture(scope="session")
+def jira_user_integration(client):
+    """One USER-type Jira integration of the running user, shared by all tests of the run.
+
+    A single integration for the whole run keeps tests that run side by side from deleting the
+    integration another test is calling through."""
+    integration_utils = IntegrationUtils(client)
+    integration = integration_utils.create_user_integration(
+        CredentialTypes.JIRA, CredentialsManager.jira_credentials()
+    )
+    yield integration
+    integration_utils.delete_integration(integration)
+
+
+@pytest.fixture
+def publish_workflow_as_global(workflow_utils):
+    """Factory ``(workflow_id, categories=None) -> dict``; publishes a workflow to the
+    marketplace, which is the only way the public API sets ``is_global=True``.
+
+    Unpublishes every workflow it published at teardown, so ``is_global`` reverts even
+    when the test fails.
+    """
+    published_ids: list[str] = []
+
+    def _publish(workflow_id: str, categories: Optional[list[str]] = None) -> dict:
+        response = workflow_utils.publish_workflow_to_marketplace(
+            workflow_id, categories or [COMPLETE_CATEGORIES]
+        )
+        published_ids.append(workflow_id)
+        return response
+
+    yield _publish
+    for workflow_id in published_ids:
+        try:
+            workflow_utils.unpublish_workflow_from_marketplace(workflow_id)
+        except Exception as e:
+            logger.warning(f"Failed to unpublish workflow {workflow_id}: {e}")
 
 
 @pytest.fixture(scope="session")
@@ -2424,6 +2501,7 @@ def workflow(workflow_utils):
         state_model=None,
         project_name=None,
         description=None,
+        headroom=None,
     ):
         workflow_name = workflow_name if workflow_name else get_random_name()
 
@@ -2433,7 +2511,12 @@ def workflow(workflow_utils):
             states=[state_model],
         )
 
-        yaml_content = prepare_yaml_content(workflow_yaml.model_dump(exclude_none=True))
+        yaml_dict = workflow_yaml.model_dump(exclude_none=True)
+        # Top-level Headroom block of the workflow YAML (``headroom:``); the YAML model
+        # has no field for it.
+        if headroom is not None:
+            yaml_dict["headroom"] = headroom
+        yaml_content = prepare_yaml_content(yaml_dict)
 
         created_workflow = workflow_utils.create_workflow(
             workflow_name=workflow_name,
@@ -2473,6 +2556,7 @@ def workflow_with_virtual_assistant(workflow, default_llm):
         datasource_ids=None,
         project_name=None,
         skill_ids=None,
+        headroom=None,
     ):
         # Normalize tool_names to a tuple; allow None or single or tuple
         if tool_names is None:
@@ -2507,7 +2591,10 @@ def workflow_with_virtual_assistant(workflow, default_llm):
         )
 
         return workflow(
-            assistant_model=assistant, state_model=state, project_name=project_name
+            assistant_model=assistant,
+            state_model=state,
+            project_name=project_name,
+            headroom=headroom,
         )
 
     return _create_workflow
@@ -3177,28 +3264,13 @@ def marketplace_submitter(request, default_llm, marketplace_core_gates):
         )
 
 
-def _delete_submitter_assistant(submitter, admin_client, assistant_id) -> None:
-    """Delete an assistant of the submitter in any review state (pending, rejected, approved).
-
-    The owner deletes it; the admin client is the fallback. A failure of both is logged as
-    an error, because the assistant is then left behind.
-    """
-    try:
-        submitter.assistant_utils.delete_assistant_by_id(assistant_id)
-    except Exception:
-        try:
-            admin_client.assistants.delete(assistant_id)
-        except Exception as e:
-            logger.error(f"Failed to delete assistant {assistant_id}: {e}")
-
-
 @pytest.fixture
 def marketplace_assistants_to_delete(marketplace_submitter, client):
     """Collects the assistants a test creates for the submitter and deletes them on teardown."""
     created = []
     yield created
     for assistant in created:
-        _delete_submitter_assistant(marketplace_submitter, client, assistant.id)
+        delete_submitter_assistant(marketplace_submitter, client, assistant.id)
 
 
 @pytest.fixture
@@ -3208,7 +3280,7 @@ def delete_marketplace_assistant(
     """Deletes an assistant right away (for one that is public) and drops it from the teardown list."""
 
     def _delete(assistant) -> None:
-        _delete_submitter_assistant(marketplace_submitter, client, assistant.id)
+        delete_submitter_assistant(marketplace_submitter, client, assistant.id)
         marketplace_assistants_to_delete.remove(assistant)
 
     return _delete

@@ -117,6 +117,44 @@ class AnalyticsUtils(BaseUtils):
         params = AnalyticsQueryParams(**kwargs) if kwargs else None
         return self.client.analytics.get_summaries(params)
 
+    def get_headroom_summary(self, **kwargs) -> SummariesResponse:
+        """Get Headroom (context compression) summary metrics.
+
+        Args:
+            **kwargs: Query parameters (time_period, start_date, end_date, users, projects);
+                ``users`` takes platform user ids, comma-separated
+
+        Returns:
+            SummariesResponse with the Headroom savings metrics
+        """
+        params = AnalyticsQueryParams(**kwargs) if kwargs else None
+        return self.client.analytics.get_headroom_summary(params)
+
+    def get_headroom_timeseries(self, **kwargs) -> TabularResponse:
+        """Get Headroom savings per time bucket.
+
+        Args:
+            **kwargs: Query parameters (time_period, start_date, end_date, users, projects)
+
+        Returns:
+            TabularResponse with one row per time bucket
+        """
+        params = AnalyticsQueryParams(**kwargs) if kwargs else None
+        return self.client.analytics.get_headroom_timeseries(params)
+
+    def get_headroom_by_strategy(self, **kwargs) -> TabularResponse:
+        """Get Headroom savings broken down by compression strategy.
+
+        Args:
+            **kwargs: Query parameters (time_period, start_date, end_date, users, projects,
+                page, per_page)
+
+        Returns:
+            TabularResponse with one row per strategy
+        """
+        params = PaginatedAnalyticsQueryParams(**kwargs) if kwargs else None
+        return self.client.analytics.get_headroom_by_strategy(params)
+
     def get_cli_summary(self, **kwargs) -> SummariesResponse:
         """Get CLI-specific summary metrics.
 

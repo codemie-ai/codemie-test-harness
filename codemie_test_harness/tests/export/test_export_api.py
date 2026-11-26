@@ -490,6 +490,9 @@ _ASSISTANT_NOT_EXPORTED = {
     "smart_tool_selection_enabled",
     "custom_metadata",
     "hide_tool_outputs",
+    # Headroom settings are not part of the assistant export document; the backend's own
+    # round-trip test lists the field as not exported.
+    "headroom_config",
     "id",
     "created_by",
 }

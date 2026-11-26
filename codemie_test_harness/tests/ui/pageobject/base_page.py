@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import re
+from functools import cached_property
 from pathlib import Path
 
 from playwright.sync_api import expect, Locator
@@ -55,9 +56,10 @@ class BasePage:
         """Menu component instance."""
         return Menu(self.page)
 
-    @property
+    @cached_property
     def toast(self) -> Toast:
-        """Toast notifications component instance."""
+        """Toast notifications component, one instance per page object, so state a check keeps
+        (such as when a toast was seen) carries over to the next check."""
         return Toast(self.page)
 
     # Common page elements
