@@ -51,9 +51,11 @@ from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     assert_accepted,
 )
 from codemie_test_harness.tests.utils.cli_classification_utils import (
+    LINKED,
     ORGANIZATION_ENCODING,
     assert_rejected,
     assert_session_discarded,
+    expected_routing,
     further_event,
     listed_rows,
     listed_session_ids_with,
@@ -71,16 +73,6 @@ from codemie_test_harness.tests.utils.cli_gate_utils import (
     SESSION_PREFIX,
     observe_absence_window,
 )
-
-LINKED = {"project_source": "linked_folder"}
-
-
-def _routing(subscription_type, project_origin, route_note=None):
-    return {
-        "subscription_type": subscription_type,
-        "project_origin": project_origin,
-        "route_note": route_note,
-    }
 
 
 # ── TC-001: routed through CodeMie ──────────────────────────────────────────────
@@ -117,7 +109,7 @@ def test_session_routed_via_codemie_is_classified_codemie_whatever_the_organizat
     )
     assert_that(
         routing_of(row),
-        equal_to(_routing(CODEMIE, LINKED_FOLDER)),
+        equal_to(expected_routing(CODEMIE, LINKED_FOLDER)),
         "a session routed through CodeMie must be classified codemie",
     )
 
@@ -167,7 +159,7 @@ def test_organization_matching_the_corporate_list_is_classified_corporate(
     )
     assert_that(
         routing_of(row),
-        equal_to(_routing(CORPORATE, LINKED_FOLDER)),
+        equal_to(expected_routing(CORPORATE, LINKED_FOLDER)),
         "an organization in the corporate list must be classified corporate",
     )
 
@@ -207,7 +199,7 @@ def test_non_matching_organization_is_personal_owner_only_and_outside_company_sp
     owner_row = wait_for_session_row(owner.api, personal.session_id, personal.repo)
     assert_that(
         routing_of(owner_row),
-        equal_to(_routing(PERSONAL, PERSONAL)),
+        equal_to(expected_routing(PERSONAL, PERSONAL)),
         "the owner must read the session as Personal in the personal project",
     )
     observe_absence_window(
@@ -266,7 +258,7 @@ def test_session_with_an_organization_but_an_empty_corporate_list_is_unknown(
     )
     assert_that(
         routing_of(row),
-        equal_to(_routing(UNKNOWN, LINKED_FOLDER)),
+        equal_to(expected_routing(UNKNOWN, LINKED_FOLDER)),
         "an empty corporate list must give an Unknown session in the linked work project",
     )
 
@@ -296,7 +288,7 @@ def test_session_without_an_organization_is_unknown_even_with_a_corporate_list(
     )
     assert_that(
         routing_of(row),
-        equal_to(_routing(UNKNOWN, LINKED_FOLDER)),
+        equal_to(expected_routing(UNKNOWN, LINKED_FOLDER)),
         "a missing organization must give an Unknown session in the linked work project",
     )
 
@@ -488,7 +480,7 @@ def test_later_personal_classification_of_a_shared_bound_session_is_rejected(
     fresh_row = wait_for_session_row(world.sender.api, fresh.session_id, fresh.repo)
     assert_that(
         routing_of(fresh_row),
-        equal_to(_routing(PERSONAL, PERSONAL)),
+        equal_to(expected_routing(PERSONAL, PERSONAL)),
         "a new session must be classified under the current list",
     )
 
@@ -575,6 +567,6 @@ def test_encoded_organization_at_the_size_limits_is_accepted_and_classified(
     owned = wait_for_session_row(world.sender.api, batch.session_id, batch.repo)
     assert_that(
         routing_of(owned),
-        equal_to(_routing(PERSONAL, PERSONAL)),
+        equal_to(expected_routing(PERSONAL, PERSONAL)),
         "a name at the size limits must be accepted and classified personal",
     )

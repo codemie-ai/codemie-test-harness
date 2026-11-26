@@ -144,6 +144,7 @@ CLAIMED_TYPES_NEEDING_ORGANIZATION = ["personal", "corporate"]
 class PlacementRow:
     subscription: str  # corporate | codemie | unknown
     link: str | None  # key of the project in X-CodeMie-Project (linked_folder)
+    project_source: str | None  # X-CodeMie-Project-Source sent with the link
     registered: (
         str | None
     )  # key of the project whose registered remote the session reports
@@ -154,26 +155,40 @@ class PlacementRow:
 
 PLACEMENT_ROWS = [
     pytest.param(
-        PlacementRow(CORPORATE, "A", "B", "A", LINKED_FOLDER, None),
+        PlacementRow(CORPORATE, "A", LINKED_FOLDER, "B", "A", LINKED_FOLDER, None),
         id="corporate-accessible-link-beats-registration",
     ),
     pytest.param(
-        PlacementRow(CODEMIE, None, "B", "B", REGISTERED_REPOSITORY, None),
+        PlacementRow(CODEMIE, None, None, "B", "B", REGISTERED_REPOSITORY, None),
         id="codemie-registered-repository",
     ),
     pytest.param(
-        PlacementRow(UNKNOWN, "N", "B", "B", REGISTERED_REPOSITORY, None),
+        PlacementRow(
+            UNKNOWN, "N", LINKED_FOLDER, "B", "B", REGISTERED_REPOSITORY, None
+        ),
         id="unknown-inaccessible-link-falls-to-registration",
     ),
     pytest.param(
         PlacementRow(
-            UNKNOWN, "N", None, "D", DEFAULT_PROJECT, LINKED_PROJECT_UNAVAILABLE
+            UNKNOWN,
+            "N",
+            LINKED_FOLDER,
+            None,
+            "D",
+            DEFAULT_PROJECT,
+            LINKED_PROJECT_UNAVAILABLE,
         ),
         id="unknown-inaccessible-link-falls-to-default",
     ),
     pytest.param(
         PlacementRow(
-            CORPORATE, None, "N", "D", DEFAULT_PROJECT, REGISTERED_PROJECT_INACCESSIBLE
+            CORPORATE,
+            None,
+            None,
+            "N",
+            "D",
+            DEFAULT_PROJECT,
+            REGISTERED_PROJECT_INACCESSIBLE,
         ),
         id="corporate-inaccessible-registration-falls-to-default",
     ),
@@ -185,6 +200,7 @@ class ProfileRow:
     profile_project: (
         str | None
     )  # key of the project the profile sends (project source profile)
+    project_source: str | None  # X-CodeMie-Project-Source sent with that project
     registered: str | None
     project: str
     origin: str
@@ -193,15 +209,15 @@ class ProfileRow:
 
 PROFILE_ROWS = [
     pytest.param(
-        ProfileRow("A", "B", "A", PROFILE, None),
+        ProfileRow("A", PROFILE, "B", "A", PROFILE, None),
         id="profile-project-beats-registration",
     ),
     pytest.param(
-        ProfileRow(None, "B", "B", REGISTERED_REPOSITORY, None),
+        ProfileRow(None, None, "B", "B", REGISTERED_REPOSITORY, None),
         id="no-profile-project-falls-to-registration",
     ),
     pytest.param(
-        ProfileRow(None, None, "D", DEFAULT_PROJECT, FOLDER_NOT_LINKED),
+        ProfileRow(None, None, None, "D", DEFAULT_PROJECT, FOLDER_NOT_LINKED),
         id="no-profile-project-no-registration-falls-to-default",
     ),
 ]

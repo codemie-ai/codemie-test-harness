@@ -26,7 +26,6 @@ REGULAR = "regular"
 EXTERNAL = "external"
 SERVICE_ACCOUNT = "service_account"
 
-NO_PROJECT_ROLE = "none"
 PROJECT_MEMBER = "member"
 PROJECT_ADMIN = "admin"
 
@@ -52,6 +51,12 @@ class AccountSpec:
     @property
     def has_personal_project(self) -> bool:
         return self.first_login_type == REGULAR
+
+    def project_names(self, email: str, *shared: str) -> list[str]:
+        """Lower-case, sorted names of the projects an account of this kind with `email` is a
+        member of after joining `shared`: those and, when it has one, its personal project."""
+        personal = (email,) if self.has_personal_project else ()
+        return sorted(name.lower() for name in (*shared, *personal))
 
 
 REGULAR_MEMBER = AccountSpec("regular-member")
@@ -152,6 +157,7 @@ READ_ROWS = [
 class RegistrationRightsRow:
     account: str
     allowed: bool
+    status: int  # of each of the register, list and unregister calls
 
 
 # Global admins, maintainers and the project's own admin may register repositories; the route
@@ -160,9 +166,24 @@ REGISTRATION_ALLOWED_STATUS = 200
 REGISTRATION_REFUSED_STATUS = 404
 
 REGISTRATION_RIGHTS_ROWS = [
-    pytest.param(RegistrationRightsRow("regular-member", False), id="regular-member"),
-    pytest.param(RegistrationRightsRow("project-admin", True), id="project-admin"),
-    pytest.param(RegistrationRightsRow("maintainer", True), id="maintainer"),
-    pytest.param(RegistrationRightsRow("auditor", False), id="auditor"),
-    pytest.param(RegistrationRightsRow("service-account", False), id="service-account"),
+    pytest.param(
+        RegistrationRightsRow("regular-member", False, REGISTRATION_REFUSED_STATUS),
+        id="regular-member",
+    ),
+    pytest.param(
+        RegistrationRightsRow("project-admin", True, REGISTRATION_ALLOWED_STATUS),
+        id="project-admin",
+    ),
+    pytest.param(
+        RegistrationRightsRow("maintainer", True, REGISTRATION_ALLOWED_STATUS),
+        id="maintainer",
+    ),
+    pytest.param(
+        RegistrationRightsRow("auditor", False, REGISTRATION_REFUSED_STATUS),
+        id="auditor",
+    ),
+    pytest.param(
+        RegistrationRightsRow("service-account", False, REGISTRATION_REFUSED_STATUS),
+        id="service-account",
+    ),
 ]

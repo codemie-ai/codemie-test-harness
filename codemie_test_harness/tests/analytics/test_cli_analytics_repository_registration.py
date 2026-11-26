@@ -26,9 +26,11 @@ from codemie_test_harness.tests.test_data.cli_classification_test_data import (
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name, poll_until
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import CliAnalyticsApi
-from codemie_test_harness.tests.utils.cli_classification_utils import new_remote
-
-REPOSITORIES = "/v1/projects/{project}/repositories"
+from codemie_test_harness.tests.utils.cli_classification_utils import (
+    REPOSITORIES_PATH,
+    new_remote,
+    repository_key,
+)
 
 
 @pytest.fixture
@@ -63,7 +65,9 @@ def test_registration_api_refuses_personal_projects_bad_remotes_and_missing_regi
     project = registration_world[row.target]
 
     response = registration_world["api"].request(
-        row.method, REPOSITORIES.format(project=project), json={"remote": row.remote}
+        row.method,
+        REPOSITORIES_PATH.format(project=project),
+        json={"remote": row.remote},
     )
 
     assert_that(
@@ -84,7 +88,7 @@ def test_registration_api_refuses_personal_projects_bad_remotes_and_missing_regi
 def test_listing_registrations_of_an_unknown_project_is_404(registration_world):
     """The registrations of a project that does not exist are 404 (the API reveals nothing else)."""
     response = registration_world["api"].request(
-        "GET", REPOSITORIES.format(project=get_random_name())
+        "GET", REPOSITORIES_PATH.format(project=get_random_name())
     )
 
     assert_that(
@@ -104,15 +108,15 @@ def test_registered_repository_is_listed_and_can_be_unregistered_once(
     for the project and removed by DELETE; a second DELETE finds nothing and is 404."""
     api, project = registration_world["api"], registration_world["shared"]
     remote = new_remote()
-    key = remote.removeprefix("https://").removesuffix(".git")
+    key = repository_key(remote)
 
     registered = provisioner.register(project, remote)
-    listed = api.request("GET", REPOSITORIES.format(project=project))
+    listed = api.request("GET", REPOSITORIES_PATH.format(project=project))
     removed = api.request(
-        "DELETE", REPOSITORIES.format(project=project), json={"remote": remote}
+        "DELETE", REPOSITORIES_PATH.format(project=project), json={"remote": remote}
     )
     removed_again = api.request(
-        "DELETE", REPOSITORIES.format(project=project), json={"remote": remote}
+        "DELETE", REPOSITORIES_PATH.format(project=project), json={"remote": remote}
     )
 
     assert_that(

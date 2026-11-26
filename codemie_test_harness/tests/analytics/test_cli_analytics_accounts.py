@@ -35,8 +35,6 @@ from codemie_test_harness.tests.test_data.cli_account_test_data import (
     LISTS_PROJECT_SESSIONS,
     PERSONAL_SENDER_KINDS,
     READ_ROWS,
-    REGISTRATION_ALLOWED_STATUS,
-    REGISTRATION_REFUSED_STATUS,
     REGISTRATION_RIGHTS_ROWS,
     specs_named,
 )
@@ -52,12 +50,15 @@ from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
 from codemie_test_harness.tests.utils.cli_classification_utils import (
     COST_PATH,
     LINKED,
+    REPOSITORIES_PATH,
     SESSIONS_PATH,
     assert_rejected,
     expected_routing,
     listed_session_ids_with,
     new_remote,
     new_session,
+    repository_key,
+    repository_keys,
     routing_of,
     send_evidence,
     session_rows,
@@ -66,7 +67,6 @@ from codemie_test_harness.tests.utils.cli_classification_utils import (
 from codemie_test_harness.tests.utils.cli_gate_utils import observe_absence_window
 
 OWN_SESSIONS_ONLY_KINDS = ("regular-member", "auditor")
-REPOSITORIES = "/v1/projects/{project}/repositories"
 SHARED_ORIGIN_PERSONAL = expected_routing(PERSONAL, LINKED_FOLDER)
 
 
@@ -93,9 +93,6 @@ def test_personal_session_of_an_external_user_or_service_account_is_stored_in_a_
     for a service account while an external user's old personal project stays unused."""
     world = account_world
     account = provisioner.account(spec, world.project)
-    expected_projects = [world.project.lower()] + (
-        [account.email.lower()] if spec.has_personal_project else []
-    )
     batch = new_session()
 
     response = send_evidence(
@@ -118,7 +115,7 @@ def test_personal_session_of_an_external_user_or_service_account_is_stored_in_a_
     )
     assert_that(
         sorted(name.lower() for name in provisioner.project_names_of(account)),
-        equal_to(sorted(expected_projects)),
+        equal_to(spec.project_names(account.email, world.project)),
         "no personal project may be created for the account by sending the session",
     )
 
@@ -355,7 +352,7 @@ def test_repository_registration_is_allowed_to_admins_and_refused_to_other_kinds
     exactly as they were."""
     world = account_world
     api = world.accounts[row.account].api
-    path = REPOSITORIES.format(project=world.project)
+    path = REPOSITORIES_PATH.format(project=world.project)
     existing, attempted = new_remote(), new_remote()
     world.provisioner.register(world.project, existing)
 
@@ -364,23 +361,14 @@ def test_repository_registration_is_allowed_to_admins_and_refused_to_other_kinds
     unregistered = api.request("DELETE", path, json={"remote": existing})
     stored = world.admin_api.request("GET", path)
 
-    status = REGISTRATION_ALLOWED_STATUS if row.allowed else REGISTRATION_REFUSED_STATUS
     assert_that(
         [registered.status_code, listed.status_code, unregistered.status_code],
-        equal_to([status] * 3),
+        equal_to([row.status] * 3),
         f"register, list and unregister: {registered.text[:100]} {unregistered.text[:100]}",
     )
-    keys = _keys_of(stored)
+    keys = repository_keys(stored)
     assert_that(
-        (_key_of(existing) in keys, _key_of(attempted) in keys),
+        (repository_key(existing) in keys, repository_key(attempted) in keys),
         equal_to((not row.allowed, row.allowed)),
         "the registrations left behind must be those the allowed calls made",
     )
-
-
-def _key_of(remote: str) -> str:
-    return remote.removeprefix("https://").removesuffix(".git")
-
-
-def _keys_of(response) -> list:
-    return [item["key"] for item in response.json()]

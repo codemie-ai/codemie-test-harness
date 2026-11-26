@@ -46,10 +46,12 @@ from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     assert_accepted,
 )
 from codemie_test_harness.tests.utils.cli_classification_utils import (
+    LINKED,
     ClassifiedSender,
     assert_rejected,
     assert_session_discarded,
     evidence_headers,
+    expected_routing,
     further_event,
     listed_session_ids_with,
     mixed_session_batch,
@@ -68,16 +70,7 @@ from codemie_test_harness.tests.utils.cli_gate_utils import (
     observe_absence_window,
 )
 
-LINKED = {"project_source": "linked_folder"}
 EXTERNAL_USER_TYPE = "external"
-
-
-def _routing(subscription_type, project_origin, route_note=None):
-    return {
-        "subscription_type": subscription_type,
-        "project_origin": project_origin,
-        "route_note": route_note,
-    }
 
 
 def _classification(subscription, organizations):
@@ -111,7 +104,7 @@ def test_destination_follows_link_then_registration_then_default(
         world.sender.client,
         batch,
         project=link,
-        project_source="linked_folder" if link else None,
+        project_source=row.project_source,
         repo_remote=world.remote(row.registered),
         **_classification(row.subscription, organizations),
     )
@@ -125,7 +118,7 @@ def test_destination_follows_link_then_registration_then_default(
     )
     assert_that(
         routing_of(stored),
-        equal_to(_routing(row.subscription, row.origin, row.note)),
+        equal_to(expected_routing(row.subscription, row.origin, row.note)),
         f"the session must be stored in project {row.project} with this classification and note",
     )
 
@@ -155,7 +148,7 @@ def test_unlinked_session_goes_to_the_default_project_and_is_marked(routing_worl
         (routing_of(stored), stored["routing_label"]),
         equal_to(
             (
-                _routing(UNKNOWN, DEFAULT_PROJECT, FOLDER_NOT_LINKED),
+                expected_routing(UNKNOWN, DEFAULT_PROJECT, FOLDER_NOT_LINKED),
                 FOLDER_NOT_LINKED_LABEL,
             )
         ),
@@ -185,7 +178,7 @@ def test_profile_project_wins_for_a_corporate_managed_launch(
         batch,
         organization=organizations.corporate,
         project=profile_project,
-        project_source="profile" if profile_project else None,
+        project_source=row.project_source,
         repo_remote=world.remote(row.registered),
     )
 
@@ -198,7 +191,7 @@ def test_profile_project_wins_for_a_corporate_managed_launch(
     )
     assert_that(
         routing_of(stored),
-        equal_to(_routing(CORPORATE, row.origin, row.note)),
+        equal_to(expected_routing(CORPORATE, row.origin, row.note)),
         f"the session must be stored in project {row.project} with this origin and note",
     )
 
@@ -229,7 +222,7 @@ def test_personal_session_of_an_ordinary_user_ignores_the_profile_project(
     owned = wait_for_session_row(world.sender.api, batch.session_id, batch.repo)
     assert_that(
         routing_of(owned),
-        equal_to(_routing(PERSONAL, PERSONAL)),
+        equal_to(expected_routing(PERSONAL, PERSONAL)),
         "a Personal session must be stored in the owner's personal project",
     )
     assert_that(

@@ -32,7 +32,13 @@ from dataclasses import dataclass
 
 import requests
 from codemie_sdk import CodeMieClient
-from hamcrest import assert_that, contains_string, empty, equal_to, has_length
+from hamcrest import (
+    assert_that,
+    contains_string,
+    equal_to,
+    greater_than_or_equal_to,
+    has_length,
+)
 
 from codemie_test_harness.tests.test_data.cli_account_test_data import (
     PROJECT_ADMIN,
@@ -59,9 +65,14 @@ from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
 )
 from codemie_test_harness.tests.utils.cli_gate_utils import Batch, make_batch
 from codemie_test_harness.tests.utils.client_factory import get_client
+from codemie_test_harness.tests.utils.logger_util import setup_logger
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
 
+logger = setup_logger(__name__)
+
 CLASSIFICATION_POLICY_PATH = f"{INGEST_PREFIX}/classification-policy"
+# Repository registration of a project (PUT, GET, DELETE); the SDK has no call for it.
+REPOSITORIES_PATH = "/v1/projects/{project}/repositories"
 SESSIONS_PATH = f"{INGEST_PREFIX}/sessions"
 COST_PATH = f"{INGEST_PREFIX}/cost"
 
@@ -92,6 +103,16 @@ def unique_organization() -> str:
 def new_remote() -> str:
     """A fresh repository remote on a placeholder host."""
     return f"https://example.com/autotest/{uuid.uuid4().hex}.git"
+
+
+def repository_key(remote: str) -> str:
+    """The normalized key the registration API stores a remote under."""
+    return remote.removeprefix("https://").removesuffix(".git")
+
+
+def repository_keys(response) -> list[str]:
+    """The keys of a GET registrations response."""
+    return [item["key"] for item in response.json()]
 
 
 def encode_organization(organization: str) -> str:
@@ -393,7 +414,10 @@ class CorporateList:
 
 def wait_until_profile(client: CodeMieClient, matches, what: str) -> None:
     """Wait until several consecutive profile reads (GET /v1/user, each possibly served by another
-    replica) satisfy `matches(profile)`; fails naming `what` otherwise."""
+    replica) satisfy `matches(profile)`; fails naming `what` otherwise.
+
+    The profile is read raw: the SDK's `about_me()` model drops user_type, is_maintainer and
+    is_auditor, the fields these waits are about."""
     api = CliAnalyticsApi(client)
     streak = [0]
 
@@ -410,8 +434,8 @@ def wait_until_profile(client: CodeMieClient, matches, what: str) -> None:
 
     poll_until(_read, lambda _: streak[0] >= _PROFILE_STREAK, 120, 2)
     assert_that(
-        streak[0] >= _PROFILE_STREAK,
-        equal_to(True),
+        streak[0],
+        greater_than_or_equal_to(_PROFILE_STREAK),
         f"{what} did not become effective on every replica",
     )
 
@@ -436,8 +460,8 @@ class Provisioner:
     """Creates users, shared projects and repository registrations and removes all of them.
 
     `cleanup` is called from the teardown of the fixture that owns the instance. It tries
-    every removal, registrations first, then projects (members first), then users, and raises
-    one error naming whatever is left on the stand.
+    every removal, registrations first, then projects (members first), then users, and logs
+    one warning naming whatever is left on the stand, so a leak never fails a passed test.
     """
 
     def __init__(
@@ -487,6 +511,7 @@ class Provisioner:
         if spec.first_login_type == REGULAR:
             password = self._keycloak.create_platform_user(email=email)
         else:
+            # The platform gives an external user or service account no personal project.
             password = self._keycloak.create_platform_user_of_type(
                 email, spec.first_login_type, personal_project=False
             )
@@ -557,6 +582,7 @@ class Provisioner:
     def _assert_stored_state(
         self, account: ClassifiedSender, spec: AccountSpec, project: str | None
     ) -> None:
+        # Raw read: the SDK's get_admin_user model (CodeMieUserDetail) drops is_auditor.
         response = self._admin_api.request("GET", f"/v1/admin/users/{account.user_id}")
         assert_that(
             response.status_code,
@@ -599,7 +625,7 @@ class Provisioner:
     def register(self, project: str, remote: str) -> dict:
         """Register `remote` to the project; returns the registration the API answered."""
         response = self._admin_api.request(
-            "PUT", f"/v1/projects/{project}/repositories", json={"remote": remote}
+            "PUT", REPOSITORIES_PATH.format(project=project), json={"remote": remote}
         )
         assert_that(
             response.status_code,
@@ -619,11 +645,16 @@ class Provisioner:
         failures = []
         for project, remote in self._registrations:
             try:
-                self._admin_api.request(
+                response = self._admin_api.request(
                     "DELETE",
-                    f"/v1/projects/{project}/repositories",
+                    REPOSITORIES_PATH.format(project=project),
                     json={"remote": remote},
                 )
+                # 404: a test already removed it.
+                if response.status_code not in (200, 404):
+                    failures.append(
+                        f"registration {remote} of {project}: HTTP {response.status_code}"
+                    )
             except Exception as e:
                 failures.append(f"registration {remote} of {project}: {e}")
         try:
@@ -635,4 +666,5 @@ class Provisioner:
                 self._keycloak.delete_user(email)
             except Exception as e:
                 failures.append(f"user {email}: {e}")
-        assert_that(failures, empty(), "left behind on the stand")
+        if failures:
+            logger.warning("Left behind on the stand: " + "; ".join(failures))
