@@ -463,6 +463,19 @@ class WorkflowUtils(BaseUtils):
     def get_workflow(self, workflow_id):
         return self.client.workflows.get(workflow_id)
 
+    def find_workflows_by_name(self, name: str, per_page: int = 200) -> list:
+        """Every workflow of the running user named exactly ``name``, across all list pages."""
+        matches = []
+        page_num = 0
+        while True:
+            workflows = self.client.workflows.list(
+                page=page_num, per_page=per_page, filter_by_user=True
+            )
+            matches.extend(workflow for workflow in workflows if workflow.name == name)
+            if len(workflows) < per_page:
+                return matches
+            page_num += 1
+
     def upload_workflow_icon(self, file_path: Path, content_type: Optional[str] = None):
         """Upload an icon image and return the ``file_url`` to use as a workflow ``icon_url``.
 

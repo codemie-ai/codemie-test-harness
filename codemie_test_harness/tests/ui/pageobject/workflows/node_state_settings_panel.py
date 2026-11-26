@@ -15,10 +15,17 @@
 """Page object for the State Settings of any node configuration panel.
 
 The Tool, Sub-workflow, Custom, Assistant and Transform panels share the same
-State Settings block (State ID, Task, Output Schema, four switches). Which of its
-fields are rendered depends on the node type; this class asserts that.
+State Settings block (State ID, Task, four switches) and a "Contracts" block (Input
+contract, Output contract, Save validation). Which of their fields are rendered depends
+on the node type; this class asserts that.
+
+Contracts evidence (frontend): ContractFields.tsx (labels, placeholders, select id
+``node_validation_mode_select``), CommonStateFields.tsx (the "Contracts" accordion,
+expanded by default), Textarea.tsx / FieldAnnouncer.tsx (amber warning and red error
+styling of a field).
 """
 
+import re
 from typing import Optional
 
 from playwright.sync_api import Locator, Page, expect
@@ -28,6 +35,10 @@ from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 
 CUSTOM_NODE_TYPE_PLACEHOLDER = "Select a custom node type"
 REQUIRED_FIELD_ERROR = "Field is required"
+NODE_SAVE_VALIDATION_SELECT_ID = "node_validation_mode_select"
+FIELD_WARNING_BORDER_CLASS = "border-aborted-secondary"
+FIELD_ERROR_BORDER_CLASS = "border-border-error"
+FIELD_WARNING_TEXT_CLASS = "text-aborted-primary"
 
 
 class NodeStateSettingsPanel(BasePage):
@@ -65,6 +76,33 @@ class NodeStateSettingsPanel(BasePage):
         return self.config_panel.get_by_placeholder(
             "Expected output format (JSON Schema)", exact=True
         )
+
+    @property
+    def input_contract_textarea(self) -> Locator:
+        """Input contract textarea of the Contracts block."""
+        return self.config_panel.get_by_placeholder(
+            "Expected input format (JSON Schema)", exact=True
+        )
+
+    @property
+    def save_validation_select(self) -> Locator:
+        """Node-level 'Save validation' select of the Contracts block."""
+        return self.config_panel.locator(f"#{NODE_SAVE_VALIDATION_SELECT_ID}")
+
+    @property
+    def contracts_heading(self) -> Locator:
+        """Heading of the 'Contracts' accordion."""
+        return self.config_panel.get_by_role("heading", name="Contracts", exact=True)
+
+    @property
+    def field_warnings(self) -> Locator:
+        """Amber inline warning messages under the panel fields."""
+        return self.config_panel.locator(f".{FIELD_WARNING_TEXT_CLASS}")
+
+    @property
+    def field_errors(self) -> Locator:
+        """Inline error messages under the panel fields."""
+        return self.config_panel.get_by_role("alert")
 
     @property
     def other_state_settings_switches(self) -> list[Locator]:
@@ -127,6 +165,12 @@ class NodeStateSettingsPanel(BasePage):
         return self
 
     @step
+    def fill_input_contract(self, schema: str):
+        """Replace the Input contract text."""
+        self.input_contract_textarea.fill(schema)
+        return self
+
+    @step
     def click_save(self):
         """Click Save in the node configuration panel footer."""
         self.save_button.click()
@@ -171,6 +215,71 @@ class NodeStateSettingsPanel(BasePage):
     def should_have_output_schema_visibility(self, visible: bool):
         """Verify the Output Schema textarea is shown (visible=True) or absent (visible=False)."""
         self._expect_presence(self.output_schema_textarea, visible)
+        return self
+
+    @step
+    def should_have_output_schema_value(self, value: str):
+        """Verify the Output contract textarea is shown with ``value``."""
+        expect(self.output_schema_textarea).to_have_value(value)
+        return self
+
+    @step
+    def should_have_input_contract_visibility(self, visible: bool):
+        """Verify the Input contract textarea is shown (visible=True) or absent (visible=False)."""
+        self._expect_presence(self.input_contract_textarea, visible)
+        return self
+
+    @step
+    def should_have_save_validation_visibility(self, visible: bool):
+        """Verify the node 'Save validation' select is shown (visible=True) or absent."""
+        self._expect_presence(self.save_validation_select, visible)
+        if visible:
+            expect(
+                self.config_panel.get_by_text("Save validation", exact=True)
+            ).to_be_visible()
+        return self
+
+    @step
+    def should_have_contracts_accordion_expanded(self):
+        """Verify the 'Contracts' accordion is shown and expanded (its Input contract is visible)."""
+        expect(self.contracts_heading).to_be_visible()
+        expect(self.input_contract_textarea).to_be_visible()
+        return self
+
+    @step
+    def should_have_no_contract_controls(self):
+        """Verify the panel has no Contracts accordion, Input contract, Output contract or
+        Save validation."""
+        expect(self.contracts_heading).to_have_count(0)
+        expect(self.input_contract_textarea).to_have_count(0)
+        expect(self.output_schema_textarea).to_have_count(0)
+        expect(self.save_validation_select).to_have_count(0)
+        return self
+
+    @step
+    def should_show_panel_text(self, text: str):
+        """Verify the panel shows ``text``; proves the panel of the expected node type rendered."""
+        expect(self.config_panel).to_contain_text(text)
+        return self
+
+    @step
+    def should_have_task_warning(self, message: str):
+        """Verify the Task field has the amber warning border and the amber inline ``message``."""
+        expect(self.task_textarea).to_be_visible()
+        expect(self.task_textarea).to_have_class(
+            re.compile(re.escape(FIELD_WARNING_BORDER_CLASS))
+        )
+        expect(self.field_warnings.filter(has_text=message).first).to_be_visible()
+        return self
+
+    @step
+    def should_have_input_contract_error(self, message: str):
+        """Verify the Input contract field has the red error border and the inline ``message``."""
+        expect(self.input_contract_textarea).to_be_visible()
+        expect(self.input_contract_textarea).to_have_class(
+            re.compile(re.escape(FIELD_ERROR_BORDER_CLASS))
+        )
+        expect(self.field_errors.filter(has_text=message).first).to_be_visible()
         return self
 
     @step

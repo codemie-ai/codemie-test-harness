@@ -154,6 +154,7 @@ class CreateWorkflowPage(BaseWorkflowFormPage):
         yaml_config: str = "",
         shared: bool = False,
         categories: list[str] | None = None,
+        save_and_run: bool = False,
     ):
         """
         Complete workflow creation with provided details using YAML Editor.
@@ -166,6 +167,7 @@ class CreateWorkflowPage(BaseWorkflowFormPage):
             yaml_config: YAML configuration (optional)
             shared: Whether to share with project team (optional)
             categories: Names of categories to select (optional, up to 3)
+            save_and_run: Finish with the header 'Save and Run' instead of 'Save'
         """
 
         name = name or get_random_name()
@@ -209,7 +211,26 @@ class CreateWorkflowPage(BaseWorkflowFormPage):
             workflow_config_panel.click_save()
 
         # Save workflow
-        self.click_save()
+        if save_and_run:
+            self.click_save_and_run()
+        else:
+            self.click_save()
+
+    @step
+    def fill_draft(self, name: str, yaml_config: str):
+        """Fill the Name (Basic tab) and the YAML of a new workflow without saving the workflow.
+
+        Each panel's own Save commits its fields to the draft; the header Save is not clicked.
+        """
+        workflow_config_panel = self.open_workflow_config_panel()
+        workflow_config_panel.switch_to_basic_tab()
+        workflow_config_panel.fill_name(name)
+        workflow_config_panel.click_save()
+
+        workflow_config_panel = self.open_yaml_panel()
+        workflow_config_panel.fill_yaml_config(yaml_config)
+        workflow_config_panel.click_save()
+        return self
 
     # ==================== VERIFICATION METHODS ====================
     @step

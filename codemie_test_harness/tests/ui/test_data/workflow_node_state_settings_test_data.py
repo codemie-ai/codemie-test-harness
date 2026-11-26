@@ -14,9 +14,14 @@
 
 """Test data for the workflow node-panel State Settings visibility tests.
 
-Covers which State Settings fields (Task, Output Schema, the other switches) the
-visual editor shows for each node type, and that values stored in fields the panel
-hides survive editing another setting and saving.
+Covers which State Settings fields (Task, the other switches) and Contracts fields
+(Input contract, Output contract, Save validation) the visual editor shows for each node
+type, and that stored values survive editing another setting and saving.
+
+The Output contract shows on Assistant, Tool, Sub-workflow and Custom panels; Transform
+keeps its own output control and shows only Input contract and Save validation
+(frontend ToolTab.tsx, SubWorkflowTab.tsx, CustomTab.tsx, AssistantTab.tsx
+``contractFields="full"``; TransformTab.tsx ``contractFields="input"``).
 """
 
 from dataclasses import dataclass
@@ -44,7 +49,7 @@ _TRANSFORM_ACTOR_ID = "transform_node"
 _ASSISTANT_ID = "node_assistant"
 _TOOL_ID = "node_tool"
 
-# Values stored in YAML on nodes whose panel hides them.
+# Values stored in YAML; the panel hides the Task on Tool and Sub-workflow nodes.
 SEEDED_TASK = "Seeded task kept for hidden-value check"
 SEEDED_OUTPUT_SCHEMA = '{"type": "object"}'
 
@@ -94,6 +99,8 @@ class NonCustomNodeVisibilityCase:
     output_schema_visible: bool
     # Interrupt Before, Finish Iteration, Resolve Dynamic Values in Prompt, Result as Human Message.
     other_settings_visible: bool
+    # Input contract and the node Save validation select of the Contracts block.
+    contract_linking_visible: bool
 
 
 @dataclass(frozen=True)
@@ -111,32 +118,45 @@ class CustomNodeVisibilityCase:
 
 @dataclass(frozen=True)
 class HiddenValueCase:
-    """Node whose stored Task/Output Schema must survive an unrelated edit and save."""
+    """Node whose stored Task/Output contract must survive an unrelated edit and save."""
 
     case_id: str
     node_kind: NodeKind
     custom_node_type: Optional[CustomNodeType]
-    # The Custom state-processor panel shows Task; every other value stays hidden.
+    # The Custom state-processor panel shows Task; Tool and Sub-workflow hide it.
     task_visible: bool
 
 
 NON_CUSTOM_NODE_VISIBILITY_CASES = [
     NonCustomNodeVisibilityCase(
-        "tool", NodeKind.TOOL, "Tool Configuration", False, False, True
+        "tool", NodeKind.TOOL, "Tool Configuration", False, True, True, True
     ),
     NonCustomNodeVisibilityCase(
         "sub-workflow",
         NodeKind.SUB_WORKFLOW,
         "Sub-Workflow Configuration",
         False,
-        False,
+        True,
+        True,
         True,
     ),
     NonCustomNodeVisibilityCase(
-        "assistant", NodeKind.ASSISTANT, "Assistant Configuration", True, True, True
+        "assistant",
+        NodeKind.ASSISTANT,
+        "Assistant Configuration",
+        True,
+        True,
+        True,
+        True,
     ),
     NonCustomNodeVisibilityCase(
-        "transform", NodeKind.TRANSFORM, "Transform Configuration", False, False, False
+        "transform",
+        NodeKind.TRANSFORM,
+        "Transform Configuration",
+        False,
+        False,
+        False,
+        True,
     ),
 ]
 
@@ -178,7 +198,8 @@ def build_node_workflow_yaml(
         node_kind: Which kind of node the state is.
         custom_node_type: Required for ``NodeKind.CUSTOM``.
         sub_workflow_id: Required for ``NodeKind.SUB_WORKFLOW``; the workflow to call.
-        with_hidden_values: Seed ``SEEDED_TASK`` / ``SEEDED_OUTPUT_SCHEMA`` on the state.
+        with_hidden_values: Seed ``SEEDED_TASK`` / ``SEEDED_OUTPUT_SCHEMA`` on the state
+            (the panel hides the Task of Tool and Sub-workflow nodes).
         with_required_config: For the state-processor custom node, seed its required
             Output Template config; ``False`` leaves the node unconfigured.
     """

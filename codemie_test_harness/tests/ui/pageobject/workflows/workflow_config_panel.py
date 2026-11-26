@@ -264,6 +264,28 @@ class WorkflowConfigPanel:
         """Workflow-level Headroom controls."""
         return HeadroomSettings(self.page, self.headroom_region)
 
+    # ------ Contracts Elements (in Advanced Tab) ------
+    # Evidence (frontend): AdvancedConfigTab.tsx "Contracts" accordion, collapsed by default;
+    # contractModes.ts WORKFLOW_MODE_SELECT_ID; switch id "require_input_contracts".
+    @property
+    def contracts_accordion(self) -> Locator:
+        """'Contracts' accordion header of the Advanced tab; collapsed by default."""
+        return self.config_panel.get_by_role("button", name="Contracts", exact=True)
+
+    @property
+    def workflow_save_validation_select(self) -> Locator:
+        """Workflow-level 'Save validation' select."""
+        return self.config_panel.locator("#workflow_validation_mode_select")
+
+    @property
+    def require_input_contracts_switch(self) -> Locator:
+        """'Require input contracts' switch."""
+        return self.config_panel.get_by_role("switch", name="Require input contracts")
+
+    def save_validation_option(self, label: str) -> Locator:
+        """Option of the opened 'Save validation' list; the list renders at page level."""
+        return self.page.get_by_role("option", name=label, exact=True)
+
     # ------ Footer Buttons (in Config Panel) ------
     @property
     def save_button(self) -> Locator:
@@ -562,6 +584,23 @@ class WorkflowConfigPanel:
         return self.headroom
 
     @step
+    def open_contracts_settings(self):
+        """Open the Advanced tab and expand its 'Contracts' accordion."""
+        self.switch_to_advanced_tab()
+        expect(self.contracts_accordion).to_be_visible()
+        if self.contracts_accordion.get_attribute("aria-expanded") != "true":
+            self.contracts_accordion.click()
+        expect(self.contracts_accordion).to_have_attribute("aria-expanded", "true")
+        return self
+
+    @step
+    def select_workflow_save_validation(self, label: str):
+        """Choose a workflow-level 'Save validation' option."""
+        self.workflow_save_validation_select.click()
+        self.save_validation_option(label).click()
+        return self
+
+    @step
     def save_configuration(self):
         """Save the panel and wait for its confirmation; the panel closes."""
         self.save_button.click()
@@ -754,6 +793,44 @@ class WorkflowConfigPanel:
         assert expected_lines == actual_lines, (
             f"YAML content mismatch.\nExpected:\n{expected_config}\n\nActual:\n{yaml_content_cleaned}"
         )
+
+    @step
+    def should_have_yaml_tab_selected(self):
+        """The panel shows its YAML tab."""
+        expect(self.config_panel).to_be_visible()
+        expect(self.yaml_tab).to_have_attribute("aria-selected", "true")
+        return self
+
+    @step
+    def should_have_yaml_cursor_on_line_containing(self, text: str):
+        """The YAML editor cursor sits on a line that contains ``text`` (read through the Ace API)."""
+        expect(self.yaml_editor_text_layer).to_be_visible()
+        self.page.wait_for_function(
+            """(text) => {
+                const el = document.querySelector('[data-name="yaml_config"]');
+                if (!(el && el.env && el.env.editor)) return false;
+                const editor = el.env.editor;
+                const row = editor.getCursorPosition().row;
+                return editor.session.getLine(row).includes(text);
+            }""",
+            arg=text,
+        )
+        return self
+
+    # ------ Contracts Verifications ------
+    @step
+    def should_have_contracts_controls(self):
+        """The workflow-level 'Save validation' select and 'Require input contracts' switch are shown."""
+        expect(self.workflow_save_validation_select).to_be_visible()
+        expect(
+            self.config_panel.get_by_text("Save validation", exact=True)
+        ).to_be_visible()
+        # The switch input is visually hidden (sr-only), so count it in the DOM.
+        expect(self.require_input_contracts_switch).to_have_count(1)
+        expect(
+            self.config_panel.get_by_text("Require input contracts", exact=True)
+        ).to_be_visible()
+        return self
 
     # ------ Config Panel Verifications ------
     @step

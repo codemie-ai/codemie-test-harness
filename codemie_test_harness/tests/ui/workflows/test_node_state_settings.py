@@ -12,16 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""State Settings of the workflow node configuration panels.
+"""State Settings and Contracts of the workflow node configuration panels.
 
-The Task and Output Schema fields are shown only for node types whose backend
-behaviour uses them:
+The Task field is shown only for node types whose backend behaviour uses it; the
+Contracts block (expanded by default) holds Input contract, Output contract and the
+node Save validation select:
 
-- Tool and Sub-workflow: neither field.
-- Custom: never Output Schema; Task only for the state-processor type, and not
-  before a type is chosen.
-- Assistant: both fields.
-- Transform: neither, and also none of the four State Settings switches.
+- Tool and Sub-workflow: no Task; Input contract, Output contract, Save validation.
+- Custom: Task only for the state-processor type, and not before a type is chosen;
+  Input contract, Output contract, Save validation for every type.
+- Assistant: Task; Input contract, Output contract, Save validation.
+- Transform: no Task, none of the four State Settings switches, and of the Contracts
+  only Input contract and Save validation (its output control lives in the Transform
+  form).
 
 Values stored in a field the panel hides must survive editing another setting.
 """
@@ -59,8 +62,10 @@ def test_non_custom_node_panel_shows_task_and_output_schema_only_where_used(
     page, create_node_workflow, case
 ):
     # @case workflow-editor-task-output-schema_TC_001
-    """Tool and Sub-workflow hide Task and Output Schema, Assistant shows both,
-    Transform hides both and the four State Settings switches."""
+    # @case save-time-contract-editor-controls_TC_001
+    """Tool and Sub-workflow hide Task and show the three contract controls, Assistant
+    shows Task and the three contract controls, Transform hides Task, the four State
+    Settings switches and the Output contract but shows Input contract and Save validation."""
     workflow = create_node_workflow(case.node_kind)
     edit_page = EditWorkflowPage(page)
     edit_page.navigate_to(workflow.id)
@@ -72,6 +77,9 @@ def test_non_custom_node_panel_shows_task_and_output_schema_only_where_used(
     panel.should_have_task_visibility(case.task_visible)
     panel.should_have_output_schema_visibility(case.output_schema_visible)
     panel.should_have_other_state_settings_visibility(case.other_settings_visible)
+    panel.should_have_contracts_accordion_expanded()
+    panel.should_have_input_contract_visibility(case.contract_linking_visible)
+    panel.should_have_save_validation_visibility(case.contract_linking_visible)
 
 
 @pytest.mark.workflow
@@ -86,7 +94,9 @@ def test_custom_node_panel_hides_output_schema_and_shows_task_only_for_state_pro
     page, create_node_workflow, case
 ):
     # @case workflow-editor-task-output-schema_TC_001
-    """Custom panel: Output Schema is hidden for every type, Task only for state-processor."""
+    # @case save-time-contract-editor-controls_TC_001
+    """Custom panel: Input contract, Output contract and Save validation for every type,
+    Task only for state-processor."""
     workflow = create_node_workflow(NodeKind.CUSTOM, case.custom_node_type)
     edit_page = EditWorkflowPage(page)
     edit_page.navigate_to(workflow.id)
@@ -96,8 +106,11 @@ def test_custom_node_panel_hides_output_schema_and_shows_task_only_for_state_pro
     panel.should_be_visible()
     panel.should_have_selected_custom_node_type(case.type_label)
     panel.should_have_task_visibility(case.task_visible)
-    panel.should_have_output_schema_visibility(False)
+    panel.should_have_output_schema_visibility(True)
     panel.should_have_other_state_settings_visibility(True)
+    panel.should_have_contracts_accordion_expanded()
+    panel.should_have_input_contract_visibility(True)
+    panel.should_have_save_validation_visibility(True)
 
 
 @pytest.mark.workflow
@@ -106,7 +119,8 @@ def test_custom_node_panel_hides_output_schema_and_shows_task_only_for_state_pro
 def test_custom_node_task_field_follows_type_selection_before_save(page, test_workflow):
     # @case workflow-editor-task-output-schema_TC_001
     """A new Custom node hides Task until a type that uses it is chosen; Task then
-    appears and disappears as the type changes, with nothing saved."""
+    appears and disappears as the type changes, with nothing saved. The Output contract
+    shows throughout."""
     edit_page = EditWorkflowPage(page)
     edit_page.navigate_to(test_workflow.id)
 
@@ -116,7 +130,7 @@ def test_custom_node_task_field_follows_type_selection_before_save(page, test_wo
     panel.should_be_visible()
     panel.should_have_selected_custom_node_type(None)
     panel.should_have_task_visibility(False)
-    panel.should_have_output_schema_visibility(False)
+    panel.should_have_output_schema_visibility(True)
 
     panel.select_custom_node_type(
         CUSTOM_NODE_TYPE_LABELS[CustomNodeType.STATE_PROCESSOR]
@@ -125,7 +139,7 @@ def test_custom_node_task_field_follows_type_selection_before_save(page, test_wo
         CUSTOM_NODE_TYPE_LABELS[CustomNodeType.STATE_PROCESSOR]
     )
     panel.should_have_task_visibility(True)
-    panel.should_have_output_schema_visibility(False)
+    panel.should_have_output_schema_visibility(True)
 
     panel.select_custom_node_type(
         CUSTOM_NODE_TYPE_LABELS[CustomNodeType.GENERATE_DOCUMENTS_TREE]
@@ -134,7 +148,7 @@ def test_custom_node_task_field_follows_type_selection_before_save(page, test_wo
         CUSTOM_NODE_TYPE_LABELS[CustomNodeType.GENERATE_DOCUMENTS_TREE]
     )
     panel.should_have_task_visibility(False)
-    panel.should_have_output_schema_visibility(False)
+    panel.should_have_output_schema_visibility(True)
 
 
 @pytest.mark.workflow
@@ -147,8 +161,8 @@ def test_hidden_task_and_output_schema_survive_editing_another_setting(
     page, create_node_workflow, workflow_utils, case
 ):
     # @case workflow-editor-task-output-schema_TC_006
-    """Editing only the State ID and saving keeps the stored Task and Output Schema,
-    including the ones the panel does not display."""
+    """Editing only the State ID and saving keeps the stored Task and Output contract,
+    including a Task the panel does not display; the Output contract shows its value."""
     workflow = create_node_workflow(
         case.node_kind, case.custom_node_type, with_hidden_values=True
     )
@@ -158,7 +172,7 @@ def test_hidden_task_and_output_schema_survive_editing_another_setting(
     panel = edit_page.open_node_config_panel(NODE_STATE_ID)
     panel.should_be_visible()
     panel.should_have_task_visibility(case.task_visible)
-    panel.should_have_output_schema_visibility(False)
+    panel.should_have_output_schema_value(SEEDED_OUTPUT_SCHEMA)
 
     panel.fill_state_id(RENAMED_NODE_STATE_ID)
     panel.click_save()
