@@ -144,50 +144,52 @@ class ConfluenceUtils:
         response.raise_for_status()
         return response.json()["id"]
 
-    def get_page_storage_body(self, page_id: str) -> str:
-        """Return the storage-format body of a page."""
+    def _get(self, url: str, headers: Optional[dict] = None, **kwargs):
+        """GET with this instance's auth; raises on an error status."""
         response = requests.get(
-            url=f"{self.confluence_url}{self.search_api_path}/{page_id}",
-            headers=self.headers,
+            url=url,
+            headers=self.headers if headers is None else headers,
             auth=self.auth,
-            params={"expand": "body.storage"},
             verify=True,
             timeout=60,
+            **kwargs,
         )
         response.raise_for_status()
+        return response
+
+    def get_page_storage_body(self, page_id: str) -> str:
+        """Return the storage-format body of a page."""
+        response = self._get(
+            f"{self.confluence_url}{self.search_api_path}/{page_id}",
+            params={"expand": "body.storage"},
+        )
         return response.json()["body"]["storage"]["value"]
 
     def list_attachments(self, page_id: str) -> list[dict]:
         """Return the attachments of a page (each with ``title`` and ``_links.download``)."""
-        response = requests.get(
-            url=f"{self.confluence_url}{self.search_api_path}/{page_id}/child/attachment",
-            headers=self.headers,
-            auth=self.auth,
+        response = self._get(
+            f"{self.confluence_url}{self.search_api_path}/{page_id}/child/attachment",
             params={"limit": 100},
-            verify=True,
-            timeout=60,
         )
-        response.raise_for_status()
         return response.json().get("results", [])
 
     def download_attachment(self, attachment: dict) -> bytes:
-        """Return the bytes of an attachment returned by ``list_attachments``."""
+        """Return the bytes of an attachment returned by ``list_attachments``.
+
+        Only the Server path is exercised by the tests. The Cloud branch is untested: Cloud
+        serves downloads through a redirect to its media host, which may drop Basic auth.
+        """
         # The download link is relative to the site base, which on Cloud includes /wiki.
         site_base = (
             f"{self.confluence_url}/wiki" if self.is_cloud else self.confluence_url
         )
+        # JSON Accept/Content-Type headers do not apply to a binary download.
         headers = {
             key: value for key, value in self.headers.items() if key == "Authorization"
         }
-        response = requests.get(
-            url=f"{site_base}{attachment['_links']['download']}",
-            headers=headers,
-            auth=self.auth,
-            verify=True,
-            timeout=60,
-        )
-        response.raise_for_status()
-        return response.content
+        return self._get(
+            f"{site_base}{attachment['_links']['download']}", headers=headers
+        ).content
 
     def find_seed_page_id(self) -> Optional[str]:
         return find_seed_page_id(self.search_pages_in_space())

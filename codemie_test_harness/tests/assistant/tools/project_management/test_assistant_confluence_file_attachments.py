@@ -20,7 +20,9 @@ tool output saved in the conversation thoughts, and the page's attachments read 
 Confluence itself.
 """
 
+import logging
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 
 import pytest
 from hamcrest import (
@@ -29,6 +31,7 @@ from hamcrest import (
     contains_string,
     empty,
     equal_to,
+    has_entry,
     has_item,
     is_not,
 )
@@ -63,11 +66,7 @@ from codemie_test_harness.tests.utils.workspace_script_utils import upload_text_
 
 SUCCESS_WORDING = "Successfully attached"
 
-
-@dataclass
-class AttachmentPage:
-    page_id: str
-    marker: str
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -82,13 +81,13 @@ def confluence_utils():
 
 
 @pytest.fixture
-def attachment_page(confluence_utils, confluence_page_cleanup) -> AttachmentPage:
-    """A fresh Confluence Server page with no attachments; deleted at teardown with its attachments."""
-    title = attachment_page_title()
-    confluence_page_cleanup.append(title)
-    marker = random_suffix()
-    page_id = confluence_utils.create_page(title, page_body(marker))
-    return AttachmentPage(page_id=page_id, marker=marker)
+def attachment_page_id(confluence_utils) -> str:
+    """Id of a fresh Confluence Server page with no attachments; deleted by id at teardown."""
+    page_id = confluence_utils.create_page(
+        attachment_page_title(), page_body(random_suffix())
+    )
+    yield page_id
+    confluence_utils.delete_confluence_page(page_id)
 
 
 @pytest.fixture
@@ -121,8 +120,8 @@ def conversation_workspace(client, conversation_utils, confluence_assistant):
     for conversation_id in created:
         try:
             conversation_utils.delete_conversation(conversation_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to delete conversation '{conversation_id}': {e}")
 
 
 def write_generated_file(client, conversation: ConversationWorkspace, name, content):
@@ -132,6 +131,14 @@ def write_generated_file(client, conversation: ConversationWorkspace, name, cont
         item.path for item in client.workspaces.list_files(conversation.workspace_id)
     ]
     assert_that(paths, has_item(name), f"'{name}' is in the workspace")
+
+
+def workspace_file_sizes(client, conversation: ConversationWorkspace) -> dict:
+    """Path -> size of every file in the conversation workspace."""
+    return {
+        item.path: item.size
+        for item in client.workspaces.list_files(conversation.workspace_id)
+    }
 
 
 def ask_to_attach(
@@ -179,7 +186,7 @@ def test_attach_generated_json_file_to_confluence_page_by_exact_name(
     confluence_utils,
     confluence_assistant,
     conversation_workspace,
-    attachment_page,
+    attachment_page_id,
 ):
     # @case confluence-generated-file-attachments_TC_001
     conversation = conversation_workspace()
@@ -192,7 +199,7 @@ def test_attach_generated_json_file_to_confluence_page_by_exact_name(
         assistant_utils,
         confluence_assistant,
         conversation,
-        attach_prompt(attachment_page.page_id, "POST", {"file": name}),
+        attach_prompt(attachment_page_id, "POST", {"file": name}),
     )
 
     output = confluence_tool_output(conversation_utils, conversation.conversation_id)
@@ -200,11 +207,11 @@ def test_attach_generated_json_file_to_confluence_page_by_exact_name(
         output,
         all_of(
             contains_string(ATTACHED_MESSAGE.format(name=name)),
-            contains_string(ATTACHED_TO_PAGE.format(page_id=attachment_page.page_id)),
+            contains_string(ATTACHED_TO_PAGE.format(page_id=attachment_page_id)),
         ),
         "the tool reports the file attached to the page",
     )
-    attachments = confluence_utils.list_attachments(attachment_page.page_id)
+    attachments = confluence_utils.list_attachments(attachment_page_id)
     assert_that(
         [item["title"] for item in attachments],
         equal_to([name]),
@@ -216,7 +223,7 @@ def test_attach_generated_json_file_to_confluence_page_by_exact_name(
         "the attachment holds the generated file's bytes",
     )
     assert_that(
-        confluence_utils.get_page_storage_body(attachment_page.page_id),
+        confluence_utils.get_page_storage_body(attachment_page_id),
         is_not(contains_string(json_marker)),
         "the JSON content is not written into the page body",
     )
@@ -233,7 +240,7 @@ def test_attach_file_generated_in_another_conversation_is_not_found(
     confluence_utils,
     confluence_assistant,
     conversation_workspace,
-    attachment_page,
+    attachment_page_id,
 ):
     # @case confluence-generated-file-attachments_TC_002
     conversation_a = conversation_workspace()
@@ -247,7 +254,7 @@ def test_attach_file_generated_in_another_conversation_is_not_found(
         assistant_utils,
         confluence_assistant,
         conversation_a,
-        attach_prompt(attachment_page.page_id, "POST", {"file": foreign_name}),
+        attach_prompt(attachment_page_id, "POST", {"file": foreign_name}),
     )
 
     assert_that(
@@ -258,7 +265,7 @@ def test_attach_file_generated_in_another_conversation_is_not_found(
         "the file of conversation B is not found, and only conversation A's file is offered",
     )
     assert_that(
-        attachment_titles(confluence_utils, attachment_page.page_id),
+        attachment_titles(confluence_utils, attachment_page_id),
         empty(),
         "nothing is attached to the page",
     )
@@ -280,7 +287,7 @@ def test_attach_unmatched_file_name_reports_not_found_and_attaches_nothing(
     confluence_utils,
     confluence_assistant,
     conversation_workspace,
-    attachment_page,
+    attachment_page_id,
     variant,
 ):
     # @case confluence-generated-file-attachments_TC_003
@@ -289,13 +296,16 @@ def test_attach_unmatched_file_name_reports_not_found_and_attaches_nothing(
     known_name = f"report-{suffix}.json"
     unknown_name = f"{variant.unknown_prefix}-{suffix}.json"
     write_generated_file(client, conversation, known_name, json_report_content(suffix))
-    requested = [known_name, unknown_name] if variant.include_known else unknown_name
 
     ask_to_attach(
         assistant_utils,
         confluence_assistant,
         conversation,
-        attach_prompt(attachment_page.page_id, "POST", {variant.param: requested}),
+        attach_prompt(
+            attachment_page_id,
+            "POST",
+            {variant.param: variant.requested(known_name, unknown_name)},
+        ),
     )
 
     assert_that(
@@ -309,7 +319,7 @@ def test_attach_unmatched_file_name_reports_not_found_and_attaches_nothing(
         "the unmatched name is reported with the available files, and nothing is attached",
     )
     assert_that(
-        attachment_titles(confluence_utils, attachment_page.page_id),
+        attachment_titles(confluence_utils, attachment_page_id),
         empty(),
         "no attachment, not even the known file",
     )
@@ -331,19 +341,23 @@ def test_attach_empty_file_and_no_file_named_get_distinct_messages(
     confluence_utils,
     confluence_assistant,
     conversation_workspace,
-    attachment_page,
+    attachment_page_id,
     variant,
 ):
     # @case confluence-generated-file-attachments_TC_004
     conversation = conversation_workspace()
-    # assumed: the workspace write accepts empty content and stores a 0-byte file.
     write_generated_file(client, conversation, EMPTY_FILE_NAME, "")
+    assert_that(
+        workspace_file_sizes(client, conversation),
+        has_entry(EMPTY_FILE_NAME, 0),
+        "precondition: the workspace stores the empty file as 0 bytes",
+    )
 
     ask_to_attach(
         assistant_utils,
         confluence_assistant,
         conversation,
-        attach_prompt(attachment_page.page_id, "POST", variant.params),
+        attach_prompt(attachment_page_id, "POST", variant.params),
     )
 
     assert_that(
@@ -355,7 +369,7 @@ def test_attach_empty_file_and_no_file_named_get_distinct_messages(
         f"the {variant.variant} message is reported, not the other variant's",
     )
     assert_that(
-        attachment_titles(confluence_utils, attachment_page.page_id),
+        attachment_titles(confluence_utils, attachment_page_id),
         empty(),
         "nothing is attached to the page",
     )
@@ -372,7 +386,7 @@ def test_attach_several_files_partly_reports_attached_and_not_attempted(
     confluence_utils,
     confluence_assistant,
     conversation_workspace,
-    attachment_page,
+    attachment_page_id,
 ):
     # @case confluence-generated-file-attachments_TC_005
     conversation = conversation_workspace()
@@ -385,7 +399,7 @@ def test_attach_several_files_partly_reports_attached_and_not_attempted(
         assistant_utils,
         confluence_assistant,
         conversation,
-        attach_prompt(attachment_page.page_id, "POST", {"files": PARTIAL_FILES}),
+        attach_prompt(attachment_page_id, "POST", {"files": PARTIAL_FILES}),
     )
 
     assert_that(
@@ -400,7 +414,7 @@ def test_attach_several_files_partly_reports_attached_and_not_attempted(
         "the tool lists the attached file and the file it never tried separately",
     )
     assert_that(
-        attachment_titles(confluence_utils, attachment_page.page_id),
+        attachment_titles(confluence_utils, attachment_page_id),
         equal_to([first]),
         "only the file before the empty one is attached",
     )
@@ -418,7 +432,7 @@ def test_non_upload_method_on_attachment_url_is_not_an_upload(
     confluence_utils,
     confluence_assistant,
     conversation_workspace,
-    attachment_page,
+    attachment_page_id,
     method,
 ):
     # @case confluence-generated-file-attachments_TC_007
@@ -430,7 +444,7 @@ def test_non_upload_method_on_attachment_url_is_not_an_upload(
         assistant_utils,
         confluence_assistant,
         conversation,
-        attach_prompt(attachment_page.page_id, method, None),
+        attach_prompt(attachment_page_id, method, None),
     )
 
     assert_that(
@@ -442,7 +456,7 @@ def test_non_upload_method_on_attachment_url_is_not_an_upload(
         f"{method} goes to Confluence as a plain request, not as an upload",
     )
     assert_that(
-        attachment_titles(confluence_utils, attachment_page.page_id),
+        attachment_titles(confluence_utils, attachment_page_id),
         empty(),
         "the attachment count is unchanged (zero)",
     )
@@ -459,14 +473,13 @@ def test_attach_name_shared_by_upload_and_generated_file_is_ambiguous(
     confluence_utils,
     confluence_assistant,
     conversation_workspace,
-    attachment_page,
+    attachment_page_id,
 ):
     # @case confluence-generated-file-attachments_TC_008
     conversation = conversation_workspace()
     name = json_report_name()
-    # assumed: the generated row written first keeps its own content when the upload of the
-    # same name is registered in the workspace, so both files stay reachable by that name.
-    write_generated_file(client, conversation, name, json_report_content("generated"))
+    generated_content = json_report_content("generated")
+    write_generated_file(client, conversation, name, generated_content)
     file_url = upload_text_file(client, name, json_report_content("uploaded"))
     assert_that(
         workspace_path_of_upload(file_url),
@@ -478,10 +491,23 @@ def test_attach_name_shared_by_upload_and_generated_file_is_ambiguous(
         assistant_utils,
         confluence_assistant,
         conversation,
-        attach_prompt(attachment_page.page_id, "POST", {"file": name}),
+        attach_prompt(attachment_page_id, "POST", {"file": name}),
         file_urls=[file_url],
     )
 
+    # Precondition for the ambiguity: syncing the upload into the workspace neither renamed it
+    # nor overwrote the generated file, so both candidates share the name and keep their content.
+    stem = PurePosixPath(name).stem
+    assert_that(
+        [path for path in workspace_file_sizes(client, conversation) if stem in path],
+        equal_to([name]),
+        "precondition: the upload was not registered under a de-duplicated path",
+    )
+    assert_that(
+        client.workspaces.read_file(conversation.workspace_id, name).content,
+        equal_to(generated_content),
+        "precondition: the generated file keeps its own content after the upload sync",
+    )
     assert_that(
         confluence_tool_output(conversation_utils, conversation.conversation_id),
         all_of(
@@ -491,7 +517,7 @@ def test_attach_name_shared_by_upload_and_generated_file_is_ambiguous(
         "the tool refuses the shared name instead of picking one file",
     )
     assert_that(
-        attachment_titles(confluence_utils, attachment_page.page_id),
+        attachment_titles(confluence_utils, attachment_page_id),
         empty(),
         "nothing is attached to the page",
     )
@@ -508,7 +534,7 @@ def test_attach_file_uploaded_in_chat_is_attached_once(
     confluence_utils,
     confluence_assistant,
     conversation_workspace,
-    attachment_page,
+    attachment_page_id,
 ):
     # @case confluence-generated-file-attachments_TC_009
     conversation = conversation_workspace()
@@ -521,7 +547,7 @@ def test_attach_file_uploaded_in_chat_is_attached_once(
         assistant_utils,
         confluence_assistant,
         conversation,
-        attach_prompt(attachment_page.page_id, "POST", {"file": name}),
+        attach_prompt(attachment_page_id, "POST", {"file": name}),
         file_urls=[file_url],
     )
 
@@ -534,7 +560,7 @@ def test_attach_file_uploaded_in_chat_is_attached_once(
         "the upload is attached without an ambiguity error against its own workspace row",
     )
     assert_that(
-        attachment_titles(confluence_utils, attachment_page.page_id),
+        attachment_titles(confluence_utils, attachment_page_id),
         equal_to([name]),
         "exactly one attachment on the page, named like the uploaded file",
     )

@@ -40,7 +40,8 @@ AVAILABLE_FILES = "Available files: {available}."
 OUTCOME_MESSAGE = "{error} Already attached: {done}. Not attempted: {remaining}."
 # generated_files.py, match_attachment: an upload and a generated file share the requested name.
 AMBIGUOUS_MESSAGE = "File name '{name}' is ambiguous:"
-# HttpResult of a non-upload request (confluence.request): "HTTP: <METHOD> <url> -> <status>".
+# HttpResult of a non-upload request (confluence.request), compact layout:
+# "HTTP: {method}{url} -> {status}{reason}{body}", with no space between method and URL.
 HTTP_RESULT_PREFIX = "HTTP: {method}"
 
 
@@ -118,6 +119,10 @@ class UnmatchedNameVariant:
     include_known: bool
     # A misspelling of the generated file's "report" prefix.
     unknown_prefix: str = "reprot"
+
+    def requested(self, known: str, unknown: str):
+        """The value of ``param``: both names for ``files``, the unknown name alone for ``file``."""
+        return [known, unknown] if self.include_known else unknown
 
 
 UNMATCHED_NAME_VARIANTS = [
