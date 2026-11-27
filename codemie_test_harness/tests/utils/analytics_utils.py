@@ -56,6 +56,7 @@ from codemie_test_harness.tests.test_data.assistants_requests_analytics_test_dat
 from .base_utils import BaseUtils, poll_until
 from .cli_analytics_api_utils import (
     CT_JSON,
+    CT_NDJSON,
     CliAnalyticsApi,
     IngestClient,
     assert_accepted,
@@ -713,6 +714,26 @@ class AnalyticsUtils(BaseUtils):
             interval=2,
         )
         assert_not_discarded(result, f"CLI analytics batch for project {project!r}")
+
+    def ingest_cli_evidence_hooks(
+        self, events: list[dict], project: str, evidence_headers: dict
+    ) -> None:
+        """Send CLI hook events as the client's own user with the classification headers
+        the CLI adds to a session it holds evidence for (see ingest_cli_event_hooks).
+
+        Posted raw, because the SDK sends no headers but X-CodeMie-Project. The sender
+        must already reach `project`: an evidence request is not retried, and any discard
+        fails at once.
+        """
+        body = "".join(json.dumps(event) + "\n" for event in events).encode()
+        response = IngestClient(self.client).post_signal(
+            "event-hooks",
+            body,
+            CT_NDJSON,
+            project=project,
+            extra_headers=evidence_headers,
+        )
+        assert_accepted(response, "event-hooks", CT_NDJSON)
 
     def ingest_cli_otlp_logs(self, payload: dict, project: str | None = None) -> None:
         """Send OTLP logs (JSON form) as the client's own user (see ingest_cli_event_hooks).
