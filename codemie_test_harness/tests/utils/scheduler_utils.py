@@ -42,3 +42,22 @@ class SchedulerUtils(BaseUtils):
             if match is not None or page + 1 >= listed.pagination.pages:
                 return match
             page += 1
+
+    def list_schedulers_for_resource(self, resource_id: str) -> list[SchedulerListItem]:
+        """Return every row of the caller's scheduler list that runs this resource.
+
+        Reads every page of ``GET /v1/schedulers`` and keeps the rows whose
+        ``resource.id`` is ``resource_id`` (an assistant, workflow or datasource id).
+        """
+        rows: list[SchedulerListItem] = []
+        page = 0
+        while True:
+            listed = self.client.schedulers.list(
+                page=page, per_page=SCHEDULER_PAGE_SIZE
+            )
+            rows.extend(
+                item for item in listed.items if item.resource.id == resource_id
+            )
+            if page + 1 >= listed.pagination.pages:
+                return rows
+            page += 1

@@ -599,6 +599,9 @@ class DataSourceUtils(BaseUtils):
                 "project_space_visible", datasource.shared_with_project
             ),
             "custom_fields": kwargs.get("custom_fields"),
+            # None leaves the field out of the request body (the SDK drops None values).
+            "cron_expression": kwargs.get("cron_expression"),
+            "timezone": kwargs.get("timezone"),
         }
 
         update_datasource_request = UpdateJiraDataSourceRequest(**update_request_params)
