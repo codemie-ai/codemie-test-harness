@@ -27,14 +27,10 @@ from playwright.sync_api import expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.utils.money import format_money
 
 NOT_ASSIGNED_TEXT = "— not assigned —"
 NO_PROJECTS_LINKED_TEXT = "No projects linked"
-
-
-def format_money(value: float) -> str:
-    """Format an amount the way the rollup card does: '$1,234.50'."""
-    return f"${value:,.2f}"
 
 
 class CostCenterDetailsPage(BasePage):

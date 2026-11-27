@@ -305,6 +305,21 @@ def to_iso(moment: datetime, utc_offset_hours: int = 0) -> str:
     return local.isoformat(timespec="seconds")
 
 
+def otlp_attr(key: str, value) -> dict:
+    """An OTLP JSON attribute: an int as ``intValue``, a float as ``doubleValue``,
+    anything else as ``stringValue``."""
+    if isinstance(value, float):
+        return {"key": key, "value": {"doubleValue": value}}
+    if isinstance(value, int):
+        return {"key": key, "value": {"intValue": str(value)}}
+    return {"key": key, "value": {"stringValue": value}}
+
+
+def otlp_nanos(moment: datetime) -> str:
+    """An OTLP JSON timestamp: whole seconds of ``moment`` in nanoseconds."""
+    return str(int(moment.timestamp()) * 10**9)
+
+
 @dataclass(frozen=True)
 class Window:
     """A requested time range; both bounds are inclusive."""

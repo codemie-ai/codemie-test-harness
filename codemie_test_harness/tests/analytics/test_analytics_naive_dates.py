@@ -49,6 +49,7 @@ def _read(api: CliAnalyticsApi, endpoint: str, params: dict) -> tuple[dict, dict
 
 
 @pytest.mark.analytics
+@pytest.mark.cli_analytics
 @pytest.mark.api
 @pytest.mark.parametrize("endpoint", DATE_FILTERED_ENDPOINTS)
 @pytest.mark.parametrize(

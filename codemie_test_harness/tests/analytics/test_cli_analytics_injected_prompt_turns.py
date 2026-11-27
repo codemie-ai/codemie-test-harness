@@ -30,26 +30,11 @@ INJECTED_PROMPT_ROLLUP_TIMEOUT = 90
 
 
 @pytest.fixture(scope="module")
-def ingest_turns_sessions(
-    ingest_cli_sessions, cli_analytics_users, cli_analytics_project
-):
-    """Factory that sends Claude Code sessions as the owner: hooks and logs, then the spans."""
-
-    def _ingest(seeds: list[ClaudeCodeTurnsSeed]) -> None:
-        ingest_cli_sessions(seeds)
-        for seed in seeds:
-            cli_analytics_users[OWNER].analytics_utils.ingest_cli_otlp_traces(
-                seed.otlp_traces(), project=cli_analytics_project
-            )
-
-    return _ingest
-
-
-@pytest.fixture(scope="module")
-def injected_prompt_sessions(ingest_turns_sessions):
-    """One Claude Code session per kind of injected prompt, keyed by scenario id."""
+def injected_prompt_sessions(ingest_cli_sessions):
+    """One Claude Code session per kind of injected prompt, keyed by scenario id: hooks,
+    logs and spans, each as the seed's user (the owner)."""
     seeds = get_injected_prompt_seeds()
-    ingest_turns_sessions(list(seeds.values()))
+    ingest_cli_sessions(list(seeds.values()))
     return seeds
 
 
@@ -102,14 +87,14 @@ def test_session_turns_exclude_injected_prompts(
 @pytest.mark.cli_analytics
 @pytest.mark.api
 def test_typed_prompt_that_looks_like_a_hand_back_is_a_turn(
-    analytics_utils, ingest_turns_sessions
+    analytics_utils, ingest_cli_sessions
 ):
     """A prompt the user typed that starts "Another Claude session sent a message:" is a
     turn: only the tag Claude Code injects marks a hand-back. With a real hand-back
     between the two typed prompts, the session has two turns. No client summary is sent,
     so the served turns are the ones the backend counted."""
     seed = get_typed_prompts_seed()
-    ingest_turns_sessions([seed])
+    ingest_cli_sessions([seed])
     _wait_until_rolled_up(analytics_utils, seed)
 
     turns = analytics_utils.wait_for_cli_session_turns(
@@ -128,13 +113,13 @@ def test_typed_prompt_that_looks_like_a_hand_back_is_a_turn(
 @pytest.mark.cli_analytics
 @pytest.mark.api
 def test_late_prompt_hook_recounts_the_injected_prompt(
-    analytics_utils, ingest_turns_sessions, cli_analytics_users, cli_analytics_project
+    analytics_utils, ingest_cli_sessions, cli_analytics_users, cli_analytics_project
 ):
     """When the prompt hook of a subagent hand-back reaches the backend after the session
     was rolled up, the session's turns are counted again and the hand-back stops being a
     turn. No client summary is sent, so the served turns are the ones the backend counted."""
     seed = get_late_hook_seed()
-    ingest_turns_sessions([seed])
+    ingest_cli_sessions([seed])
     analytics_utils.wait_for_cli_session(seed.session_id)
 
     turns_before = analytics_utils.wait_for_cli_session_turns(

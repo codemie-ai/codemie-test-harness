@@ -769,13 +769,11 @@ class AnalyticsUtils(BaseUtils):
         else:
             assert_nothing_discarded(response, "traces", discard)
 
-    def get_cli_session_turns(self, trace_id: str) -> int | None:
-        """Turns of a session from the raw session detail, or None while the session is
-        not rolled up or the detail has no `turns`. The SDK model does not carry the
-        field, so the raw JSON is read."""
-        response = CliAnalyticsApi(self.client).request(
-            "GET", f"/v1/analytics/cli-analytics/sessions/{trace_id}"
-        )
+    def get_cli_session_detail(self, trace_id: str) -> dict | None:
+        """The raw session detail body (``data`` and ``metadata``), or None while the
+        session is not rolled up (404). The SDK model lacks several of its fields (the
+        Timeline rows, turns, unpriced models), so the raw JSON is read."""
+        response = CliAnalyticsApi(self.client).read(f"/sessions/{trace_id}")
         if response.status_code == 404:
             return None
         assert_that(
@@ -783,24 +781,53 @@ class AnalyticsUtils(BaseUtils):
             equal_to(200),
             f"session detail of {trace_id}: {response.text[:200]}",
         )
-        return response.json().get("data", {}).get("turns")
+        return response.json()
+
+    def wait_for_cli_session_detail(
+        self,
+        trace_id: str,
+        ready: Callable[[dict], bool],
+        timeout: float = CLI_SESSION_ROLLUP_TIMEOUT,
+    ) -> dict | None:
+        """Poll the raw session detail until `ready(detail)` holds. Returns the last
+        detail whether or not it held (None if the session never rolled up); the caller
+        asserts."""
+        return poll_until(
+            lambda: self.get_cli_session_detail(trace_id),
+            lambda detail: detail is not None and ready(detail),
+            timeout=timeout,
+            interval=5,
+        )
+
+    def get_cli_session_turns(self, trace_id: str) -> int | None:
+        """Turns of a session from the raw session detail, or None while the session is
+        not rolled up or the detail has no `turns`."""
+        detail = self.get_cli_session_detail(trace_id)
+        return None if detail is None else detail.get("data", {}).get("turns")
 
     def get_cli_session_unpriced_models(self, trace_id: str) -> list[str] | None:
         """Models of a session the platform catalog has no price for
         (``metadata.unpriced_models`` of the raw session detail), or None while the
-        session is not rolled up or the detail has no such field. The SDK model does not
-        carry the field, so the raw JSON is read."""
-        response = CliAnalyticsApi(self.client).request(
-            "GET", f"/v1/analytics/cli-analytics/sessions/{trace_id}"
-        )
-        if response.status_code == 404:
+        session is not rolled up or the detail has no such field."""
+        detail = self.get_cli_session_detail(trace_id)
+        if detail is None:
             return None
-        assert_that(
-            response.status_code,
-            equal_to(200),
-            f"session detail of {trace_id}: {response.text[:200]}",
+        return detail.get("metadata", {}).get("unpriced_models")
+
+    def get_cli_skills_invoked(
+        self, project: str, start_date: str, end_date: str
+    ) -> dict[str, int]:
+        """Tools & Models > Skills invoked of a project between two ISO dates (the
+        endpoint refuses an end in the future), as {skill name: count}. The SDK has no
+        model for the tools endpoint, so the raw JSON is read."""
+        response = CliAnalyticsApi(self.client).read(
+            "/tools", projects=project, start_date=start_date, end_date=end_date
         )
-        return response.json().get("metadata", {}).get("unpriced_models")
+        assert_that(response.status_code, equal_to(200), response.text[:200])
+        return {
+            row["name"]: row["count"]
+            for row in response.json()["data"]["skills_invoked"]
+        }
 
     def wait_for_cli_session_turns(
         self,

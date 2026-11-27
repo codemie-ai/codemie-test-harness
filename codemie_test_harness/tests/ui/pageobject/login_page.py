@@ -54,8 +54,10 @@ class LoginPage(BasePage):
 
     @property
     def show_more_options_button(self):
-        """Button/link to expand email/password login form."""
-        return self.page.get_by_text("more options")
+        """Button to expand the email/password login form, shown while it is collapsed."""
+        return self.page.get_by_role(
+            "button", name="Show more sign-in options", exact=True
+        )
 
     @property
     def hide_options_button(self):
@@ -127,9 +129,23 @@ class LoginPage(BasePage):
     # Action methods
     @step
     def expand_email_password_form(self):
-        """Expand the email/password login form if not already visible."""
-        if self.show_more_options_button.is_visible():
+        """Expand the email/password login form if it is collapsed.
+
+        The collapsed form stays in the DOM under an overlay, so Playwright treats the
+        Email field as visible either way; only the toggle tells the state. `networkidle`
+        can fire before the page renders, so wait for the form first, then click the
+        "Show more sign-in options" toggle until it is gone (a click made before the page
+        is interactive is lost).
+        """
+        self.username_input.wait_for(state="visible", timeout=60000)
+        for _ in range(3):
+            if not self.show_more_options_button.is_visible():
+                break
             self.show_more_options_button.click()
+            try:
+                self.show_more_options_button.wait_for(state="hidden", timeout=5000)
+            except Exception:
+                continue
         return self
 
     @step
@@ -155,26 +171,35 @@ class LoginPage(BasePage):
 
     @step
     def click_submit(self):
-        """Click the submit button."""
-        self.submit_button.click()
+        """Click the submit button.
+
+        The click also waits for the navigation it starts (the credentials POST to
+        Keycloak), so its timeout matches the 60 s allowed for slow auth servers.
+        """
+        self.submit_button.click(timeout=60000)
         return self
 
     @step
     def login(self, username: str, password: str):
-        """Complete login process with username and password."""
-        self.page.wait_for_load_state("networkidle", timeout=60000)
+        """Complete login process with username and password.
+
+        Waits on the URL and the "load" event, not "networkidle": the app keeps polling
+        after it renders, so under parallel load the network may never go idle and the
+        wait timed out on a page that had already logged in.
+        """
+        # Waits up to 60 s for the form itself, so no page-level wait is needed first.
         self.expand_email_password_form()
         self.fill_username(username)
         self.fill_password(password)
         self.click_submit()
-        # Wait for the full OAuth redirect chain to finish.
-        # Timeout raised to 60 s to accommodate slow auth servers.
-        self.page.wait_for_load_state("networkidle", timeout=60000)
-        # Ensure the redirect chain has fully landed on the app (not still on the
-        # Keycloak auth server).  networkidle can fire during a multi-hop OAuth
-        # redirect; this guard prevents the AssistantsPage constructor's goto() from
-        # racing with a still-pending server redirect.
-        self.page.wait_for_url(lambda url: "openid-connect" not in url, timeout=60000)
+        # The OAuth redirect chain has finished once the URL leaves the Keycloak realm
+        # pages (/realms/.../openid-connect, /realms/.../login-actions) and the
+        # oauth2-proxy callback (/oauth2/). Timeout 60 s for slow auth servers.
+        self.page.wait_for_url(
+            lambda url: "/realms/" not in url and "/oauth2/" not in url,
+            timeout=60000,
+        )
+        self.page.wait_for_load_state("load", timeout=60000)
         frontend_url = CredentialsManager.get_parameter("FRONTEND_URL", "")
 
         # Check if we got a 404 error page instead of the app. If so, redirect to frontend_url.
@@ -184,8 +209,7 @@ class LoginPage(BasePage):
             )
             # 404 page detected, redirect to frontend_url
             if frontend_url:
-                self.page.goto(frontend_url)
-                self.page.wait_for_load_state("networkidle", timeout=60000)
+                self.page.goto(frontend_url, timeout=60000)
         except Exception:
             # 404 page not found (good), we're on the app
             pass
