@@ -1246,6 +1246,40 @@ def assign_budget_user(manual_budget, maintainer_client):
 
 
 @pytest.fixture
+def manual_budget_factory(maintainer_client, lite_llm_budget_utils):
+    """Factory ``(*user_ids)``: one more manual platform budget owned by the maintainer, with
+    the given users assigned to it as their platform budget; returns the created budget.
+
+    For tests that need budgets besides ``manual_budget`` (an empty one next to an assigned
+    one, a second budget to switch a filter to). The teardown unassigns the users, then
+    deletes each budget in CodeMie and removes any LiteLLM leftover.
+    """
+    budget_utils = AdminBudgetUtils(maintainer_client)
+    created = []  # (budget_id, assigned user ids)
+
+    def _create(*user_ids: str) -> dict:
+        budget = budget_utils.create_budget(
+            f"autotest-ucnt-{secrets.token_hex(4)}", "platform"
+        )
+        assigned = []
+        created.append((budget["budget_id"], assigned))
+        for user_id in user_ids:
+            budget_utils.assign_user_budget(user_id, "platform", budget["budget_id"])
+            assigned.append(user_id)
+        return budget
+
+    yield _create
+
+    for budget_id, assigned in reversed(created):
+        for user_id in assigned:
+            with contextlib.suppress(HTTPError):
+                budget_utils.unassign_user_budget(user_id, "platform")
+        with contextlib.suppress(HTTPError):
+            budget_utils.delete_budget(budget_id)
+        lite_llm_budget_utils.delete_budget(budget_id)
+
+
+@pytest.fixture
 def project_admin_client(project_admin_user):
     """project_admin_user's client."""
     return project_admin_user.client

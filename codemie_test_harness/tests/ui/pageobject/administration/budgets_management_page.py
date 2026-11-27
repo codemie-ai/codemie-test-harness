@@ -24,7 +24,9 @@ For the Auditor role:
   - No edit/sync/assign write controls exposed
 """
 
+import re
 from typing import List
+from urllib.parse import quote
 
 from hamcrest import assert_that, empty
 from playwright.sync_api import expect, TimeoutError as PlaywrightTimeoutError
@@ -32,6 +34,11 @@ from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
+
+# FE: BudgetsManagementPage.tsx:188-193 — the Users cell is a ResourceCounterBadge whose
+# aria-label and tooltip are this text (ResourceCounterBadge.tsx renders it as a link).
+USERS_BADGE_LABEL = "Users assigned to this budget"
+USER_MANAGEMENT_PATH = "/settings/administration/users"
 
 
 class BudgetsManagementPage(BasePage):
@@ -136,6 +143,27 @@ class BudgetsManagementPage(BasePage):
         """'Delete' button of the delete confirmation dialog."""
         return self._delete_dialog.get_by_role("button", name="Delete", exact=True)
 
+    # ── Users column ──────────────────────────────────────────────────────────
+    # FE: BudgetsManagementPage.tsx:105 (column 'Users'), :181-193 (badge with a user icon,
+    # count user_count ?? 0, link to User Management ?budgets=<budget_id>), :206 (the column
+    # is shown only to admin and maintainer). Recon: the badge is an <a> with the label above.
+
+    @property
+    def users_column_header(self):
+        """'Users' column header of the budgets table."""
+        return self.budget_table.get_by_role("columnheader", name="Users", exact=True)
+
+    @property
+    def users_badges(self):
+        """Every Users badge link on the current page of the budgets table."""
+        return self.budget_table.get_by_role("link", name=USERS_BADGE_LABEL, exact=True)
+
+    def users_badge(self, budget_name: str):
+        """The Users badge link of a budget row."""
+        return self.budget_row(budget_name).get_by_role(
+            "link", name=USERS_BADGE_LABEL, exact=True
+        )
+
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @step
@@ -230,6 +258,14 @@ class BudgetsManagementPage(BasePage):
     def hover_delete_item(self):
         """Hover the 'Delete' item of the open row-actions menu."""
         self._delete_menu_item.hover()
+        return self
+
+    @step
+    def click_users_badge(self, budget_name: str):
+        """Click the Users badge of a budget row (navigates to User Management)."""
+        badge = self.users_badge(budget_name)
+        expect(badge).to_be_visible(timeout=15000)
+        badge.click()
         return self
 
     # ── Assertions ────────────────────────────────────────────────────────────
@@ -352,4 +388,58 @@ class BudgetsManagementPage(BasePage):
         expect(self.budget_rows.filter(has_text=budget_name)).to_have_count(
             0, timeout=15000
         )
+        return self
+
+    @step
+    def should_see_users_badge(self, budget_name: str, count: int):
+        """Assert the row's Users cell is a badge with the user icon and exactly `count`, and
+        that hovering it shows the tooltip 'Users assigned to this budget'."""
+        expect(self.users_column_header).to_be_visible(timeout=15000)
+        badge = self.users_badge(budget_name)
+        expect(badge).to_have_count(1, timeout=15000)
+        expect(badge.locator("svg")).to_be_visible()
+        expect(badge).to_have_text(str(count), timeout=15000)
+        badge.hover()
+        expect(self.page.get_by_role("tooltip")).to_have_text(
+            USERS_BADGE_LABEL, timeout=5000
+        )
+        return self
+
+    @step
+    def should_see_users_badge_on_every_row(self):
+        """Assert every budget row on the current page carries exactly one Users badge."""
+        expect(self.budget_rows.first).to_be_visible(timeout=15000)
+        expect(self.users_badges).to_have_count(self.budget_rows.count(), timeout=15000)
+        return self
+
+    @step
+    def should_link_users_badge_to_user_management(
+        self, budget_name: str, budget_id: str
+    ):
+        """Assert the row's Users badge links to User Management filtered by this budget only
+        (`/settings/administration/users?budgets=<budget_id>`)."""
+        expect(self.users_badge(budget_name)).to_have_attribute(
+            "href",
+            re.compile(
+                "^"
+                + re.escape(
+                    f"{USER_MANAGEMENT_PATH}?budgets={quote(budget_id, safe='-_.~')}"
+                )
+                + "$"
+            ),
+            timeout=15000,
+        )
+        return self
+
+    @step
+    def should_show_users_column(self, shown: bool):
+        """Assert the 'Users' column and its badges are shown (admin, maintainer) or absent
+        (auditor). Waits for the rows first, so an absence is not read off an empty table."""
+        expect(self.budget_rows.first).to_be_visible(timeout=15000)
+        expected = 1 if shown else 0
+        expect(self.users_column_header).to_have_count(expected, timeout=15000)
+        if shown:
+            expect(self.users_badges.first).to_be_visible(timeout=15000)
+        else:
+            expect(self.users_badges).to_have_count(0)
         return self

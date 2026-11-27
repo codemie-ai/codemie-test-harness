@@ -33,6 +33,9 @@ from codemie_test_harness.tests.test_data.admin_users_order_test_data import (
     PROJECT_MEMBERS,
 )
 from codemie_test_harness.tests.test_data.budget_test_data import project_key_alias
+from codemie_test_harness.tests.ui.pageobject.administration.user_management_page import (
+    UserManagementPage,
+)
 from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
 from codemie_test_harness.tests.ui.test_data.project_budget_platform_test_data import (
     starting_budget_categories,
@@ -373,3 +376,11 @@ def budget_and_expected_display(request, admin_budget_utils):
         return admin_budget_utils.find_preconfigured_budget(), "System"
     budget_id = request.getfixturevalue("orphaned_creator_budget")
     return admin_budget_utils.get_budget(budget_id), "—"
+
+
+@pytest.fixture
+def reset_user_management_filters(page):
+    """Clears the User Management filters the page keeps for the signed-in user after the
+    test, whatever its outcome, for a test that saves one (e.g. a Project filter)."""
+    yield
+    UserManagementPage(page).reset_saved_filters()
