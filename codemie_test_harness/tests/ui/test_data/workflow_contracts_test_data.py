@@ -216,7 +216,7 @@ def build_warning_and_unverified_yaml(model: str) -> str:
 
     c2, between them, has no input contract yet: the rejected-save test types one into its
     panel. c1 carries an output contract without ``x``, so the removed key stays removed when
-    it reaches c2 (assumed: composition of recipes 1 and 3, not run on the stand as a whole).
+    it reaches c2. Run on a stand, the composed graph gives exactly one finding per severity.
     """
     chain = _warning_chain(DECLARING_STATE_ID, warning_state_output=_object_schema("y"))
     chain.append(_state(DECLARING_STATE_ID, DOC_PRODUCER_STATE_ID))
@@ -226,8 +226,7 @@ def build_warning_and_unverified_yaml(model: str) -> str:
 def build_all_severities_yaml(model: str) -> str:
     """ERROR (c2 declares the removed ``x``), WARNING (c1) and UNVERIFIED (``b``); rejected.
 
-    Same graph as ``build_warning_and_unverified_yaml`` with c2's input contract already set
-    (assumed composition, see there).
+    Same graph as ``build_warning_and_unverified_yaml`` with c2's input contract already set.
     """
     chain = _warning_chain(DECLARING_STATE_ID, warning_state_output=_object_schema("y"))
     chain.append(

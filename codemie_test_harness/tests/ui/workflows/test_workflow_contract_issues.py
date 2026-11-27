@@ -92,8 +92,6 @@ def test_rejected_save_shows_errors_warnings_and_unverified_in_severity_groups(
     # @case save-time-contract-editor-controls_TC_004
     """A save rejected by a declared input contract opens the Issues panel with Errors,
     Warnings and a collapsed Unverified group, coverage, and no saved note or error toast."""
-    # assumed: the WARNING + UNVERIFIED seed and the ERROR typed into c2 compose recipes 1
-    # and 3 of the recon walk (see build_warning_and_unverified_yaml).
     workflow = workflow_factory(
         build_warning_and_unverified_yaml(default_llm.base_name)
     )
@@ -251,7 +249,7 @@ def test_go_to_issue_on_error_opens_input_contract_with_red_error(
 
     node_panel = edit_page.get_node_config_panel()
     node_panel.should_be_visible()
-    # assumed: the declared-ERROR message carries the same text as the strict ERROR recon saw.
+    # The declared-ERROR message carries the same text as the strict ERROR.
     node_panel.should_have_input_contract_error(REMOVED_KEY_MESSAGE)
     edit_page.should_have_node_outline(WARNING_STATE_ID, "error")
 
@@ -428,7 +426,6 @@ def test_check_on_new_workflow_opens_panel_with_every_severity_and_saves_nothing
     coverage and 'Changes not saved yet'; the header is unchanged and nothing is created."""
     create_page = CreateWorkflowPage(page)
     create_page.navigate_to()
-    # assumed: composition of recipes 1 and 3 (see build_all_severities_yaml).
     create_page.fill_draft(
         ui_workflow_name, build_all_severities_yaml(default_llm.base_name)
     )
