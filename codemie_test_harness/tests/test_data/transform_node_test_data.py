@@ -32,24 +32,36 @@ SURROGATE_OUTPUT_FIELD = "pr_text"
 SURROGATE_CODEC_ERROR = "surrogates not allowed"
 
 
+# Built from parts so no editor or encoder can collapse the escape text into the
+# character it encodes. ESCAPED_SURROGATE_PAIR is 12 ASCII chars: a backslash-u escape
+# for the high surrogate U+D83D, then one for the low surrogate U+DCDA (together U+1F4DA).
+BACKSLASH = "\\"
+ESCAPED_SURROGATE_PAIR = BACKSLASH + "uD83D" + BACKSLASH + "uDCDA"
+ESCAPED_LONE_HIGH_SURROGATE = BACKSLASH + "ud83d"
+
+
 @dataclass(frozen=True)
 class SurrogateUserInput:
     user_input: str
     expected_text: str
+    # Escape text the raw user_input must carry verbatim
+    escape_text: str
 
 
 SURROGATE_USER_INPUTS = [
     pytest.param(
         SurrogateUserInput(
-            user_input=r'{"pr_description": "📚"}',
+            user_input='{"pr_description": "' + ESCAPED_SURROGATE_PAIR + '"}',
             expected_text="\U0001f4da",
+            escape_text=ESCAPED_SURROGATE_PAIR,
         ),
         id="escaped-surrogate-pair",
     ),
     pytest.param(
         SurrogateUserInput(
-            user_input=r'{"pr_description": "x \ud83d y"}',
-            expected_text="x � y",
+            user_input='{"pr_description": "x ' + ESCAPED_LONE_HIGH_SURROGATE + ' y"}',
+            expected_text="x \ufffd y",
+            escape_text=ESCAPED_LONE_HIGH_SURROGATE,
         ),
         id="lone-high-surrogate",
     ),

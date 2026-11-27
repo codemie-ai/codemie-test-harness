@@ -658,6 +658,17 @@ def test_input_source_user_input_with_surrogate_escapes_is_sanitized(
        becomes one character, an unpaired surrogate becomes U+FFFD.
     """
     # @case workflow-pr-description-surrogate-emoji_TC_001
+    # Guard: the input must carry backslash-u escape text, never the decoded character
+    assert_that(
+        surrogate_input.user_input,
+        contains_string(surrogate_input.escape_text),
+        "user_input must hold the surrogate escape text",
+    )
+    assert_that(
+        surrogate_input.user_input.isascii(),
+        equal_to(True),
+        "user_input must be ASCII escape text, not a decoded character",
+    )
     workflow_yaml = WorkflowYamlModel(
         enable_summarization_node=False,
         assistants=[],
