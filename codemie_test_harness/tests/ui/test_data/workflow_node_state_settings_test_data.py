@@ -99,8 +99,6 @@ class NonCustomNodeVisibilityCase:
     output_schema_visible: bool
     # Interrupt Before, Finish Iteration, Resolve Dynamic Values in Prompt, Result as Human Message.
     other_settings_visible: bool
-    # Input contract and the node Save validation select of the Contracts block.
-    contract_linking_visible: bool
 
 
 @dataclass(frozen=True)
@@ -129,7 +127,7 @@ class HiddenValueCase:
 
 NON_CUSTOM_NODE_VISIBILITY_CASES = [
     NonCustomNodeVisibilityCase(
-        "tool", NodeKind.TOOL, "Tool Configuration", False, True, True, True
+        "tool", NodeKind.TOOL, "Tool Configuration", False, True, True
     ),
     NonCustomNodeVisibilityCase(
         "sub-workflow",
@@ -138,16 +136,9 @@ NON_CUSTOM_NODE_VISIBILITY_CASES = [
         False,
         True,
         True,
-        True,
     ),
     NonCustomNodeVisibilityCase(
-        "assistant",
-        NodeKind.ASSISTANT,
-        "Assistant Configuration",
-        True,
-        True,
-        True,
-        True,
+        "assistant", NodeKind.ASSISTANT, "Assistant Configuration", True, True, True
     ),
     NonCustomNodeVisibilityCase(
         "transform",
@@ -156,7 +147,6 @@ NON_CUSTOM_NODE_VISIBILITY_CASES = [
         False,
         False,
         False,
-        True,
     ),
 ]
 
@@ -172,6 +162,26 @@ CUSTOM_NODE_VISIBILITY_CASES = [
     CustomNodeVisibilityCase(
         "summarize_conversation", CustomNodeType.SUMMARIZE_CONVERSATION, False
     ),
+]
+
+
+@dataclass(frozen=True)
+class ContractControlsCase:
+    """Node whose panel must show Input contract and Save validation (flag on)."""
+
+    case_id: str
+    node_kind: NodeKind
+    custom_node_type: Optional[CustomNodeType] = None
+
+
+CONTRACT_CONTROLS_CASES = [
+    ContractControlsCase(case.case_id, case.node_kind)
+    for case in NON_CUSTOM_NODE_VISIBILITY_CASES
+] + [
+    ContractControlsCase(
+        f"custom-{case.case_id}", NodeKind.CUSTOM, case.custom_node_type
+    )
+    for case in CUSTOM_NODE_VISIBILITY_CASES
 ]
 
 HIDDEN_VALUE_CASES = [

@@ -180,8 +180,8 @@ def test_save_with_contract_warning_stays_open_in_saved_with_warnings_state(
     edit_page.should_have_node_outline(WARNING_STATE_ID, "warning")
 
     edit_page.click_done()
-    UnsavedChangesDialog(page).should_not_be_visible()
     edit_page.should_have_left_editor()
+    UnsavedChangesDialog(page).should_not_be_visible()
     WorkflowsPage(page).should_be_on_workflows_page()
 
 
@@ -297,13 +297,14 @@ def test_clean_or_unverified_only_save_shows_update_toast_and_navigates_back(
     edit_page = EditWorkflowPage(page)
     edit_page.navigate_to(workflow.id)
     edit_page.toast.start_recording()
+    edit_page.issues_panel.start_watching()
 
     edit_page.save_workflow()
 
     edit_page.should_have_left_editor()
     WorkflowsPage(page).should_be_on_workflows_page()
     edit_page.toast.should_have_recorded_none_with(WARNED_SAVE_TOAST_PREFIX)
-    edit_page.issues_panel.should_not_be_visible()
+    edit_page.issues_panel.should_not_have_opened()
 
 
 @pytest.mark.workflow
@@ -330,6 +331,7 @@ def test_save_and_run_with_warning_skips_run_popup_and_run_anyway_opens_it(
 
     edit_page.should_show_run_popup()
     edit_page.should_have_sent_update_requests(1)
+    edit_page.stop_counting_update_requests()
 
 
 @pytest.mark.workflow
@@ -345,11 +347,13 @@ def test_save_and_run_with_clean_or_unverified_only_result_opens_run_popup(
     workflow = workflow_factory(case.yaml_builder(default_llm.base_name))
     edit_page = EditWorkflowPage(page)
     edit_page.navigate_to(workflow.id)
+    edit_page.issues_panel.start_watching()
 
     edit_page.click_save_and_run()
 
     edit_page.should_show_run_popup()
     edit_page.issues_panel.should_not_be_visible()
+    edit_page.issues_panel.should_not_have_opened()
 
 
 @pytest.mark.workflow

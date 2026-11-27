@@ -172,14 +172,7 @@ class CreateWorkflowPage(BaseWorkflowFormPage):
 
         name = name or get_random_name()
 
-        # Open workflow config panel
-        workflow_config_panel = self.open_workflow_config_panel()
-
-        # Switch to Basic tab to fill basic fields
-        workflow_config_panel.switch_to_basic_tab()
-
-        # Fill name
-        workflow_config_panel.fill_name(name)
+        workflow_config_panel = self._open_basic_tab_with_name(name)
 
         # Select project if provided
         if project_name:
@@ -204,11 +197,8 @@ class CreateWorkflowPage(BaseWorkflowFormPage):
         # Save config on panel
         workflow_config_panel.click_save()
 
-        # Fill YAML config if provided
         if yaml_config:
-            workflow_config_panel = self.open_yaml_panel()
-            workflow_config_panel.fill_yaml_config(yaml_config)
-            workflow_config_panel.click_save()
+            self._commit_yaml(yaml_config)
 
         # Save workflow
         if save_and_run:
@@ -222,15 +212,22 @@ class CreateWorkflowPage(BaseWorkflowFormPage):
 
         Each panel's own Save commits its fields to the draft; the header Save is not clicked.
         """
+        self._open_basic_tab_with_name(name).click_save()
+        self._commit_yaml(yaml_config)
+        return self
+
+    def _open_basic_tab_with_name(self, name: str):
+        """Open the workflow config panel on its Basic tab and type the Name; not committed."""
         workflow_config_panel = self.open_workflow_config_panel()
         workflow_config_panel.switch_to_basic_tab()
         workflow_config_panel.fill_name(name)
-        workflow_config_panel.click_save()
+        return workflow_config_panel
 
+    def _commit_yaml(self, yaml_config: str):
+        """Type ``yaml_config`` into the YAML panel and commit it with the panel's Save."""
         workflow_config_panel = self.open_yaml_panel()
         workflow_config_panel.fill_yaml_config(yaml_config)
         workflow_config_panel.click_save()
-        return self
 
     # ==================== VERIFICATION METHODS ====================
     @step

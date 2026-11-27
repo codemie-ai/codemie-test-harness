@@ -27,6 +27,9 @@ node Save validation select:
   form).
 
 Values stored in a field the panel hides must survive editing another setting.
+
+Only the Input contract and Save validation depend on ``features:workflowContracts``;
+the test that checks them is gated on it, the rest run on every stand.
 """
 
 import pytest
@@ -40,6 +43,7 @@ from codemie_test_harness.tests.ui.test_data.workflow_contracts_test_data import
     WORKFLOW_CONTRACTS_COMPONENT_ID,
 )
 from codemie_test_harness.tests.ui.test_data.workflow_node_state_settings_test_data import (
+    CONTRACT_CONTROLS_CASES,
     CUSTOM_NODE_TYPE_LABELS,
     CUSTOM_NODE_VISIBILITY_CASES,
     HIDDEN_VALUE_CASES,
@@ -53,7 +57,6 @@ from codemie_test_harness.tests.ui.test_data.workflow_node_state_settings_test_d
 )
 
 
-@pytest.mark.requires_capability(WORKFLOW_CONTRACTS_COMPONENT_ID)
 @pytest.mark.workflow
 @pytest.mark.ui
 @pytest.mark.prod_regression
@@ -62,14 +65,12 @@ from codemie_test_harness.tests.ui.test_data.workflow_node_state_settings_test_d
     NON_CUSTOM_NODE_VISIBILITY_CASES,
     ids=[case.case_id for case in NON_CUSTOM_NODE_VISIBILITY_CASES],
 )
-def test_non_custom_node_panel_shows_task_and_output_schema_only_where_used(
+def test_non_custom_node_panel_shows_task_output_contract_and_switches_by_node_type(
     page, create_node_workflow, case
 ):
     # @case workflow-editor-task-output-schema_TC_001
-    # @case save-time-contract-editor-controls_TC_001
-    """Tool and Sub-workflow hide Task and show the three contract controls, Assistant
-    shows Task and the three contract controls, Transform hides Task, the four State
-    Settings switches and the Output contract but shows Input contract and Save validation."""
+    """Tool and Sub-workflow hide Task and show the Output contract, Assistant shows both,
+    Transform hides Task, the Output contract and the four State Settings switches."""
     workflow = create_node_workflow(case.node_kind)
     edit_page = EditWorkflowPage(page)
     edit_page.navigate_to(workflow.id)
@@ -81,12 +82,8 @@ def test_non_custom_node_panel_shows_task_and_output_schema_only_where_used(
     panel.should_have_task_visibility(case.task_visible)
     panel.should_have_output_schema_visibility(case.output_schema_visible)
     panel.should_have_other_state_settings_visibility(case.other_settings_visible)
-    panel.should_have_contracts_accordion_expanded()
-    panel.should_have_input_contract_visibility(case.contract_linking_visible)
-    panel.should_have_save_validation_visibility(case.contract_linking_visible)
 
 
-@pytest.mark.requires_capability(WORKFLOW_CONTRACTS_COMPONENT_ID)
 @pytest.mark.workflow
 @pytest.mark.ui
 @pytest.mark.prod_regression
@@ -95,13 +92,12 @@ def test_non_custom_node_panel_shows_task_and_output_schema_only_where_used(
     CUSTOM_NODE_VISIBILITY_CASES,
     ids=[case.case_id for case in CUSTOM_NODE_VISIBILITY_CASES],
 )
-def test_custom_node_panel_hides_output_schema_and_shows_task_only_for_state_processor(
+def test_custom_node_panel_shows_output_contract_and_task_only_for_state_processor(
     page, create_node_workflow, case
 ):
     # @case workflow-editor-task-output-schema_TC_001
-    # @case save-time-contract-editor-controls_TC_001
-    """Custom panel: Input contract, Output contract and Save validation for every type,
-    Task only for state-processor."""
+    """Custom panel: the Output contract and the four switches for every type, Task only
+    for state-processor."""
     workflow = create_node_workflow(NodeKind.CUSTOM, case.custom_node_type)
     edit_page = EditWorkflowPage(page)
     edit_page.navigate_to(workflow.id)
@@ -113,6 +109,31 @@ def test_custom_node_panel_hides_output_schema_and_shows_task_only_for_state_pro
     panel.should_have_task_visibility(case.task_visible)
     panel.should_have_output_schema_visibility(True)
     panel.should_have_other_state_settings_visibility(True)
+
+
+@pytest.mark.requires_capability(WORKFLOW_CONTRACTS_COMPONENT_ID)
+@pytest.mark.workflow
+@pytest.mark.ui
+@pytest.mark.prod_regression
+@pytest.mark.parametrize(
+    "case",
+    CONTRACT_CONTROLS_CASES,
+    ids=[case.case_id for case in CONTRACT_CONTROLS_CASES],
+)
+def test_node_panel_shows_input_contract_and_save_validation(
+    page, create_node_workflow, case
+):
+    # @case save-time-contract-editor-controls_TC_001
+    """With workflow contracts on, every node panel (Tool, Sub-workflow, Assistant,
+    Transform and each Custom type) shows the expanded Contracts block with Input contract
+    and Save validation."""
+    workflow = create_node_workflow(case.node_kind, case.custom_node_type)
+    edit_page = EditWorkflowPage(page)
+    edit_page.navigate_to(workflow.id)
+
+    panel = edit_page.open_node_config_panel(NODE_STATE_ID)
+
+    panel.should_be_visible()
     panel.should_have_contracts_accordion_expanded()
     panel.should_have_input_contract_visibility(True)
     panel.should_have_save_validation_visibility(True)
@@ -162,7 +183,7 @@ def test_custom_node_task_field_follows_type_selection_before_save(page, test_wo
 @pytest.mark.parametrize(
     "case", HIDDEN_VALUE_CASES, ids=[case.case_id for case in HIDDEN_VALUE_CASES]
 )
-def test_hidden_task_and_output_schema_survive_editing_another_setting(
+def test_stored_task_and_output_contract_survive_editing_another_setting(
     page, create_node_workflow, workflow_utils, case
 ):
     # @case workflow-editor-task-output-schema_TC_006

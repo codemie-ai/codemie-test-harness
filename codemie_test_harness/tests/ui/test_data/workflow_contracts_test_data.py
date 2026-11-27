@@ -82,11 +82,9 @@ SAVED_WITH_WARNINGS_NOTE = "Saved with warnings"
 CREATED_WITH_WARNINGS_NOTE = "Workflow created with warnings"
 NOT_SAVED_NOTE = "Changes not saved yet"
 WORKFLOW_STRICT_LINE = "Blocked by the workflow-level save validation (strict)"
-STATE_STRICT_TAG = "node save validation (strict)"
 SAVED_WITH_ONE_WARNING_TOAST = "Workflow saved with 1 warning"
 WARNED_SAVE_TOAST_PREFIX = "Workflow saved with"
 NO_ISSUES_FOUND_TOAST = "No issues found"
-RESOLVED_BADGE = "Resolved"
 
 # Issue group labels and the Issues button colours (issueSeverity.ts).
 ERRORS_GROUP = "Errors"

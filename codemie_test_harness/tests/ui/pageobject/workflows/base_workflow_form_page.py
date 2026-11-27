@@ -38,6 +38,10 @@ NODE_OUTLINE_CLASS = {
     "warning": "outline-aborted-secondary",
 }
 
+# Quiet window with no new update request before counting them, and the cap on waiting for it.
+UPDATE_REQUESTS_SETTLE_MS = 2_000
+UPDATE_REQUESTS_SETTLE_TIMEOUT_MS = 10_000
+
 
 class BaseWorkflowFormPage(BasePage):
     """Base class for workflow form pages with common elements and methods for Visual Editor."""
@@ -49,6 +53,7 @@ class BaseWorkflowFormPage(BasePage):
         self._config_panel = WorkflowConfigPanel(page)
         self.issues_panel = WorkflowIssuesPanel(page)
         self._update_requests: list[str] = []
+        self._update_request_listener = None
 
     # ==============================================
     # PROPERTIES - UI ELEMENTS
@@ -305,6 +310,7 @@ class BaseWorkflowFormPage(BasePage):
     @step
     def start_counting_update_requests(self, workflow_id: str):
         """Record every update request (PUT v1/workflows/<id>) the page sends from now on."""
+        self.stop_counting_update_requests()
         self._update_requests = []
         suffix = f"/v1/workflows/{workflow_id}"
 
@@ -313,6 +319,14 @@ class BaseWorkflowFormPage(BasePage):
                 self._update_requests.append(request.url)
 
         self.page.on("request", _record)
+        self._update_request_listener = _record
+        return self
+
+    def stop_counting_update_requests(self):
+        """Remove the listener added by ``start_counting_update_requests``, if any."""
+        if self._update_request_listener is not None:
+            self.page.remove_listener("request", self._update_request_listener)
+            self._update_request_listener = None
         return self
 
     # ------ Toolbar Actions ------
@@ -544,7 +558,19 @@ class BaseWorkflowFormPage(BasePage):
 
     @step
     def should_have_sent_update_requests(self, count: int):
-        """Exactly ``count`` update requests were sent since ``start_counting_update_requests``."""
+        """Exactly ``count`` update requests were sent since ``start_counting_update_requests``.
+
+        Waits until no new update request has arrived for ``UPDATE_REQUESTS_SETTLE_MS``, so
+        a duplicate update sent asynchronously right after the UI settles is still counted.
+        """
+        deadline_ms = UPDATE_REQUESTS_SETTLE_TIMEOUT_MS
+        seen = len(self._update_requests)
+        while deadline_ms > 0:
+            self.page.wait_for_timeout(UPDATE_REQUESTS_SETTLE_MS)
+            deadline_ms -= UPDATE_REQUESTS_SETTLE_MS
+            if len(self._update_requests) == seen:
+                break
+            seen = len(self._update_requests)
         assert_that(
             self._update_requests,
             has_length(count),

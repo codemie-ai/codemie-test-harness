@@ -25,8 +25,10 @@ button ``data-severity``), issueSeverity.ts (card border classes).
 """
 
 import re
+from typing import Optional
 
 from playwright.sync_api import Locator, Page, expect
+from hamcrest import assert_that, is_
 from reportportal_client import step
 
 # The restore dry-run has its own 30 s limit (CHECK_TIMEOUT_MS); its outcome may take that long.
@@ -38,6 +40,20 @@ CARD_BORDER_CLASS = {
     "Warning": "border-aborted-secondary",
     "Unverified": "border-border-quaternary",
 }
+
+# Sets window.__issuesPanelSeen once an <aside>/complementary region headed "Issues" exists,
+# so a panel that opens and is then torn down by navigation is still caught.
+_WATCH_ISSUES_PANEL_JS = """() => {
+    window.__issuesPanelSeen = false;
+    const isOpen = () => [...document.querySelectorAll('aside, [role="complementary"]')]
+        .some(region => [...region.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]')]
+            .some(heading => heading.textContent.trim() === 'Issues'));
+    if (isOpen()) { window.__issuesPanelSeen = true; return; }
+    const observer = new MutationObserver(() => {
+        if (isOpen()) { window.__issuesPanelSeen = true; observer.disconnect(); }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+}"""
 
 
 class WorkflowIssuesPanel:
@@ -84,10 +100,11 @@ class WorkflowIssuesPanel:
         """'node save validation (strict)' tags on cards."""
         return self.panel.get_by_text("node save validation (strict)", exact=True)
 
-    def group_header(self, label: str) -> Locator:
-        """Header button of a severity group, named '<label> (<count>)'."""
+    def group_header(self, label: str, count: Optional[int] = None) -> Locator:
+        """Header button of a severity group, named '<label> (<count>)'; any count if None."""
+        count_pattern = r"\d+" if count is None else str(count)
         return self.panel.get_by_role(
-            "button", name=re.compile(rf"^{re.escape(label)}\s*\(\d+\)$")
+            "button", name=re.compile(rf"^{re.escape(label)}\s*\({count_pattern}\)$")
         )
 
     def card(self, text: str) -> Locator:
@@ -107,6 +124,16 @@ class WorkflowIssuesPanel:
         """Open the panel from the Issues toolbar button."""
         self.issues_button.click()
         expect(self.panel).to_be_visible()
+        return self
+
+    @step
+    def start_watching(self):
+        """Record in the page whether the Issues panel opens at any moment from now on.
+
+        The editor is a single-page app, so the flag survives the client-side navigation
+        back to the workflows list; ``should_not_have_opened`` reads it afterwards.
+        """
+        self.page.evaluate(_WATCH_ISSUES_PANEL_JS)
         return self
 
     @step
@@ -138,21 +165,25 @@ class WorkflowIssuesPanel:
         return self
 
     @step
-    def should_have_group(self, label: str, count: int, expanded: bool):
-        """The severity group '<label> (<count>)' is shown, expanded or collapsed."""
-        header = self.panel.get_by_role(
-            "button", name=re.compile(rf"^{re.escape(label)}\s*\({count}\)$")
-        )
-        expect(header).to_be_visible(timeout=RESULT_TIMEOUT_MS)
-        expect(header).to_have_attribute(
-            "aria-expanded", "true" if expanded else "false"
+    def should_not_have_opened(self):
+        """The Issues panel did not open at any moment since ``start_watching``."""
+        seen = self.page.evaluate("() => window.__issuesPanelSeen")
+        assert_that(
+            seen,
+            is_(False),
+            "Issues panel opened since start_watching (None: the watcher was lost, "
+            "the page reloaded instead of navigating client-side)",
         )
         return self
 
     @step
-    def should_not_have_group(self, label: str):
-        """No severity group with this label is shown."""
-        expect(self.group_header(label)).to_have_count(0)
+    def should_have_group(self, label: str, count: int, expanded: bool):
+        """The severity group '<label> (<count>)' is shown, expanded or collapsed."""
+        header = self.group_header(label, count)
+        expect(header).to_be_visible(timeout=RESULT_TIMEOUT_MS)
+        expect(header).to_have_attribute(
+            "aria-expanded", "true" if expanded else "false"
+        )
         return self
 
     @step
