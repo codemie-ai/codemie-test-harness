@@ -16,7 +16,8 @@
 
 PUT /v1/settings/project/{id} and PUT /v1/settings/user/{id} move the integration to the
 ``project_name`` of the request while keeping its id. Covers TC_002, TC_003, TC_004, TC_006
-and TC_007, plus the refusal to move a subsystem-managed row.
+and TC_007, plus the refusal to move a subsystem-managed row. DELETE /v1/settings/project/{id}
+on a personal integration is covered at the end of the module.
 """
 
 import time
@@ -26,6 +27,7 @@ import pytest
 from hamcrest import (
     any_of,
     assert_that,
+    contains_string,
     equal_to,
     has_item,
     is_not,
@@ -43,14 +45,17 @@ from codemie_sdk.models.integration import (
 from codemie_test_harness.tests.test_data.integration_project_change_test_data import (
     ACCESS_DENIED_DETAILS,
     ALIAS_COLLISION_DETAILS,
+    INTEGRATION_DELETED_MESSAGE,
     INTEGRATION_UPDATED_MESSAGE,
     MANAGED_ALIAS_DETAILS,
     NOT_OWNER_ACCESS_DENIED_MESSAGE,
+    NOT_OWNER_DELETE_DETAILS,
     NOT_OWNER_UPDATE_DETAILS,
     RESERVED_IDENTIFIERS_MESSAGE,
     SCHEDULE_MANAGED_ALIAS,
     git_datasource_source,
     non_owner_caller_test_data,
+    personal_integration_deleter_test_data,
     project_change_scope_test_data,
     project_managed_alias_test_data,
     user_managed_alias_test_data,
@@ -798,4 +803,191 @@ def test_update_managed_integration_keeping_project_succeeds(
         updated.alias,
         equal_to(SCHEDULE_MANAGED_ALIAS),
         "Managed integration alias changed during an in-place update.",
+    )
+
+
+@pytest.fixture
+def owner_project_admin_utils(
+    owner_project,
+    owner_personal_integration,
+    platform_user,
+    user_utils,
+    create_integration_in_project,
+):
+    """Client of the integration owner after being made admin of ``owner_project``.
+
+    The project-level delete first checks the caller's access to the row's project, so the owner
+    must be its admin to reach the ownership check. The role is effective once the owner lists the
+    project integrations.
+    """
+    owner_utils, _ = owner_personal_integration
+    user_utils.update_user_project_role(
+        platform_user.user_id, owner_project.name, is_project_admin=True
+    )
+    _wait_until_member_sees_project(
+        owner_utils, owner_project.name, create_integration_in_project
+    )
+    return owner_utils
+
+
+@pytest.fixture
+def platform_admin_deleter_utils(admin_client):
+    """Client of a platform admin whose role is active on all replicas."""
+    return IntegrationUtils(admin_client)
+
+
+@pytest.fixture
+def maintainer_deleter_utils(maintainer_client):
+    """Client of a maintainer who logged in after the maintainer flag was set."""
+    return IntegrationUtils(maintainer_client)
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.api
+def test_delete_personal_integration_denied_for_project_admin_non_owner(
+    platform_user,
+    owner_personal_integration,
+    project_admin_non_owner_utils,
+):
+    # @case personal-integration-delete-guard_TC_001
+    """A Project Admin who is not the owner gets 403 'Access denied' without the owner revealed; the row stays."""
+    owner_utils, personal = owner_personal_integration
+
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
+        project_admin_non_owner_utils.delete_integration_by_id(
+            personal.id, IntegrationType.PROJECT
+        )
+
+    response = exc_info.value.response
+    assert_error_details(
+        response, 403, NOT_OWNER_ACCESS_DENIED_MESSAGE, field="message"
+    )
+    assert_error_details(response, 403, NOT_OWNER_DELETE_DETAILS)
+    assert_that(
+        response.text,
+        is_not(contains_string(platform_user.user_id)),
+        "Refusal body reveals the owner's user id.",
+    )
+    assert_that(
+        response.text,
+        is_not(contains_string(platform_user.email)),
+        "Refusal body reveals the owner's e-mail.",
+    )
+    retained = owner_utils.get_integration_by_id(personal.id, IntegrationType.USER)
+    assert_that(
+        retained,
+        not_none(),
+        "Personal integration was removed despite the refused delete.",
+    )
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.parametrize("deleter_fixture", personal_integration_deleter_test_data)
+@pytest.mark.api
+def test_delete_personal_integration_allowed_for_owner_platform_admin_and_maintainer(
+    request, owner_personal_integration, deleter_fixture
+):
+    # @case personal-integration-delete-guard_TC_002
+    """The owner, a platform admin and a maintainer delete the personal integration; it leaves the owner's list."""
+    owner_utils, personal = owner_personal_integration
+    deleter_utils = request.getfixturevalue(deleter_fixture)
+
+    response = deleter_utils.delete_integration_by_id(
+        personal.id, IntegrationType.PROJECT
+    )
+
+    assert_that(
+        response["message"],
+        equal_to(INTEGRATION_DELETED_MESSAGE),
+        "Personal integration delete response is not as expected.",
+    )
+    assert_that(
+        owner_utils.get_integration_by_id(personal.id, IntegrationType.USER),
+        none(),
+        "Personal integration is still listed for the owner after the delete.",
+    )
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.api
+def test_delete_project_integration_allowed_for_project_admin(
+    integration_utils,
+    owner_project,
+    project_admin_non_owner_utils,
+    create_integration_in_project,
+):
+    # @case personal-integration-delete-guard_TC_003
+    """A Project Admin deletes a project integration of their project; it leaves the project's list."""
+    created = create_integration_in_project(owner_project.name)
+
+    response = project_admin_non_owner_utils.delete_integration_by_id(
+        created.id, IntegrationType.PROJECT
+    )
+
+    assert_that(
+        response["message"],
+        equal_to(INTEGRATION_DELETED_MESSAGE),
+        "Project integration delete response is not as expected.",
+    )
+    assert_that(
+        integration_utils.list_integration_ids_in_project(
+            owner_project.name, IntegrationType.PROJECT
+        ),
+        is_not(has_item(created.id)),
+        "Project integration is still listed after the Project Admin deleted it.",
+    )
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.api
+def test_delete_integration_of_other_project_denied_for_project_admin(
+    project,
+    platform_user,
+    user_utils,
+    project_admin_non_owner_utils,
+    create_integration_in_project,
+):
+    # @case personal-integration-delete-guard_TC_004
+    """A Project Admin of project A gets 403 on an integration under project B; it stays in project B."""
+    other_project = project()
+    other = create_integration_in_project(other_project.name)
+    user_utils.assign_user_to_project(
+        platform_user.user_id, other_project.name, is_project_admin=True
+    )
+    other_admin_utils = IntegrationUtils(platform_user.client)
+    wait_for_entity(
+        lambda: other_admin_utils.list_integrations(
+            IntegrationType.PROJECT, per_page=200
+        ),
+        entity_name=other.alias,
+        timeout=60,
+    )
+
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
+        project_admin_non_owner_utils.delete_integration_by_id(
+            other.id, IntegrationType.PROJECT
+        )
+
+    response = exc_info.value.response
+    assert_error_details(
+        response, 403, NOT_OWNER_ACCESS_DENIED_MESSAGE, field="message"
+    )
+    assert_error_details(
+        response, 403, f"{ACCESS_DENIED_DETAILS} '{other_project.name}'"
+    )
+    retained = other_admin_utils.get_integration_by_id(
+        other.id, IntegrationType.PROJECT
+    )
+    assert_that(
+        retained,
+        not_none(),
+        "Integration under project B was removed by a Project Admin of project A.",
     )
