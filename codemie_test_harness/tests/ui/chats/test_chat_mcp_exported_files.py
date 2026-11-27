@@ -18,6 +18,9 @@ Covers:
   TC_002  An exported file shows as a chip with its name and MIME type, downloads
           under its name, and is listed again after a reload
   TC_004  A file that is missing or empty produces no chip and no filesystem link
+  Also: a file with a non-Latin name shows its decoded name and downloads under it, a
+  sandbox link with an invented token gets no chip, and a chip in a shared conversation
+  downloads for a second user
 
 The export runs through the API (an assistant with the opted-in filesystem MCP
 server, or the shell one for an xlsx); the tests then open the saved chat in the browser.
@@ -25,16 +28,21 @@ The filesystem server writes text only, so a csv file checks its chip, and a she
 MCP server running python3 writes the xlsx.
 """
 
+from datetime import datetime
+
 import pytest
-from hamcrest import assert_that, empty, is_not
+from hamcrest import assert_that, contains_string, empty, is_not
 from requests import HTTPError
 
-from codemie_sdk.models.conversation import ConversationCreateRequest
+from codemie_sdk.models.conversation import ConversationCreateRequest, HistoryItem
 from codemie_test_harness.tests.enums.tools import McpServerFilesystem
 from codemie_test_harness.tests.test_data.mcp_export_files_test_data import (
+    CHINESE_NAME_STEM,
+    CYRILLIC_NAME_STEM,
     EXPORT_WITHOUT_LINKS_SYSTEM_PROMPT,
     SHELL_MCP_SERVER,
     build_csv_file,
+    build_non_latin_csv_file,
     build_xlsx_file,
     export_empty_file_prompt,
     export_missing_file_prompt,
@@ -45,6 +53,11 @@ from codemie_test_harness.tests.test_data.mcp_server_test_data import (
     FILESYSTEM_MCP_SERVER,
 )
 from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
+from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
+from codemie_test_harness.tests.ui.test_data.sandbox_file_link_test_data import (
+    build_invented_sandbox_link,
+)
+from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 
 
 @pytest.fixture
@@ -118,6 +131,71 @@ def open_chat(page):
         return chat_page
 
     return _open
+
+
+@pytest.fixture
+def seeded_reply_chat(client, assistant_factory, conversation_utils):
+    """Factory ``(assistant reply text) -> chat id``: a new conversation whose saved
+    history holds one user message and the given text as the assistant's answer.
+
+    The answer is written to the history through the API, not produced by a model, so
+    the text reaches the chat exactly as given. The conversation is deleted on
+    teardown; the assistant is deleted by ``assistant_factory``.
+    """
+    created_ids = []
+
+    def _seed(reply: str) -> str:
+        replier = assistant_factory.create()
+        conversation = client.conversations.create(
+            ConversationCreateRequest(initial_assistant_id=replier.id, folder="")
+        )
+        chat_id = conversation.get("id")
+        created_ids.append(chat_id)
+        conversation_utils.upsert_history(
+            conversation_id=chat_id,
+            history=[
+                HistoryItem(
+                    role="User",
+                    message="share the report",
+                    messageRaw="<p>share the report</p>",
+                    historyIndex=0,
+                    date=datetime.now(),
+                    fileNames=[],
+                ),
+                HistoryItem(
+                    role="Assistant",
+                    message=reply,
+                    historyIndex=0,
+                    date=datetime.now(),
+                    fileNames=[],
+                ),
+            ],
+            assistant_id=replier.id,
+        )
+        return chat_id
+
+    yield _seed
+
+    for chat_id in created_ids:
+        try:
+            client.conversations.delete(chat_id)
+        except HTTPError:
+            pass
+
+
+@pytest.fixture
+def reader_chat_page(new_context, platform_user):
+    """A ``ChatPage`` of a second, signed-in user in its own browser context, who is not
+    the owner of the chats the test creates."""
+    page = new_context().new_page()
+    user_id = platform_user.user_id
+    LoginPage(page).login_suppressing_popups(
+        platform_user.email,
+        platform_user.password,
+        user_id,
+        CredentialsManager.get_parameter("FRONTEND_URL", ""),
+    )
+    return ChatPage(page)
 
 
 # @case downloadable-chat-artifacts-mcp-files_TC_002
@@ -209,3 +287,100 @@ def test_missing_and_empty_export_files_show_no_chip_or_filesystem_link(
     chat_page = open_chat(chat_id)
     chat_page.generated_files.should_not_show_files()
     chat_page.generated_files.should_not_have_undelivered_links()
+
+
+# @case unify-sandbox-artifact-link-format_TC_001
+@pytest.mark.chat
+@pytest.mark.mcp
+@pytest.mark.parametrize(
+    "name_stem",
+    [
+        pytest.param(CYRILLIC_NAME_STEM, id="cyrillic"),
+        pytest.param(CHINESE_NAME_STEM, id="chinese"),
+    ],
+)
+@pytest.mark.timeout(600)
+@pytest.mark.ui
+def test_exported_file_with_non_latin_name_shows_decoded_name_and_downloads(
+    export_chat, open_chat, name_stem
+):
+    """A file whose name is Cyrillic or Chinese shows as one chip with its decoded name
+    and MIME type, and downloads under that decoded name.
+
+    AC-6: the artifact token of a non-Latin name decodes; AC-3: the chip and the
+    download show the decoded name; AC-1: the chip downloads the file.
+    """
+    exported = build_non_latin_csv_file(name_stem)
+    chat_page = open_chat(export_chat(export_prompt(exported)))
+
+    chat_page.generated_files.should_show_file(exported.name, exported.mime_type)
+
+    download = chat_page.generated_files.download_file()
+    chat_page.generated_files.should_be_saved_as(
+        download, exported.name, exported.content
+    )
+
+
+# @case unify-sandbox-artifact-link-format_TC_002
+@pytest.mark.chat
+@pytest.mark.mcp
+@pytest.mark.timeout(600)
+@pytest.mark.ui
+def test_sandbox_link_with_invented_token_gets_no_chip(
+    export_chat, seeded_reply_chat, open_chat, chat_history
+):
+    """A sandbox link whose token the back end never issued gets no chip and no sandbox:
+    link, while a link to a file the back end did export shows its chip in the same run.
+
+    AC-6: the strict token decoder refuses an invented token.
+
+    The answer is written to the saved history through the API, so no model has to copy
+    the link. The history must hold the link and the page must show its label, so a chat
+    that lost the link cannot pass. The exported file is the positive control: the same
+    chip logic does show a real chip.
+    """
+    exported = build_csv_file()
+    control_page = open_chat(export_chat(export_prompt(exported)))
+    control_page.generated_files.should_show_file(exported.name, exported.mime_type)
+
+    invented = build_invented_sandbox_link()
+    invented_chat_id = seeded_reply_chat(invented.reply)
+    assert_that(
+        " ".join(
+            item.message for item in _assistant_items(chat_history(invented_chat_id))
+        ),
+        contains_string(invented.link),
+        "The assistant's answer must carry the invented sandbox link",
+    )
+
+    chat_page = open_chat(invented_chat_id)
+    chat_page.should_show_assistant_text(invented.label)
+    chat_page.generated_files.should_not_show_files()
+    chat_page.generated_files.should_not_have_undelivered_links()
+
+
+# @case unify-sandbox-artifact-link-format_TC_003
+@pytest.mark.chat
+@pytest.mark.mcp
+@pytest.mark.timeout(600)
+@pytest.mark.ui
+def test_exported_file_chip_in_shared_conversation_downloads_for_second_user(
+    export_chat, conversation_utils, reader_chat_page
+):
+    """A second user who opens a shared conversation sees the chip of the exported file
+    and downloads it under its name with the bytes the server wrote.
+
+    AC-1: the chip resolves through the share grant and the download uses it.
+    """
+    exported = build_csv_file()
+    share_token = conversation_utils.share_conversation(
+        export_chat(export_prompt(exported))
+    ).token
+
+    reader_chat_page.navigate_to_shared_conversation(share_token)
+
+    reader_chat_page.generated_files.should_show_file(exported.name, exported.mime_type)
+    download = reader_chat_page.generated_files.download_file()
+    reader_chat_page.generated_files.should_be_saved_as(
+        download, exported.name, exported.content
+    )

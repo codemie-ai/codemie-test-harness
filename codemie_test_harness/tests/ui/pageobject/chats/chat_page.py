@@ -248,6 +248,11 @@ class ChatPage(BasePage):
     def search_assistant_list(self) -> Locator:
         return self.page.locator("#quill-mention-list")
 
+    @property
+    def mention_file_rows(self) -> Locator:
+        """File rows of the `@` mention list (assistant rows are `data-type="assistant"`)."""
+        return self.search_assistant_list.locator('li[data-type="file"]')
+
     # ==================== ACTION BUTTONS ====================
 
     @property
@@ -1415,6 +1420,34 @@ class ChatPage(BasePage):
         return self
 
     @step
+    def should_show_assistant_text(self, text: str, timeout: int = 30000):
+        """An assistant message shows `text` as visible text."""
+        expect(self.assistant_message.filter(has_text=text).first).to_be_visible(
+            timeout=timeout
+        )
+        return self
+
+    @step
+    def open_file_mention_list(self):
+        """Type `@` in the message input to open the mention list."""
+        self.chat_input.fill("@")
+        expect(self.search_assistant_list).to_be_visible()
+        return self
+
+    @step
+    def should_list_mention_files(self, names: tuple, timeout: int = 15000):
+        """The mention list holds exactly one file row per name, each showing the
+        decoded file name."""
+        expect(self.mention_file_rows).to_have_count(len(names), timeout=timeout)
+        for name in names:
+            row = self.mention_file_rows.filter(
+                has=self.page.get_by_text(name, exact=True)
+            )
+            expect(row).to_have_count(1, timeout=timeout)
+            expect(row).to_have_attribute("data-value", name, timeout=timeout)
+        return self
+
+    @step
     def should_have_blocked_image_badge_count(self, count: int):
         """Verify the number of blocked-image badges rendered on the page."""
         expect(self.blocked_image_badges).to_have_count(count)
@@ -1489,7 +1522,8 @@ class ChatPage(BasePage):
 
     @property
     def generated_files(self) -> GeneratedFiles:
-        """Files the chat's assistant messages published (the generated-files block)."""
+        """Files the chat's assistant messages published (the generated-files block).
+        The shared conversation view renders the same message list, so this serves it too."""
         return GeneratedFiles(self.chat_history_container)
 
     @step
