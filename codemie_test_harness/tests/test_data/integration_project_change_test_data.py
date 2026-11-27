@@ -45,6 +45,21 @@ non_owner_caller_test_data = [
 # Message returned by a successful PUT /v1/settings/{project|user}/{id}.
 INTEGRATION_UPDATED_MESSAGE = "Specified credentials updated"
 
+# DELETE /v1/settings/project/{id}: refusal of a Project Admin who does not own the personal row,
+# and the message of a successful delete.
+NOT_OWNER_DELETE_DETAILS = (
+    "You do not have the necessary permissions to delete this entity."
+)
+INTEGRATION_DELETED_MESSAGE = "Specified credential removed"
+
+# Fixture names of callers who may delete another user's (or their own) personal integration through
+# the project-level delete; resolved lazily so each caller is only created for its own case.
+personal_integration_deleter_test_data = [
+    pytest.param("owner_project_admin_utils", id="owner"),
+    pytest.param("platform_admin_deleter_utils", id="platform_admin"),
+    pytest.param("maintainer_deleter_utils", id="maintainer"),
+]
+
 
 # Rejection of a one-row move of a row whose stored alias belongs to another subsystem.
 RESERVED_IDENTIFIERS_MESSAGE = "Reserved integration identifiers"
