@@ -24,16 +24,27 @@ Rows are created enabled, so a PATCH to ``isEnabled: false`` is a visible change
 Grounding: backend src/codemie/service/settings/scheduler_settings_service.py:713
 (admin/maintainer bypass), :716 (write check, 403), :728 (non-scheduler row, 404),
 :742 (value saved, SchedulerListItem returned); src/codemie/rest_api/routers/
-schedulers.py:83 (200, SchedulerListItem); frontend src/store/schedulers.ts:162 sends
+schedulers.py:83 (200, SchedulerListItem); an id that matches no Settings row at all
+is not found (404) as well, src/codemie/service/settings/scheduler_settings_service.py:846
+(lookup returns None) and :848 (raise_not_found, message "Scheduler not found"); frontend src/store/schedulers.ts:162 sends
 ``{"isEnabled": <bool>}``, the body ``client.schedulers.update`` sends.
 """
 
+import uuid
 from dataclasses import dataclass
 
 import pytest
 from codemie_sdk import CodeMieClient
 from codemie_sdk.models.integration import CredentialTypes, IntegrationType
-from hamcrest import assert_that, equal_to, is_, not_, has_item, not_none
+from hamcrest import (
+    assert_that,
+    contains_string,
+    equal_to,
+    has_item,
+    is_,
+    not_,
+    not_none,
+)
 from requests import HTTPError
 
 from codemie_test_harness.tests.test_data.scheduler_patch_test_data import (
@@ -377,3 +388,49 @@ def test_patch_project_scheduler_as_other_project_admin_is_forbidden(
         is_(True),
         "A denied PATCH must leave the scheduler enabled.",
     )
+
+
+@pytest.mark.scheduler
+@pytest.mark.api
+@pytest.mark.skipif(
+    EnvironmentResolver.is_sandbox(),
+    reason="Scheduler is disabled on sandbox environments",
+)
+@pytest.mark.parametrize(
+    "caller_fixture",
+    ["platform_user_client", "admin_client"],
+    ids=["platform_user", "platform_admin"],
+)
+def test_patch_scheduler_with_unknown_id_is_not_found(request, caller_fixture):
+    # @case scheduler-patch-404-unknown-id_TC_001
+    # Grounding: backend scheduler_settings_service.py:846 (find_by_id returns None for an
+    # unknown id), :848 and rest_api/routers/utils.py:96 (raise_not_found -> 404, message
+    # "Scheduler not found"); rest_api/main.py:1684-1685 (the internal-error texts a 500
+    # carries). The envelope is not pinned: only its text is checked.
+    caller = request.getfixturevalue(caller_fixture)
+    unknown_id = str(uuid.uuid4())
+
+    with pytest.raises(HTTPError) as error:
+        caller.schedulers.update(unknown_id, is_enabled=False)
+
+    response = error.value.response
+    assert_that(
+        response.status_code,
+        equal_to(404),
+        "An id that matches no row must be reported as not found, not as a server error.",
+    )
+    assert_that(
+        response.text,
+        contains_string("Scheduler not found"),
+        "The 404 body must carry the standard not-found message.",
+    )
+    for internal_text in (
+        "An internal error occurred",
+        "An unexpected error occurred",
+        "Internal Server Error",
+    ):
+        assert_that(
+            response.text,
+            not_(contains_string(internal_text)),
+            "The 404 body must not carry internal-error text.",
+        )
