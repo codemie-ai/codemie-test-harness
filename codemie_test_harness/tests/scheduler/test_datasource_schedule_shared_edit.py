@@ -57,11 +57,14 @@ def schedule_edit():
 
 @pytest.fixture
 def project_jira_integration(
-    platform_user, shared_project, scoped_integrations, jira_seed_issue
+    client, shared_project, scoped_integrations, jira_seed_issue
 ):
-    """Project-level Jira integration of the shared project, usable by both members."""
+    """Project-level Jira integration of the shared project, created by the admin client.
+
+    Plain members cannot create PROJECT settings; both members can use the integration.
+    """
     return scoped_integrations.create(
-        IntegrationUtils(platform_user.client),
+        IntegrationUtils(client),
         IntegrationType.PROJECT,
         shared_project.name,
         get_random_name(),
