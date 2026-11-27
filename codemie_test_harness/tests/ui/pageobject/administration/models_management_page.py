@@ -38,8 +38,10 @@ from codemie_test_harness.tests.ui.test_data.model_management_test_data import (
     SETTINGS_UPDATED_TOAST,
 )
 from codemie_test_harness.tests.ui.test_data.model_management_pagination_test_data import (
+    DEFAULT_PAGE_SIZE,
     EMPTY_LIST_TEXT,
     page_count,
+    page_of,
     page_size_label,
     page_slice,
 )
@@ -290,6 +292,19 @@ class ModelsManagementPage(BasePage):
         return self
 
     @step
+    def go_to_page_of_model(
+        self, base_names: list[str], base_name: str, per_page: int = DEFAULT_PAGE_SIZE
+    ):
+        """Open the page that holds the model's row.
+
+        `base_names` is the list in the order the page lists it; the page is computed
+        from the model's index. With a single page there is no page button to click.
+        """
+        if page_count(len(base_names), per_page) > 1:
+            self.go_to_page(page_of(base_names, base_name, per_page))
+        return self
+
+    @step
     def set_page_size(self, per_page: int):
         """Choose the number of rows per page; the list returns to its first page."""
         self.page_size_dropdown.click()
@@ -323,10 +338,27 @@ class ModelsManagementPage(BasePage):
         return self
 
     @step
-    def should_list_exactly_models(self, base_names: list[str]):
-        """Assert the table has one row per given base name and no other row."""
-        expect(self.data_rows).to_have_count(len(base_names), timeout=15000)
-        texts = self.data_rows.all_inner_texts()
+    def should_list_exactly_models(
+        self, base_names: list[str], per_page: int = DEFAULT_PAGE_SIZE
+    ):
+        """Assert the paged list holds one row per given base name and no other row.
+
+        Walks every page of `per_page` rows: the page buttons end at the last page the
+        count needs, each page holds its share of the rows, and together the pages show
+        every given model. Order is not checked here (`should_page_through_models` does).
+        """
+        last_page = page_count(len(base_names), per_page)
+        if last_page > 1:
+            self.should_have_last_page(last_page)
+        else:
+            self.should_show_no_page_buttons()
+        texts: list[str] = []
+        for page_number in range(1, last_page + 1):
+            if last_page > 1:
+                self.go_to_page(page_number)
+            on_page = len(page_slice(base_names, page_number, per_page))
+            expect(self.data_rows).to_have_count(on_page, timeout=15000)
+            texts.extend(self.data_rows.all_inner_texts())
         missing = [
             base_name
             for base_name in base_names
