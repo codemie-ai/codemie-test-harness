@@ -33,6 +33,13 @@ import json
 
 import pytest
 from codemie_sdk.models.workflow import WorkflowMode
+from codemie_sdk.models.workflow_state import WorkflowExecutionStatusEnum
+from codemie_test_harness.tests.test_data.transform_node_test_data import (
+    SURROGATE_CODEC_ERROR,
+    SURROGATE_OUTPUT_FIELD,
+    SURROGATE_SOURCE_KEY,
+    SURROGATE_USER_INPUTS,
+)
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.yaml_utils import (
     StateModel,
@@ -40,7 +47,7 @@ from codemie_test_harness.tests.utils.yaml_utils import (
     CustomNodeModel,
     prepare_yaml_content,
 )
-from hamcrest import assert_that, contains_string
+from hamcrest import assert_that, contains_string, equal_to, has_entry, is_not
 
 
 @pytest.mark.sanity
@@ -630,3 +637,83 @@ def test_input_source_user_input(
 
     assert_that(output, contains_string("process"))
     assert_that(output, contains_string("12345"))
+
+
+@pytest.mark.sanity
+@pytest.mark.smoke
+@pytest.mark.workflow
+@pytest.mark.transform
+@pytest.mark.parametrize("surrogate_input", SURROGATE_USER_INPUTS)
+@pytest.mark.api
+def test_input_source_user_input_with_surrogate_escapes_is_sanitized(
+    workflow_utils, workflow_cleanup, surrogate_input
+):
+    """A user_input JSON field holding surrogate escapes is extracted as valid text.
+
+    Scenario:
+    1. Transform node reads user_input and extracts a field whose value is
+       backslash-u surrogate escape text.
+    2. The run completes instead of failing on a surrogate encoding error.
+    3. The transform state output holds the sanitized text: an escaped pair
+       becomes one character, an unpaired surrogate becomes U+FFFD.
+    """
+    # @case workflow-pr-description-surrogate-emoji_TC_001
+    workflow_yaml = WorkflowYamlModel(
+        enable_summarization_node=False,
+        assistants=[],
+        custom_nodes=[
+            CustomNodeModel(
+                id="input_processor",
+                custom_node_id="transform_node",
+                config={
+                    "input_source": "user_input",
+                    "mappings": [
+                        {
+                            "output_field": SURROGATE_OUTPUT_FIELD,
+                            "type": "extract",
+                            "source_path": SURROGATE_SOURCE_KEY,
+                        },
+                    ],
+                },
+            )
+        ],
+        states=[
+            StateModel(
+                id="process_input",
+                custom_node_id="input_processor",
+                next={"state_id": "end"},
+            ),
+        ],
+    )
+
+    yaml_content = prepare_yaml_content(workflow_yaml.model_dump(exclude_none=True))
+    created_workflow = workflow_utils.create_workflow(
+        workflow_name=get_random_name(),
+        workflow_type=WorkflowMode.SEQUENTIAL,
+        workflow_yaml=yaml_content,
+    )
+    workflow_cleanup.append(created_workflow)
+
+    # Transform node output: json.dumps(output, ensure_ascii=False)
+    # (transform_node.py post_process_output)
+    output = workflow_utils.execute_workflow_without_prompt_modification(
+        created_workflow.id,
+        execution_name="process_input",
+        user_input=surrogate_input.user_input,
+    )
+
+    assert_that(
+        workflow_utils.get_first_execution(created_workflow).status,
+        equal_to(WorkflowExecutionStatusEnum.SUCCEEDED),
+        "a run with surrogate escapes in user_input must complete",
+    )
+    assert_that(
+        output,
+        is_not(contains_string(SURROGATE_CODEC_ERROR)),
+        "the transform state must not report a surrogate encoding error",
+    )
+    assert_that(
+        json.loads(output),
+        has_entry(SURROGATE_OUTPUT_FIELD, surrogate_input.expected_text),
+        "the extracted field must hold the sanitized text",
+    )
