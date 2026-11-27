@@ -204,8 +204,8 @@ def test_personal_session_of_an_ordinary_user_ignores_the_profile_project(
     routing_world, organizations
 ):
     """An ordinary user's Personal session goes to the owner's personal project even when the
-    profile names a shared project: the owner lists it with origin personal and the shared
-    project's listing does not hold it."""
+    profile names a shared project: the owner lists it with origin personal in its personal_only
+    list and the shared project's listing does not hold it."""
     world = routing_world
     batch = new_session()
 
@@ -219,7 +219,9 @@ def test_personal_session_of_an_ordinary_user_ignores_the_profile_project(
     )
 
     assert_accepted(response, "event-hooks", CT_NDJSON)
-    owned = wait_for_session_row(world.sender.api, batch.session_id, batch.repo)
+    owned = wait_for_session_row(
+        world.sender.api, batch.session_id, batch.repo, personal_only="true"
+    )
     assert_that(
         routing_of(owned),
         equal_to(expected_routing(PERSONAL, PERSONAL)),

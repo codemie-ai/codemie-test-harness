@@ -175,8 +175,9 @@ def test_non_matching_organization_is_personal_owner_only_and_outside_company_sp
     provisioner, organizations, gate_admin_client
 ):
     """An ordinary user's session with an organization outside a non-empty corporate list is
-    Personal: the owner lists it with origin personal, another user and an admin do not, and the
-    admin's cost view counts only the owner's shared session, not the Personal one.
+    Personal: the owner lists it with origin personal in its personal_only list, another ordinary
+    user does not, the shared list never holds it (not even an admin's), and the admin's cost
+    view counts only the owner's shared session, not the Personal one.
     Absence is 'not observed within the window' (observe_absence_window)."""
     owner, other = provisioner.sender(), provisioner.sender()
     shared = provisioner.project(owner, other)
@@ -196,7 +197,9 @@ def test_non_matching_organization_is_personal_owner_only_and_outside_company_sp
 
     for response in (personal_response, shared_response, others_response):
         assert_accepted(response, "event-hooks", CT_NDJSON)
-    owner_row = wait_for_session_row(owner.api, personal.session_id, personal.repo)
+    owner_row = wait_for_session_row(
+        owner.api, personal.session_id, personal.repo, personal_only="true"
+    )
     assert_that(
         routing_of(owner_row),
         equal_to(expected_routing(PERSONAL, PERSONAL)),
@@ -211,11 +214,12 @@ def test_non_matching_organization_is_personal_owner_only_and_outside_company_sp
             }
         },
         time.monotonic(),
+        filters={"personal_only": "true"},
     )
     assert_that(
         listed_session_ids_with(admin_api, search=SESSION_PREFIX),
         is_not(has_item(personal.session_id)),
-        "an admin must not list another user's Personal session",
+        "the shared list must not hold a Personal session, not even an admin's",
     )
     kpis = wait_for_cost_sessions(admin_api, 1, users=owner.email)
     assert_that(
@@ -326,7 +330,8 @@ def test_subscription_type_and_project_origin_are_stored_and_filterable(
     provisioner, organizations, gate_admin_client
 ):
     """Session rows carry subscription_type and project_origin, the two comma-separated filters
-    return exactly the matching sessions (a Personal one to its owner only), and the cost view
+    return exactly the matching sessions (a Personal one only in the owner's personal_only list),
+    and the cost view
     lists the distinct types and origins of the selected sessions."""
     admin_api = CliAnalyticsApi(gate_admin_client)
     sender = provisioner.sender()
@@ -366,7 +371,9 @@ def test_subscription_type_and_project_origin_are_stored_and_filterable(
         assert_accepted(response, "event-hooks", CT_NDJSON)
     for batch in (linked, profile, registered, default):
         wait_for_session_row(admin_api, batch.session_id, batch.repo, **shared_scope)
-    wait_for_session_row(sender.api, personal.session_id, personal.repo)
+    wait_for_session_row(
+        sender.api, personal.session_id, personal.repo, personal_only="true"
+    )
 
     rows = {
         row["trace_id"]: (row["subscription_type"], row["project_origin"])
@@ -391,7 +398,7 @@ def test_subscription_type_and_project_origin_are_stored_and_filterable(
         equal_to({linked.session_id, profile.session_id}),
         "the project_origin filter must return the linked_folder and profile sessions only",
     )
-    own = listed_rows(sender.api, project_origin="personal")
+    own = listed_rows(sender.api, personal_only="true", project_origin="personal")
     assert_that(
         [(row["trace_id"], row["subscription_type"]) for row in own],
         equal_to([(personal.session_id, PERSONAL)]),
@@ -467,7 +474,9 @@ def test_later_personal_classification_of_a_shared_bound_session_is_rejected(
         "the shared session's classification must not be rewritten",
     )
     assert_that(
-        session_rows(world.sender.api, batch.session_id, batch.repo),
+        session_rows(
+            world.sender.api, batch.session_id, batch.repo, personal_only="true"
+        ),
         empty(),
         "no private copy of the shared session may appear for the owner",
     )
@@ -477,7 +486,9 @@ def test_later_personal_classification_of_a_shared_bound_session_is_rejected(
         "event-hooks",
         CT_NDJSON,
     )
-    fresh_row = wait_for_session_row(world.sender.api, fresh.session_id, fresh.repo)
+    fresh_row = wait_for_session_row(
+        world.sender.api, fresh.session_id, fresh.repo, personal_only="true"
+    )
     assert_that(
         routing_of(fresh_row),
         equal_to(expected_routing(PERSONAL, PERSONAL)),
@@ -564,7 +575,9 @@ def test_encoded_organization_at_the_size_limits_is_accepted_and_classified(
     )
 
     assert_accepted(response, "event-hooks", CT_NDJSON)
-    owned = wait_for_session_row(world.sender.api, batch.session_id, batch.repo)
+    owned = wait_for_session_row(
+        world.sender.api, batch.session_id, batch.repo, personal_only="true"
+    )
     assert_that(
         routing_of(owned),
         equal_to(expected_routing(PERSONAL, PERSONAL)),

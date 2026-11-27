@@ -109,43 +109,54 @@ def spec_named(name: str) -> AccountSpec:
 
 # ── Reading CLI analytics by account kind ───────────────────────────────────────
 
-# What a reader lists in the sessions list narrowed to the shared project.
-LISTS_PROJECT_SESSIONS = "project sessions"  # the shared sessions of the project
-LISTS_OWN_PRIVATE = "own private sessions"  # only its own private Personal sessions
-LISTS_NOTHING = "nothing"
+# Every account kind reads the aggregates and the sessions list; the kind decides what they hold.
+# The aggregates and the shared sessions list never hold a private Personal session. A global
+# admin (a maintainer is one) and an auditor read every shared session; a project admin those of
+# their own projects; every account also reads the shared sessions it sent itself. A
+# Personal-paid session on a work project is project activity, not a private session.
+#
+# What a reader lists in the shared sessions list narrowed to the shared project:
+LISTS_PROJECT_SESSIONS = "project sessions"  # every shared session of the project
+LISTS_OWN_SHARED = "own shared sessions"  # only the shared sessions it sent itself
 
 GLOBAL_ADMIN = "global-admin"
+
+# A private Personal session is read (detail, and the personal_only list) by its owner and by
+# the kinds that read every user's private sessions: a global admin, a maintainer and an auditor.
+PRIVATE_DETAIL_STATUS = {
+    "regular-member": 404,
+    "project-admin": 404,
+    "maintainer": 200,
+    "auditor": 200,
+    "service-account": 404,
+    GLOBAL_ADMIN: 200,
+}
 
 
 @dataclass(frozen=True)
 class ReadRow:
     account: str  # key of AccountWorld.accounts, or GLOBAL_ADMIN
-    aggregate_status: int  # HTTP status of an aggregate route (the cost view)
     listing: str
-    shared_detail_status: int  # detail of a shared-project session
+    private_detail_status: int  # detail of another user's private Personal session
+    private_rows_as_own: int  # rows of that session in the reader's personal_only list
 
 
-# The shared-project read gate lets in a global admin (a maintainer is one), and a project admin
-# for their own projects; everybody else gets 403 on aggregate routes and only their own private
-# Personal sessions on the sessions list. A Personal-paid session on a work project is project
-# activity: it is not a private session of its owner, so its owner reads it only when the
-# project rights allow it.
 READ_ROWS = [
     pytest.param(
-        ReadRow("regular-member", 403, LISTS_OWN_PRIVATE, 404), id="regular-member"
+        ReadRow("regular-member", LISTS_OWN_SHARED, 404, 0), id="regular-member"
     ),
     pytest.param(
-        ReadRow("project-admin", 200, LISTS_PROJECT_SESSIONS, 200), id="project-admin"
+        ReadRow("project-admin", LISTS_PROJECT_SESSIONS, 404, 0), id="project-admin"
     ),
     pytest.param(
-        ReadRow("maintainer", 200, LISTS_PROJECT_SESSIONS, 200), id="maintainer"
+        ReadRow("maintainer", LISTS_PROJECT_SESSIONS, 200, 1), id="maintainer"
     ),
-    pytest.param(ReadRow("auditor", 403, LISTS_OWN_PRIVATE, 404), id="auditor"),
+    pytest.param(ReadRow("auditor", LISTS_PROJECT_SESSIONS, 200, 1), id="auditor"),
     pytest.param(
-        ReadRow("service-account", 403, LISTS_NOTHING, 404), id="service-account"
+        ReadRow("service-account", LISTS_OWN_SHARED, 404, 0), id="service-account"
     ),
     pytest.param(
-        ReadRow(GLOBAL_ADMIN, 200, LISTS_PROJECT_SESSIONS, 200), id="global-admin"
+        ReadRow(GLOBAL_ADMIN, LISTS_PROJECT_SESSIONS, 200, 1), id="global-admin"
     ),
 ]
 

@@ -645,14 +645,26 @@ class AccountSessions:
     personal: a Personal session of each ordinary kind (regular member, project admin,
     maintainer, auditor) with a link to the shared project; corporate: the owner's Corporate
     session in the shared project; private: the owner's Personal session; service: the Personal
-    session of the service account with a link to the shared project.
+    session of the service account with a link to the shared project; member: the regular
+    member's Corporate session in the shared project.
     """
 
     personal: dict
     corporate: SentSession
     private: SentSession
     service: SentSession
+    member: SentSession
     sent_at: float
+
+    @property
+    def shared(self) -> list[SentSession]:
+        """The sessions stored in the shared project (none of them private)."""
+        return [self.corporate, self.service, self.member]
+
+    def shared_sent_by(self, kind: str) -> set[str]:
+        """Ids of the shared-project sessions the account kind sent itself."""
+        senders = {"service-account": self.service, "regular-member": self.member}
+        return {senders[kind].batch.session_id} if kind in senders else set()
 
 
 @pytest.fixture(scope="module")
@@ -672,8 +684,13 @@ def account_sessions(account_world):
     corporate = _send(world.owner, organization=world.organizations.corporate, **linked)
     private = _send(world.owner, organization=other)
     service = _send(world.accounts["service-account"], organization=other, **linked)
+    member = _send(
+        world.accounts["regular-member"],
+        organization=world.organizations.corporate,
+        **linked,
+    )
     sent_at = time.monotonic()
-    for sent in (corporate, service):
+    for sent in (corporate, service, member):
         wait_for_session_row(
             world.admin_api,
             sent.batch.session_id,
@@ -691,4 +708,4 @@ def account_sessions(account_world):
             sent.batch.repo,
             personal_only="true",
         )
-    return AccountSessions(personal, corporate, private, service, sent_at)
+    return AccountSessions(personal, corporate, private, service, member, sent_at)

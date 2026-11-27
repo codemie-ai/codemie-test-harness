@@ -24,16 +24,16 @@ share; the external users of TC-004 are built per test because they change durin
 import time
 
 import pytest
-from hamcrest import assert_that, empty, equal_to
+from hamcrest import assert_that, empty, equal_to, has_length
 
 from codemie_test_harness.tests.test_data.cli_account_test_data import (
     EXTERNAL_FORMER_REGULAR,
     EXTERNAL_NO_PROJECTS,
     GLOBAL_ADMIN,
-    LISTS_NOTHING,
-    LISTS_OWN_PRIVATE,
+    LISTS_OWN_SHARED,
     LISTS_PROJECT_SESSIONS,
     PERSONAL_SENDER_KINDS,
+    PRIVATE_DETAIL_STATUS,
     READ_ROWS,
     REGISTRATION_RIGHTS_ROWS,
     specs_named,
@@ -66,7 +66,8 @@ from codemie_test_harness.tests.utils.cli_classification_utils import (
 )
 from codemie_test_harness.tests.utils.cli_gate_utils import observe_absence_window
 
-OWN_SESSIONS_ONLY_KINDS = ("regular-member", "auditor")
+# Kinds that read only the shared sessions they sent themselves.
+OWN_SESSIONS_ONLY_KINDS = ("regular-member",)
 SHARED_ORIGIN_PERSONAL = expected_routing(PERSONAL, LINKED_FOLDER)
 
 
@@ -196,19 +197,15 @@ def test_old_personal_project_of_an_external_user_never_receives_a_session(
 
 
 def _markers_for(sessions, reader: str) -> dict:
-    """A session the reader must see: its own private one when it reads its own sessions only,
-    otherwise the Corporate session of the shared project."""
-    sent = (
-        sessions.personal[reader]
-        if reader in OWN_SESSIONS_ONLY_KINDS
-        else sessions.corporate
-    )
+    """A session the reader must see in the shared list: its own shared one when it reads its
+    own sessions only, otherwise the owner's Corporate session of the shared project."""
+    sent = sessions.member if reader in OWN_SESSIONS_ONLY_KINDS else sessions.corporate
     return {sent.batch.session_id: sent.batch.repo}
 
 
 def _observe_private_session_absent(world, sessions, owner_kind: str, readers) -> None:
-    """None of the readers lists the private session of `owner_kind` within the absence window,
-    while each of them lists a session of its own that proves the listing works."""
+    """None of the readers lists the private session of `owner_kind` in the shared list within the
+    absence window, while each of them lists a session there that proves the listing works."""
     sent = sessions.personal[owner_kind]
     for reader in readers:
         observe_absence_window(
@@ -233,7 +230,8 @@ def test_personal_session_of_an_ordinary_account_stays_in_its_personal_project_a
 ):
     """A Personal session sent with a link to the shared project is stored in the owner's personal
     project whatever the account's role (member, project admin, maintainer, auditor); the owner
-    reads it, and neither the other kinds nor the global admin list it or open its detail."""
+    reads it, no other kind lists it in the shared list, and only a global admin, a maintainer
+    and an auditor open its detail."""
     world, sessions = account_world, account_sessions
     sent = sessions.personal[spec.name]
     owner = world.accounts[spec.name]
@@ -260,8 +258,8 @@ def test_personal_session_of_an_ordinary_account_stays_in_its_personal_project_a
     )
     assert_that(
         details,
-        equal_to({kind: 404 for kind in readers}),
-        "no other account may open the detail of a private Personal session",
+        equal_to({kind: PRIVATE_DETAIL_STATUS[kind] for kind in readers}),
+        "only a global admin, a maintainer and an auditor open another user's private session",
     )
 
 
@@ -276,34 +274,30 @@ def test_personal_session_of_an_ordinary_account_stays_in_its_personal_project_a
 def test_reading_cli_analytics_follows_the_account_kind(
     account_world, account_sessions, row
 ):
-    """Aggregates need the shared-project read gate; the sessions list returns the shared sessions
-    only to those allowed to read the project and otherwise the account's own private sessions;
-    the private Personal session of another user is never listed and its detail is 404 for every
-    kind, including maintainer, auditor and the global admin."""
+    """Every kind reads the aggregates; the shared sessions list and the shared-session detail
+    give the project's sessions to those allowed to read the project and otherwise only the
+    account's own; another user's private Personal session is never in the shared list, and only
+    a global admin, a maintainer and an auditor open it or find it in the personal_only list."""
     world, sessions = account_world, account_sessions
     api = world.api(row.account)
-    shared = [sessions.corporate, sessions.service]
-    own_private = {
-        sent.batch.session_id
-        for kind, sent in sessions.personal.items()
-        if kind == row.account
-    }
+    shared_ids = {sent.batch.session_id for sent in sessions.shared}
     expected_listing = {
-        LISTS_PROJECT_SESSIONS: {sent.batch.session_id for sent in shared},
-        LISTS_OWN_PRIVATE: own_private,
-        LISTS_NOTHING: set(),
+        LISTS_PROJECT_SESSIONS: shared_ids,
+        LISTS_OWN_SHARED: sessions.shared_sent_by(row.account),
     }[row.listing]
     private = sessions.private.batch
     # other tests of this module store sessions of their own in the project, so the listing is
     # compared on the sessions the module world sent
     world_session_ids = {
         sent.batch.session_id
-        for sent in (*shared, sessions.private, *sessions.personal.values())
+        for sent in (*sessions.shared, sessions.private, *sessions.personal.values())
     }
 
     aggregate = api.request("GET", COST_PATH, params={"projects": world.project})
     listed = listed_session_ids_with(api, projects=world.project)
-    shared_details = [_detail_status(api, sent) for sent in shared]
+    shared_details = {
+        sent.batch.session_id: _detail_status(api, sent) for sent in sessions.shared
+    }
     private_detail = _detail_status(api, sessions.private)
     private_listed = session_rows(api, private.session_id, private.repo)
     private_listed_as_own = session_rows(
@@ -312,8 +306,8 @@ def test_reading_cli_analytics_follows_the_account_kind(
 
     assert_that(
         aggregate.status_code,
-        equal_to(row.aggregate_status),
-        f"aggregate read gate: {aggregate.text[:200]}",
+        equal_to(200),
+        f"every account kind reads the aggregates: {aggregate.text[:200]}",
     )
     assert_that(
         listed & world_session_ids,
@@ -322,17 +316,24 @@ def test_reading_cli_analytics_follows_the_account_kind(
     )
     assert_that(
         shared_details,
-        equal_to([row.shared_detail_status] * len(shared)),
-        "detail of the shared-project sessions",
+        equal_to(
+            {session_id: 200 for session_id in expected_listing}
+            | {session_id: 404 for session_id in shared_ids - expected_listing}
+        ),
+        "the detail of a shared-project session opens exactly for the sessions listed",
     )
     assert_that(
-        private_detail, equal_to(404), "detail of another user's private session"
+        private_detail,
+        equal_to(row.private_detail_status),
+        "detail of another user's private session",
     )
-    assert_that(private_listed, empty(), "another user's private session in the list")
+    assert_that(
+        private_listed, empty(), "another user's private session in the shared list"
+    )
     assert_that(
         private_listed_as_own,
-        empty(),
-        "another user's private session in the own-sessions list",
+        has_length(row.private_rows_as_own),
+        "another user's private session in the personal_only list",
     )
 
 
