@@ -37,6 +37,14 @@ from codemie_test_harness.tests.ui.test_data.model_management_test_data import (
     MODELS_MANAGEMENT_PATH,
     SETTINGS_UPDATED_TOAST,
 )
+from codemie_test_harness.tests.ui.test_data.model_management_pagination_test_data import (
+    DEFAULT_PAGE_SIZE,
+    EMPTY_LIST_TEXT,
+    page_count,
+    page_of,
+    page_size_label,
+    page_slice,
+)
 from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 
 _LOAD_TIMEOUT_MS = 30000
@@ -127,6 +135,13 @@ class ModelsManagementPage(BasePage):
         """Row of the model; every row shows its base name under the label."""
         return self.data_rows.filter(has=self.page.get_by_text(base_name, exact=True))
 
+    def unsaved_change_marker(self, base_name: str) -> Locator:
+        """'Unsaved change' icon in the model-name cell of a row with a staged change.
+
+        It carries the label only as an attribute (aria-label and an SVG title), not as text.
+        """
+        return self.row_for_model(base_name).get_by_label("Unsaved change", exact=True)
+
     def status_select(self, base_name: str) -> Locator:
         """Status select of the model row (attribute selector: base names contain dots)."""
         return self.page.locator(f'[id="model-status-{base_name}"]')
@@ -144,6 +159,47 @@ class ModelsManagementPage(BasePage):
     def _bulk_action_item(self, label: str) -> Locator:
         """Item of the open Bulk Actions menu."""
         return self.page.get_by_role("menuitem", name=label, exact=True)
+
+    # ── Pagination ────────────────────────────────────────────────────────────
+
+    def page_button(self, page_number: int) -> Locator:
+        """Page button 'Page <n>' of the list pagination; the current one has aria-current='page'."""
+        return self.page.get_by_role("button", name=f"Page {page_number}", exact=True)
+
+    @property
+    def page_buttons(self) -> Locator:
+        """Every 'Page <n>' button; none is rendered when the list fits one page."""
+        return self.page.get_by_role("button", name=re.compile(r"^Page \d+$"))
+
+    @property
+    def page_size_dropdown(self) -> Locator:
+        """Clickable root of the page-size control; its combobox input opens nothing."""
+        return self.page.locator('[id="per-page"]')
+
+    def _page_size_option(self, label: str) -> Locator:
+        """Option of the open page-size list ('10 items', '20 items', ...)."""
+        return self.page.get_by_role("listbox", name="Items per page").get_by_role(
+            "option", name=label, exact=True
+        )
+
+    @property
+    def select_all_checkbox(self) -> Locator:
+        """Select-all checkbox in the table header; selects the current page only."""
+        return self.model_table.get_by_role("columnheader").get_by_role("checkbox")
+
+    def selection_indicator(self, count: int) -> Locator:
+        """'<n> selected' text of the selection bar."""
+        return self.page.get_by_text(re.compile(rf"^{count} selected$"))
+
+    @property
+    def any_selection_indicator(self) -> Locator:
+        """'<n> selected' text of the selection bar, whatever the count."""
+        return self.page.get_by_text(re.compile(r"^\d+ selected$"))
+
+    @property
+    def empty_list_message(self) -> Locator:
+        """Empty-state text of the table body."""
+        return self.model_table.get_by_text(EMPTY_LIST_TEXT)
 
     # ── Navigation and actions ────────────────────────────────────────────────
 
@@ -226,6 +282,42 @@ class ModelsManagementPage(BasePage):
         self.page.keyboard.press("Escape")
         return self
 
+    @step
+    def go_to_page(self, page_number: int):
+        """Open a page of the list with its 'Page <n>' button and wait until it is current."""
+        self.page_button(page_number).click()
+        expect(self.page_button(page_number)).to_have_attribute(
+            "aria-current", "page", timeout=_LOAD_TIMEOUT_MS
+        )
+        return self
+
+    @step
+    def go_to_page_of_model(
+        self, base_names: list[str], base_name: str, per_page: int = DEFAULT_PAGE_SIZE
+    ):
+        """Open the page that holds the model's row.
+
+        `base_names` is the list in the order the page lists it; the page is computed
+        from the model's index. With a single page there is no page button to click.
+        """
+        if page_count(len(base_names), per_page) > 1:
+            self.go_to_page(page_of(base_names, base_name, per_page))
+        return self
+
+    @step
+    def set_page_size(self, per_page: int):
+        """Choose the number of rows per page; the list returns to its first page."""
+        self.page_size_dropdown.click()
+        self._page_size_option(page_size_label(per_page)).click()
+        expect(self.page_size_dropdown).to_contain_text(page_size_label(per_page))
+        return self
+
+    @step
+    def select_all_on_page(self):
+        """Tick the select-all checkbox of the table header."""
+        self.select_all_checkbox.click()
+        return self
+
     # ── Verifications ─────────────────────────────────────────────────────────
 
     @step
@@ -246,10 +338,27 @@ class ModelsManagementPage(BasePage):
         return self
 
     @step
-    def should_list_exactly_models(self, base_names: list[str]):
-        """Assert the table has one row per given base name and no other row."""
-        expect(self.data_rows).to_have_count(len(base_names), timeout=15000)
-        texts = self.data_rows.all_inner_texts()
+    def should_list_exactly_models(
+        self, base_names: list[str], per_page: int = DEFAULT_PAGE_SIZE
+    ):
+        """Assert the paged list holds one row per given base name and no other row.
+
+        Walks every page of `per_page` rows: the page buttons end at the last page the
+        count needs, each page holds its share of the rows, and together the pages show
+        every given model. Order is not checked here (`should_page_through_models` does).
+        """
+        last_page = page_count(len(base_names), per_page)
+        if last_page > 1:
+            self.should_have_last_page(last_page)
+        else:
+            self.should_show_no_page_buttons()
+        texts: list[str] = []
+        for page_number in range(1, last_page + 1):
+            if last_page > 1:
+                self.go_to_page(page_number)
+            on_page = len(page_slice(base_names, page_number, per_page))
+            expect(self.data_rows).to_have_count(on_page, timeout=15000)
+            texts.extend(self.data_rows.all_inner_texts())
         missing = [
             base_name
             for base_name in base_names
@@ -297,4 +406,92 @@ class ModelsManagementPage(BasePage):
     def should_show_status_filter_value(self, text: str):
         """Assert the Status filter reads `text` ('All statuses' or the checked labels)."""
         expect(self.status_filter_control).to_contain_text(text)
+        return self
+
+    @step
+    def should_show_models_page(
+        self, base_names: list[str], page_number: int, per_page: int
+    ):
+        """Assert the list shows page `page_number` of `base_names`: its rows, in order, and nothing else.
+
+        `base_names` is the whole (filtered) list in the order the page lists it. With
+        more than one page, the page's button is the current one; with one page, no
+        page button is rendered.
+        """
+        expected = page_slice(base_names, page_number, per_page)
+        if page_count(len(base_names), per_page) > 1:
+            expect(self.page_button(page_number)).to_have_attribute(
+                "aria-current", "page", timeout=_LOAD_TIMEOUT_MS
+            )
+        else:
+            expect(self.page_buttons).to_have_count(0, timeout=_LOAD_TIMEOUT_MS)
+        expect(self.data_rows).to_have_count(len(expected), timeout=_LOAD_TIMEOUT_MS)
+        for index, base_name in enumerate(expected):
+            expect(
+                self.data_rows.nth(index).get_by_text(base_name, exact=True).first
+            ).to_be_visible()
+        return self
+
+    @step
+    def should_page_through_models(self, base_names: list[str], per_page: int):
+        """Open every page in turn and assert each shows the next `per_page` models.
+
+        Together the pages show every model once, in list order. The last page has no
+        'Page <last+1>' button after it.
+        """
+        last_page = page_count(len(base_names), per_page)
+        for page_number in range(1, last_page + 1):
+            self.go_to_page(page_number)
+            self.should_show_models_page(base_names, page_number, per_page)
+        self.should_have_last_page(last_page)
+        return self
+
+    @step
+    def should_have_last_page(self, last_page: int):
+        """Assert 'Page <last>' is rendered and no 'Page <last+1>' button exists."""
+        expect(self.page_button(last_page)).to_be_visible()
+        expect(self.page_button(last_page + 1)).to_have_count(0)
+        return self
+
+    @step
+    def should_show_no_page_buttons(self):
+        """Assert no 'Page <n>' button is rendered."""
+        expect(self.page_buttons).to_have_count(0, timeout=_LOAD_TIMEOUT_MS)
+        return self
+
+    @step
+    def should_show_empty_list(self):
+        """Assert the table shows its empty state and no model row."""
+        expect(self.empty_list_message).to_be_visible(timeout=_LOAD_TIMEOUT_MS)
+        return self
+
+    @step
+    def should_show_selected_count(self, count: int):
+        """Assert the selection bar reads '<count> selected'."""
+        expect(self.selection_indicator(count)).to_be_visible()
+        return self
+
+    @step
+    def should_show_no_selection(self):
+        """Assert no '<n> selected' indicator is shown."""
+        expect(self.any_selection_indicator).to_have_count(0)
+        return self
+
+    @step
+    def should_have_apply_changes_enabled(self):
+        """Assert 'Apply changes' is enabled, i.e. a change is still staged."""
+        expect(self.apply_changes_button).to_be_enabled()
+        return self
+
+    @step
+    def should_show_unsaved_change_marker(self, base_name: str):
+        """Assert the row of the model shows the 'Unsaved change' marker."""
+        expect(self.unsaved_change_marker(base_name)).to_be_visible()
+        return self
+
+    @step
+    def should_not_show_unsaved_change_marker(self, base_name: str):
+        """Assert the row of the model is shown without the 'Unsaved change' marker."""
+        expect(self.row_for_model(base_name)).to_be_visible(timeout=_LOAD_TIMEOUT_MS)
+        expect(self.unsaved_change_marker(base_name)).to_have_count(0)
         return self

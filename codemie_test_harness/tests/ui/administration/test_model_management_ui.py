@@ -41,6 +41,15 @@ from codemie_test_harness.tests.ui.test_data.model_management_test_data import (
     expected_summary,
     pick_filter_target,
 )
+from codemie_test_harness.tests.ui.test_data.model_management_pagination_test_data import (
+    base_names,
+    listed_models,
+)
+
+
+def _listed_names(llm_model_status_utils) -> list[str]:
+    """Base names in the order the paged list shows them."""
+    return base_names(listed_models(llm_model_status_utils.list_statuses()))
 
 
 # @case platform-model-management_TC_010
@@ -72,6 +81,7 @@ def test_admin_changes_a_model_status_in_the_row_select_and_applies_it(
     base_name = status_test_model.base_name
     models_page = ModelsManagementPage(page)
     models_page.navigate_to()
+    models_page.go_to_page_of_model(_listed_names(llm_model_status_utils), base_name)
 
     models_page.open_status_select(base_name)
     models_page.should_offer_status_options(STATUS_LABELS.values())
@@ -79,9 +89,10 @@ def test_admin_changes_a_model_status_in_the_row_select_and_applies_it(
     models_page.apply_changes()
     models_page.should_show_settings_updated_toast()
 
-    models_page.navigate_to()
-    models_page.should_show_row_status(base_name, STATUS_LABELS[status])
     llm_model_status_utils.wait_until_status_listed(base_name, status)
+    models_page.navigate_to()
+    models_page.go_to_page_of_model(_listed_names(llm_model_status_utils), base_name)
+    models_page.should_show_row_status(base_name, STATUS_LABELS[status])
 
 
 # @case platform-model-management_TC_012
@@ -95,6 +106,7 @@ def test_admin_changes_statuses_with_the_bulk_actions_menu(
     base_name = status_test_model.base_name
     models_page = ModelsManagementPage(page)
     models_page.navigate_to()
+    models_page.go_to_page_of_model(_listed_names(llm_model_status_utils), base_name)
 
     models_page.select_model_row(base_name)
     models_page.open_bulk_actions()
@@ -103,9 +115,10 @@ def test_admin_changes_statuses_with_the_bulk_actions_menu(
     models_page.apply_changes()
     models_page.should_show_settings_updated_toast()
 
-    models_page.navigate_to()
-    models_page.should_show_row_status(base_name, STATUS_LABELS[status])
     llm_model_status_utils.wait_until_status_listed(base_name, status)
+    models_page.navigate_to()
+    models_page.go_to_page_of_model(_listed_names(llm_model_status_utils), base_name)
+    models_page.should_show_row_status(base_name, STATUS_LABELS[status])
 
 
 # @case platform-model-management_TC_019
@@ -122,6 +135,8 @@ def test_management_list_filters_narrow_the_list_and_update_the_summary(
     kept = [model for model in models if list_filter.keeps(model, target)]
     models_page = ModelsManagementPage(page)
     models_page.navigate_to()
+    # The provider filter reads the provider from the target's row, so open its page.
+    models_page.go_to_page_of_model(base_names(listed_models(models)), target.base_name)
 
     list_filter.apply(models_page, target)
 
