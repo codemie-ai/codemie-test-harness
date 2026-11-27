@@ -698,6 +698,15 @@ class ProjectDetailsPage(BasePage):
         return self
 
     @step
+    def should_show_project_not_found_without_edit_project_button(self):
+        """STRICT: the page shows 'Project not found' (the user cannot read the project) and
+        there is no 'Edit Project' button. For users who must not see the project."""
+        expect(self.project_not_found_message).to_be_visible(timeout=15000)
+        expect(self.owned_by_label).to_have_count(0)
+        expect(self.edit_project_button).to_have_count(0)
+        return self
+
+    @step
     def open_history(self) -> ProjectActivityHistoryModal:
         """Click 'History' and return the activity history modal."""
         expect(self.history_button).to_be_visible(timeout=15000)

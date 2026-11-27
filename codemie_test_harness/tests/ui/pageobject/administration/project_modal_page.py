@@ -17,6 +17,7 @@
 Used on /settings/administration/projects.
 """
 
+import json
 import re
 
 from playwright.sync_api import Locator, expect
@@ -134,6 +135,39 @@ class ProjectModal(BasePage):
         """The wrapper carrying the read-only tooltip (present for non-writers only)."""
         return self.modal.locator(f'[data-tooltip-content="{self.READ_ONLY_TOOLTIP}"]')
 
+    # ── Edit Project with a second dialog open ────────────────
+    # While the enforcement confirmation is open there are two dialogs, so the generic `modal`
+    # locator above is ambiguous. These are scoped to the Edit Project dialog by its header.
+    # FE source of truth (codemie-ui):
+    #   src/pages/settings/administration/projectsManagement/ProjectModal.tsx (header 'Edit Project')
+    #   .../components/EnforceMemberSpendLimitsField.tsx (Switch id='enforce_member_spend_limits',
+    #     label 'Enforce member spend limits')
+
+    @property
+    def edit_dialog(self) -> Locator:
+        """The Edit Project dialog, told apart from a dialog stacked above it."""
+        return self.page.get_by_role("dialog", name="Edit Project")
+
+    @property
+    def edit_description_input(self) -> Locator:
+        """The description textarea inside the Edit Project dialog."""
+        return self.edit_dialog.get_by_label("Description", exact=True)
+
+    @property
+    def enforce_switch(self) -> Locator:
+        """The 'Enforce member spend limits' switch input (id='enforce_member_spend_limits')."""
+        return self.edit_dialog.locator("#enforce_member_spend_limits")
+
+    @property
+    def enforce_switch_label(self) -> Locator:
+        """The visible label text of the enforcement switch (the input is visually hidden)."""
+        return self.edit_dialog.get_by_text("Enforce member spend limits", exact=True)
+
+    @property
+    def edit_save_button(self) -> Locator:
+        """The Save button of the Edit Project dialog."""
+        return self.edit_dialog.get_by_role("button", name="Save", exact=True)
+
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @step
@@ -147,9 +181,135 @@ class ProjectModal(BasePage):
         return request_info.value.post_data_json
 
     @step
+    def save_edit_capturing_request(self, project_name: str) -> dict:
+        """Click Save in the Edit Project dialog and return the JSON body of the
+        PATCH /v1/projects/<name> it sends. The click is scoped to Edit Project, so a
+        confirmation still fading out above it cannot make the locator ambiguous."""
+        with self.page.expect_request(
+            lambda r: r.method == "PATCH" and f"/v1/projects/{project_name}" in r.url,
+            timeout=15000,
+        ) as request_info:
+            self.edit_save_button.click()
+        return request_info.value.post_data_json
+
+    @step
+    def start_counting_save_requests(self, project_name: str):
+        """Count every project PATCH the browser sends from now on (held or not)."""
+        pattern = re.compile(rf"/v1/projects/{re.escape(project_name)}(\?.*)?$")
+        self._counted_saves = []
+
+        def count(request):
+            if request.method == "PATCH" and pattern.search(request.url):
+                self._counted_saves.append(request.url)
+
+        self._save_counter = count
+        self.page.on("request", count)
+        return self
+
+    @property
+    def sent_save_count(self) -> int:
+        """How many project PATCHes the browser sent since start_counting_save_requests()."""
+        return len(self._counted_saves)
+
+    @step
+    def stop_counting_save_requests(self) -> int:
+        """Stop counting and return how many project PATCHes were sent."""
+        self.page.remove_listener("request", self._save_counter)
+        return self.sent_save_count
+
+    @step
+    def press_escape(self):
+        """Press the Escape key, then let the browser render two frames so a dialog that the
+        key closes is gone before any assertion runs."""
+        self.page.keyboard.press("Escape")
+        self.page.evaluate(
+            "() => new Promise(resolve => requestAnimationFrame("
+            "() => requestAnimationFrame(resolve)))"
+        )
+        return self
+
+    @step
     def toggle_cli_analytics(self):
         """Click the switch's label (the input itself is visually hidden)."""
         self.enable_ai_attribution_label_text.click()
+        return self
+
+    @step
+    def append_to_edit_description(self, suffix: str):
+        """Append text to the description in the Edit Project dialog."""
+        current = self.edit_description_input.input_value()
+        self.edit_description_input.fill(current + suffix)
+        return self
+
+    @step
+    def toggle_enforcement(self):
+        """Click the enforcement switch's label (the input itself is visually hidden)."""
+        self.enforce_switch_label.click()
+        return self
+
+    @step
+    def click_save_to_confirm_enforcement(self):
+        """Click Save in Edit Project, which opens the enforcement confirmation."""
+        self.edit_save_button.click()
+        return self
+
+    @step
+    def hold_save_requests(self, project_name: str):
+        """Hold the project PATCH the browser sends, without answering it.
+
+        The held request is later sent unchanged to the real backend by
+        release_held_save_requests(): the response is never faked. Other requests to the same
+        URL (the project GET) pass through at once.
+        """
+        self._held_saves = []
+        self._held_save_pattern = re.compile(
+            rf"/v1/projects/{re.escape(project_name)}(\?.*)?$"
+        )
+
+        def hold(route):
+            if route.request.method == "PATCH":
+                self._held_saves.append(route)
+            else:
+                route.continue_()
+
+        self.page.route(self._held_save_pattern, hold)
+        return self
+
+    @step
+    def release_held_save_requests(self):
+        """Send every held project PATCH to the real backend and stop holding."""
+        for held in self._held_saves:
+            held.continue_()
+        self._held_saves.clear()
+        self.page.unroute(self._held_save_pattern)
+        return self
+
+    @step
+    def fail_next_save_request(self, project_name: str, message: str):
+        """Make the browser's next project PATCH fail with HTTP 500 carrying `message` and let
+        every later request through.
+
+        Client-side fault injection: the failed request never reaches the backend, so the test
+        can then check that nothing was stored and that a retry reaches the real backend. The
+        route lives as long as the page; after the one failure it only passes requests on.
+        """
+        self._failing_save_pattern = re.compile(
+            rf"/v1/projects/{re.escape(project_name)}(\?.*)?$"
+        )
+        self._failed_once = False
+
+        def fail_once(route):
+            if route.request.method == "PATCH" and not self._failed_once:
+                self._failed_once = True
+                route.fulfill(
+                    status=500,
+                    content_type="application/json",
+                    body=json.dumps({"error": {"message": message}}),
+                )
+            else:
+                route.continue_()
+
+        self.page.route(self._failing_save_pattern, fail_once)
         return self
 
     @step
@@ -311,4 +471,64 @@ class ProjectModal(BasePage):
             "data-tooltip-content", expected
         )
         expect(self.cli_analytics_hint_status).to_have_text(expected)
+        return self
+
+    # ── Enforcement switch assertions ─────────────────────────
+
+    @step
+    def should_show_enforcement_switch(self):
+        """Verify the Edit Project dialog is open and offers the enforcement switch."""
+        expect(self.edit_dialog).to_be_visible()
+        expect(self.enforce_switch).to_be_attached(timeout=10000)
+        expect(self.enforce_switch).to_be_enabled()
+        return self
+
+    @step
+    def should_have_enforcement_value(self, enabled: bool):
+        """Verify the enforcement switch state (checked == enforcement on)."""
+        if enabled:
+            expect(self.enforce_switch).to_be_checked()
+        else:
+            expect(self.enforce_switch).not_to_be_checked()
+        return self
+
+    @step
+    def should_have_edit_description(self, expected_value: str):
+        """Verify the description in the Edit Project dialog."""
+        expect(self.edit_description_input).to_have_value(expected_value)
+        return self
+
+    @step
+    def should_remain_open_for_editing(self):
+        """Verify Edit Project is still open and its Save button offered."""
+        expect(self.edit_dialog).to_be_visible()
+        expect(self.edit_save_button).to_be_visible()
+        return self
+
+    @step
+    def should_have_save_disabled(self):
+        """Verify Edit Project is open and its Save button is disabled."""
+        expect(self.edit_dialog).to_be_visible()
+        expect(self.edit_save_button).to_be_disabled()
+        return self
+
+    @step
+    def should_show_save_error(self, message: str):
+        """Verify an error toast tells the user the save failed, with the backend's message."""
+        self.toast.should_show_error_text(message)
+        return self
+
+    @step
+    def should_not_show_enforcement_switch(self):
+        """Verify the Edit Project dialog is open and does not offer the enforcement switch."""
+        expect(self.edit_dialog).to_be_visible()
+        expect(self.enforce_switch).to_have_count(0)
+        return self
+
+    @step
+    def should_not_have_edit_dialog(self):
+        """Verify no Edit Project dialog is open (nor, therefore, an enforcement switch).
+
+        Meaningful only after the dialog was open, or after an action that would open it."""
+        expect(self.edit_dialog).to_have_count(0)
         return self

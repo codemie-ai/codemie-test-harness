@@ -125,10 +125,14 @@ def project_with_ordered_members(ordered_users, project, project_utils):
 def acting_credentials(request):
     """(username, password) the browser logs in with. Override via indirect parametrization.
 
-    Roles: admin (default), maintainer, auditor, plain_user, plus two project-scoped roles
-    that create a fresh user in `ownership_project`: project_admin_member, plain_member.
+    Roles: admin (default), admin_user (a fresh platform admin that is not a maintainer),
+    maintainer, auditor, plain_user, plus two project-scoped roles that create a fresh user in
+    `ownership_project`: project_admin_member, plain_member.
     """
     role = getattr(request, "param", "admin")
+    if role == "admin_user":
+        admin = request.getfixturevalue("admin_user")
+        return admin.email, admin.password, admin.user_id
     if role == "cli_auditor":
         request.getfixturevalue("verified_auditor_client")  # asserts the role is real
         auditor = request.getfixturevalue("auditor_user")
