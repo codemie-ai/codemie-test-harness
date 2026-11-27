@@ -407,6 +407,14 @@ class ProjectUtils(BaseUtils):
             project_name, default_model=default_model
         )
 
+    def restrict_models(
+        self, project_name: str, allowed_models: list[str], default_model: str
+    ) -> ProjectAllowedModelsResponse:
+        """Limit the project to an explicit list of models, starting on the default one."""
+        return self.client.projects.update_allowed_models(
+            project_name, allowed_models=allowed_models, default_model=default_model
+        )
+
     def reset_model_settings(self, project_name: str) -> ProjectAllowedModelsResponse:
         """Remove the project's model restriction and default model."""
         return self.client.projects.reset_allowed_models(project_name)

@@ -47,11 +47,6 @@ def test_help_models_catalog_shows_a_deprecated_badge(
 
 # @case platform-model-management_TC_015
 @pytest.mark.xdist_group(name="model_status")
-@pytest.mark.xfail(
-    strict=False,
-    reason="/help/models still lists a Disabled model on some instances; "
-    "not strict, because a request that reaches an updated instance passes",
-)
 @pytest.mark.help
 @pytest.mark.llm
 @pytest.mark.ui

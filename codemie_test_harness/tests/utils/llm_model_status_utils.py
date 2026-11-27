@@ -120,6 +120,29 @@ class LlmModelStatusUtils(BaseUtils):
         """Models of GET /v1/llm_models for the user behind the client, by base name."""
         return {model.base_name: model for model in client.llms.list()}
 
+    @staticmethod
+    def catalog_default_of(client: CodeMieClient) -> str | None:
+        """Base name of the model GET /v1/llm_models flags `default`, None when none or several are."""
+        defaults = [model.base_name for model in client.llms.list() if model.default]
+        return defaults[0] if len(defaults) == 1 else None
+
+    def wait_until_catalog_default(
+        self, holds, wanted: str, *clients: CodeMieClient
+    ) -> str:
+        """Wait until the catalog default of the admin and of `clients` satisfies `holds`.
+
+        `holds` gets the default base name (None when the catalog flags no single
+        model). The value must hold on several reads in a row for each client.
+        Returns the default the admin catalog flags. Raises when the time is up.
+        """
+        for client in (self.client, *clients):
+            wait_for_consistent_reads(
+                lambda c=client: self.catalog_default_of(c),
+                holds,
+                f"the catalog default to be {wanted}",
+            )
+        return self.catalog_default_of(self.client)
+
     def wait_until_status_listed(self, base_name: str, status: ModelStatus) -> None:
         """Wait until the admin list shows the status of a model, then return.
 
@@ -227,10 +250,21 @@ class LlmModelStatusUtils(BaseUtils):
         and makes the call raise at the end, because its status stays changed for
         every later test and for other users of the stand.
         """
+        self.restore_statuses(
+            [(base_name, ModelStatus.ENABLED) for base_name in base_names]
+        )
+
+    def restore_statuses(self, saved: list[tuple[str, ModelStatus]]) -> None:
+        """Put each model back to the status it had before the test changed it.
+
+        Every model is tried. A model that cannot be restored is logged as an error
+        and makes the call raise at the end, because its status stays changed for
+        every later test and for other users of the stand.
+        """
         failed = []
-        for base_name in base_names:
+        for base_name, status in saved:
             try:
-                self.apply_status(base_name, ModelStatus.ENABLED)
+                self.apply_status(base_name, status)
             except Exception as e:
                 logger.error(f"Failed to restore status of model {base_name}: {e}")
                 failed.append(base_name)

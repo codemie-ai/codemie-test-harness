@@ -20,16 +20,20 @@ rows rendered — and the "N of M models available" counter's total — must
 match the number of models `client.llms.list()` returns, so no model is
 silently dropped from the table (previously the routing models "Claude Router
 Standard v1", "Claude Router Premium v1", "GPT Router Standard v1" were
-omitted — fixed).
+omitted — fixed). A model or router whose platform status is Disabled has no
+row and is not counted.
 """
 
 import pytest
+
+from codemie_sdk.models.llm import ModelStatus
 
 from codemie_test_harness.tests.ui.pageobject.administration.project_details_page import (
     ProjectDetailsPage,
 )
 
 
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.project
 @pytest.mark.budget
 @pytest.mark.ui
@@ -39,7 +43,8 @@ def test_models_tab_lists_every_api_model(page, project_admin_setup, client):
         [
             row
             for row in client.llms.list(include_all=True)
-            if row.is_router or not row.forbidden_for_web
+            if (row.is_router or not row.forbidden_for_web)
+            and row.status != ModelStatus.DISABLED
         ]
     )
 
