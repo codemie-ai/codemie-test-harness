@@ -41,6 +41,7 @@ from codemie_test_harness.tests.ui.pageobject.workflows.workflows_page import (
     WorkflowsPage,
 )
 from codemie_test_harness.tests.ui.test_data.workflow_contracts_test_data import (
+    WORKFLOW_CONTRACTS_COMPONENT_ID,
     CLEAN_WORKFLOW_COVERAGE,
     CREATED_WITH_WARNINGS_NOTE,
     DECLARED_REMOVED_KEY_INPUT_CONTRACT,
@@ -79,6 +80,8 @@ from codemie_test_harness.tests.ui.test_data.workflow_contracts_test_data import
     build_warning_resolved_yaml,
     build_transform_example_output_yaml,
 )
+
+pytestmark = pytest.mark.requires_capability(WORKFLOW_CONTRACTS_COMPONENT_ID)
 
 
 @pytest.mark.workflow

@@ -35,6 +35,7 @@ from codemie_test_harness.tests.ui.test_data.workflow_contracts_test_data import
     REMOVED_KEY_MESSAGE,
     SAVED_WITH_ONE_WARNING_TOAST,
     SAVED_WITH_WARNINGS_NOTE,
+    WORKFLOW_CONTRACTS_COMPONENT_ID,
     contract_warning_assistants_and_states,
 )
 from codemie_test_harness.tests.ui.test_data.workflows_test_data import (
@@ -463,6 +464,7 @@ def test_save_global_workflow_shows_owner_integration_warning(
 # @case save-time-contract-editor-controls_TC_011
 @pytest.mark.jira
 @pytest.mark.workflow
+@pytest.mark.requires_capability(WORKFLOW_CONTRACTS_COMPONENT_ID)
 @pytest.mark.requires_capability(FEATURE_COMPONENT_ID)
 @pytest.mark.ui
 def test_save_global_workflow_with_contract_warning_keeps_owner_integration_toast(

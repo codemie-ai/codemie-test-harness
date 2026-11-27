@@ -34,11 +34,14 @@ from codemie_test_harness.tests.ui.pageobject.workflows.edit_workflow_page impor
     EditWorkflowPage,
 )
 from codemie_test_harness.tests.ui.test_data.workflow_contracts_test_data import (
+    WORKFLOW_CONTRACTS_COMPONENT_ID,
     LEGACY_VALIDATION_KEY,
     NO_CONTRACT_NODE_CASES,
     SAVE_VALIDATION_KEY,
     WARN_MODE,
 )
+
+pytestmark = pytest.mark.requires_capability(WORKFLOW_CONTRACTS_COMPONENT_ID)
 
 
 @pytest.mark.workflow

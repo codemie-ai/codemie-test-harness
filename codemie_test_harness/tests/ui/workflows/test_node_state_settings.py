@@ -36,6 +36,9 @@ from hamcrest import assert_that, equal_to, not_none
 from codemie_test_harness.tests.ui.pageobject.workflows.edit_workflow_page import (
     EditWorkflowPage,
 )
+from codemie_test_harness.tests.ui.test_data.workflow_contracts_test_data import (
+    WORKFLOW_CONTRACTS_COMPONENT_ID,
+)
 from codemie_test_harness.tests.ui.test_data.workflow_node_state_settings_test_data import (
     CUSTOM_NODE_TYPE_LABELS,
     CUSTOM_NODE_VISIBILITY_CASES,
@@ -50,6 +53,7 @@ from codemie_test_harness.tests.ui.test_data.workflow_node_state_settings_test_d
 )
 
 
+@pytest.mark.requires_capability(WORKFLOW_CONTRACTS_COMPONENT_ID)
 @pytest.mark.workflow
 @pytest.mark.ui
 @pytest.mark.prod_regression
@@ -82,6 +86,7 @@ def test_non_custom_node_panel_shows_task_and_output_schema_only_where_used(
     panel.should_have_save_validation_visibility(case.contract_linking_visible)
 
 
+@pytest.mark.requires_capability(WORKFLOW_CONTRACTS_COMPONENT_ID)
 @pytest.mark.workflow
 @pytest.mark.ui
 @pytest.mark.prod_regression

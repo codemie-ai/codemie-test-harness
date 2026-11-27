@@ -43,6 +43,9 @@ from codemie_test_harness.tests.utils.yaml_utils import (
 # ---------------------------------------------------------------------------
 # State ids. The backend names them in its messages, so the expected texts below use them.
 # ---------------------------------------------------------------------------
+# /v1/config component behind the contract controls, the Issues panel and Check.
+WORKFLOW_CONTRACTS_COMPONENT_ID = "features:workflowContracts"
+
 ASSISTANT_ID = "contract_assistant"
 PRODUCER_STATE_ID = "s1"
 RESETTING_STATE_ID = "s2"
