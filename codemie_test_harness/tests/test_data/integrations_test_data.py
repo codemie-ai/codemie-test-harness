@@ -590,7 +590,7 @@ empty_credentials_integrations = [
         """,
         marks=[
             pytest.mark.confluence,
-            pytest.mark.project_management
+            pytest.mark.project_management,
         ],
         id=f"{CredentialTypes.CONFLUENCE}_empty",
     ),
