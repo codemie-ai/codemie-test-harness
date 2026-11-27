@@ -54,8 +54,10 @@ class LoginPage(BasePage):
 
     @property
     def show_more_options_button(self):
-        """Button/link to expand email/password login form."""
-        return self.page.get_by_text("more options")
+        """Button to expand the email/password login form, shown while it is collapsed."""
+        return self.page.get_by_role(
+            "button", name="Show more sign-in options", exact=True
+        )
 
     @property
     def hide_options_button(self):
@@ -127,9 +129,23 @@ class LoginPage(BasePage):
     # Action methods
     @step
     def expand_email_password_form(self):
-        """Expand the email/password login form if not already visible."""
-        if self.show_more_options_button.is_visible():
+        """Expand the email/password login form if it is collapsed.
+
+        The collapsed form stays in the DOM under an overlay, so Playwright treats the
+        Email field as visible either way; only the toggle tells the state. `networkidle`
+        can fire before the page renders, so wait for the form first, then click the
+        "Show more sign-in options" toggle until it is gone (a click made before the page
+        is interactive is lost).
+        """
+        self.username_input.wait_for(state="visible", timeout=60000)
+        for _ in range(3):
+            if not self.show_more_options_button.is_visible():
+                break
             self.show_more_options_button.click()
+            try:
+                self.show_more_options_button.wait_for(state="hidden", timeout=5000)
+            except Exception:
+                continue
         return self
 
     @step
