@@ -33,6 +33,7 @@ from codemie_test_harness.tests.ui.pageobject.administration.project_details_pag
 )
 
 
+@pytest.mark.xdist_group(name="model_status")
 @pytest.mark.project
 @pytest.mark.budget
 @pytest.mark.ui
