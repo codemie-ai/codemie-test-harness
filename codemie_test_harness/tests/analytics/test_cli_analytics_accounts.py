@@ -16,26 +16,22 @@
 ordinary accounts with a global role or a project role, what each kind may read and what each
 may register.
 
-The accounts are built from `AccountSpec` rows by `Provisioner.account`. A module-scoped world
-holds the shared project, the corporate list and the accounts the read and registration tests
-share; the external users of TC-004 are built per test because they change during it.
+The accounts are built from `AccountSpec` rows by `Provisioner.account`, several at the same
+time. The run-wide account world (`account_world`) holds the shared project, an account of each
+kind and the external users and service account of TC-004; the corporate list is the run's
+(`classification_run`). The account checks that need an absence window are in
+test_cli_analytics_unlisted_sessions.py.
 """
-
-import time
 
 import pytest
 from hamcrest import assert_that, empty, equal_to, has_length
 
 from codemie_test_harness.tests.test_data.cli_account_test_data import (
-    EXTERNAL_FORMER_REGULAR,
-    EXTERNAL_NO_PROJECTS,
-    GLOBAL_ADMIN,
     LISTS_OWN_SHARED,
     LISTS_PROJECT_SESSIONS,
-    PERSONAL_SENDER_KINDS,
-    PRIVATE_DETAIL_STATUS,
     READ_ROWS,
     REGISTRATION_RIGHTS_ROWS,
+    WORK_PROJECT_SENDER_KINDS,
     specs_named,
 )
 from codemie_test_harness.tests.test_data.cli_classification_test_data import (
@@ -49,9 +45,9 @@ from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
 )
 from codemie_test_harness.tests.utils.cli_classification_utils import (
     COST_PATH,
+    detail_status,
     LINKED,
     REPOSITORIES_PATH,
-    SESSIONS_PATH,
     assert_rejected,
     expected_routing,
     listed_session_ids_with,
@@ -64,203 +60,9 @@ from codemie_test_harness.tests.utils.cli_classification_utils import (
     session_rows,
     wait_for_session_row,
 )
-from codemie_test_harness.tests.utils.cli_gate_utils import observe_absence_window
 
 # Kinds that read only the shared sessions they sent themselves.
-OWN_SESSIONS_ONLY_KINDS = ("regular-member",)
 SHARED_ORIGIN_PERSONAL = expected_routing(PERSONAL, LINKED_FOLDER)
-
-
-def _detail_status(api, session) -> int:
-    return api.request("GET", f"{SESSIONS_PATH}/{session.batch.session_id}").status_code
-
-
-# ── TC-004: external users and service accounts ─────────────────────────────────
-
-
-# @case classify-cli-sessions-by-subscription_TC_004
-@pytest.mark.cli_analytics
-@pytest.mark.not_for_parallel_run
-@pytest.mark.parametrize(
-    "spec", specs_named("external-former-regular", "service-account")
-)
-@pytest.mark.api
-def test_personal_session_of_an_external_user_or_service_account_is_stored_in_a_work_project(
-    provisioner, account_world, spec
-):
-    """A non-matching organization makes the session Personal. For a user type that cannot have a
-    personal project it is stored in the linked work project with a shared origin (never
-    personal), the admin reads it under the project rights, and no personal project is created
-    for a service account while an external user's old personal project stays unused."""
-    world = account_world
-    account = provisioner.account(spec, world.project)
-    batch = new_session()
-
-    response = send_evidence(
-        account.client,
-        batch,
-        organization=world.organizations.other,
-        project=world.project,
-        **LINKED,
-    )
-
-    assert_accepted(response, "event-hooks", CT_NDJSON)
-    stored = wait_for_session_row(
-        world.admin_api, batch.session_id, batch.repo, projects=world.project
-    )
-    assert_that(
-        routing_of(stored),
-        equal_to(SHARED_ORIGIN_PERSONAL),
-        "a Personal session of this account must be stored in the linked work project as personal "
-        "with a shared origin",
-    )
-    assert_that(
-        sorted(name.lower() for name in provisioner.project_names_of(account)),
-        equal_to(spec.project_names(account.email, world.project)),
-        "no personal project may be created for the account by sending the session",
-    )
-
-
-# @case classify-cli-sessions-by-subscription_TC_004
-@pytest.mark.cli_analytics
-@pytest.mark.not_for_parallel_run
-@pytest.mark.api
-def test_external_user_without_projects_is_retried_after_joining_a_work_project(
-    provisioner, account_world
-):
-    """An external user with no project at all gets a retryable 503 default_project_unavailable
-    for a Personal session (the link names a project it does not belong to); once it joins the
-    work project the same session is accepted and stored there as personal with a shared origin."""
-    world = account_world
-    account = provisioner.account(EXTERNAL_NO_PROJECTS)
-    batch = new_session()
-    evidence = dict(
-        organization=world.organizations.other, project=world.project, **LINKED
-    )
-
-    before = send_evidence(account.client, batch, **evidence)
-    provisioner.join(account, world.project)
-    after = send_evidence(account.client, batch, **evidence)
-
-    assert_rejected(before, 503, DEFAULT_PROJECT_UNAVAILABLE)
-    assert_accepted(after, "event-hooks", CT_NDJSON)
-    stored = wait_for_session_row(
-        world.admin_api, batch.session_id, batch.repo, projects=world.project
-    )
-    assert_that(
-        routing_of(stored),
-        equal_to(SHARED_ORIGIN_PERSONAL),
-        "the retried session must be stored in the work project as personal with a shared origin",
-    )
-    assert_that(
-        [name.lower() for name in provisioner.project_names_of(account)],
-        equal_to([world.project.lower()]),
-        "joining the work project must not create a personal project",
-    )
-
-
-# @case classify-cli-sessions-by-subscription_TC_004
-@pytest.mark.cli_analytics
-@pytest.mark.not_for_parallel_run
-@pytest.mark.api
-def test_old_personal_project_of_an_external_user_never_receives_a_session(
-    provisioner, account_world, account_sessions
-):
-    """An external user who was regular at its first login has its old personal project as the
-    default project, and that project is never a destination: a session without a link gets a
-    retryable 503 default_project_unavailable and is stored nowhere, while a control session
-    of the project is listed."""
-    world = account_world
-    account = provisioner.account(EXTERNAL_FORMER_REGULAR, world.project)
-    batch = new_session()
-
-    response = send_evidence(
-        account.client, batch, organization=world.organizations.other
-    )
-
-    assert_rejected(response, 503, DEFAULT_PROJECT_UNAVAILABLE)
-    observe_absence_window(
-        world.admin_api,
-        {
-            account_sessions.corporate.batch.session_id: account_sessions.corporate.batch.repo
-        },
-        {
-            "session sent with the old personal project as default": {
-                batch.session_id: batch.repo
-            }
-        },
-        time.monotonic(),
-    )
-
-
-# ── TC-026: Personal sessions of the ordinary account kinds ─────────────────────
-
-
-def _markers_for(sessions, reader: str) -> dict:
-    """A session the reader must see in the shared list: its own shared one when it reads its
-    own sessions only, otherwise the owner's Corporate session of the shared project."""
-    sent = sessions.member if reader in OWN_SESSIONS_ONLY_KINDS else sessions.corporate
-    return {sent.batch.session_id: sent.batch.repo}
-
-
-def _observe_private_session_absent(world, sessions, owner_kind: str, readers) -> None:
-    """None of the readers lists the private session of `owner_kind` in the shared list within the
-    absence window, while each of them lists a session there that proves the listing works."""
-    sent = sessions.personal[owner_kind]
-    for reader in readers:
-        observe_absence_window(
-            world.api(reader),
-            _markers_for(sessions, reader),
-            {
-                f"private session of the {owner_kind} account": {
-                    sent.batch.session_id: sent.batch.repo
-                }
-            },
-            sessions.sent_at,
-        )
-
-
-# @case classify-cli-sessions-by-subscription_TC_026
-@pytest.mark.cli_analytics
-@pytest.mark.not_for_parallel_run
-@pytest.mark.parametrize("spec", specs_named(*PERSONAL_SENDER_KINDS))
-@pytest.mark.api
-def test_personal_session_of_an_ordinary_account_stays_in_its_personal_project_and_private(
-    account_world, account_sessions, spec
-):
-    """A Personal session sent with a link to the shared project is stored in the owner's personal
-    project whatever the account's role (member, project admin, maintainer, auditor); the owner
-    reads it, no other kind lists it in the shared list, and only a global admin, a maintainer
-    and an auditor open its detail."""
-    world, sessions = account_world, account_sessions
-    sent = sessions.personal[spec.name]
-    owner = world.accounts[spec.name]
-    readers = [
-        kind for kind in (*PERSONAL_SENDER_KINDS, GLOBAL_ADMIN) if kind != spec.name
-    ]
-
-    owned = wait_for_session_row(
-        owner.api, sent.batch.session_id, sent.batch.repo, personal_only="true"
-    )
-    details = {kind: _detail_status(world.api(kind), sent) for kind in readers}
-    _observe_private_session_absent(world, sessions, spec.name, readers)
-
-    assert_accepted(sent.response, "event-hooks", CT_NDJSON)
-    assert_that(
-        routing_of(owned),
-        equal_to(expected_routing(PERSONAL, PERSONAL)),
-        "the owner must read the session as personal in its personal project",
-    )
-    assert_that(
-        _detail_status(owner.api, sent),
-        equal_to(200),
-        "the owner must open the detail of its own private session",
-    )
-    assert_that(
-        details,
-        equal_to({kind: PRIVATE_DETAIL_STATUS[kind] for kind in readers}),
-        "only a global admin, a maintainer and an auditor open another user's private session",
-    )
 
 
 # ── TC-027: reading by account kind ─────────────────────────────────────────────
@@ -296,9 +98,10 @@ def test_reading_cli_analytics_follows_the_account_kind(
     aggregate = api.request("GET", COST_PATH, params={"projects": world.project})
     listed = listed_session_ids_with(api, projects=world.project)
     shared_details = {
-        sent.batch.session_id: _detail_status(api, sent) for sent in sessions.shared
+        sent.batch.session_id: detail_status(api, sent.batch.session_id)
+        for sent in sessions.shared
     }
-    private_detail = _detail_status(api, sessions.private)
+    private_detail = detail_status(api, sessions.private.batch.session_id)
     private_listed = session_rows(api, private.session_id, private.repo)
     private_listed_as_own = session_rows(
         api, private.session_id, private.repo, personal_only="true"
@@ -372,4 +175,79 @@ def test_repository_registration_is_allowed_to_admins_and_refused_to_other_kinds
         (repository_key(existing) in keys, repository_key(attempted) in keys),
         equal_to((not row.allowed, row.allowed)),
         "the registrations left behind must be those the allowed calls made",
+    )
+
+
+# ── TC-004: external users and service accounts ─────────────────────────────────
+
+
+# @case classify-cli-sessions-by-subscription_TC_004
+@pytest.mark.cli_analytics
+@pytest.mark.not_for_parallel_run
+@pytest.mark.parametrize("spec", specs_named(*WORK_PROJECT_SENDER_KINDS))
+@pytest.mark.api
+def test_personal_session_of_an_external_user_or_service_account_is_stored_in_a_work_project(
+    account_world, account_sessions, spec
+):
+    """A non-matching organization makes the session Personal. For a user type that cannot have a
+    personal project it is stored in the linked work project with a shared origin (never
+    personal), the admin reads it under the project rights, and no personal project is created
+    for a service account while an external user's old personal project stays unused."""
+    world = account_world
+    account = world.work_project_senders[spec.name]
+    sent = account_sessions.work_project[spec.name]
+    batch = sent.batch
+
+    assert_accepted(sent.response, "event-hooks", CT_NDJSON)
+    stored = wait_for_session_row(
+        world.admin_api, batch.session_id, batch.repo, projects=world.project
+    )
+    assert_that(
+        routing_of(stored),
+        equal_to(SHARED_ORIGIN_PERSONAL),
+        "a Personal session of this account must be stored in the linked work project as personal "
+        "with a shared origin",
+    )
+    assert_that(
+        sorted(name.lower() for name in world.provisioner.project_names_of(account)),
+        equal_to(spec.project_names(account.email, world.project)),
+        "no personal project may be created for the account by sending the session",
+    )
+
+
+# @case classify-cli-sessions-by-subscription_TC_004
+@pytest.mark.cli_analytics
+@pytest.mark.not_for_parallel_run
+@pytest.mark.api
+def test_external_user_without_projects_is_retried_after_joining_a_work_project(
+    account_world,
+):
+    """An external user with no project at all gets a retryable 503 default_project_unavailable
+    for a Personal session (the link names a project it does not belong to); once it joins the
+    work project the same session is accepted and stored there as personal with a shared origin."""
+    world = account_world
+    account = world.no_projects
+    batch = new_session()
+    evidence = dict(
+        organization=world.organizations.other, project=world.project, **LINKED
+    )
+
+    before = send_evidence(account.client, batch, **evidence)
+    world.provisioner.join(account, world.project)
+    after = send_evidence(account.client, batch, **evidence)
+
+    assert_rejected(before, 503, DEFAULT_PROJECT_UNAVAILABLE)
+    assert_accepted(after, "event-hooks", CT_NDJSON)
+    stored = wait_for_session_row(
+        world.admin_api, batch.session_id, batch.repo, projects=world.project
+    )
+    assert_that(
+        routing_of(stored),
+        equal_to(SHARED_ORIGIN_PERSONAL),
+        "the retried session must be stored in the work project as personal with a shared origin",
+    )
+    assert_that(
+        [name.lower() for name in world.provisioner.project_names_of(account)],
+        equal_to([world.project.lower()]),
+        "joining the work project must not create a personal project",
     )

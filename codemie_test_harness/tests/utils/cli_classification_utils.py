@@ -28,6 +28,7 @@ What a test can read back, and how:
 import base64
 import secrets
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import requests
@@ -47,7 +48,6 @@ from codemie_test_harness.tests.test_data.cli_account_test_data import (
 )
 from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     E7,
-    PRESENCE_POLL_S,
     PRESENCE_TIMEOUT_S,
     STABLE_SESSION_FIELDS,
 )
@@ -90,6 +90,17 @@ ORGANIZATION_ENCODING = "utf8-b64u.v1"
 ROUTING_FIELDS = ("subscription_type", "project_origin", "route_note")
 _POLICY_STREAK = 3
 _PROFILE_STREAK = 4
+# A session shows up on the next rollup refresh; polling every 2 s (not PRESENCE_POLL_S) keeps the
+# overshoot after it small, which adds up over the many single-session waits of these tests.
+_ROW_POLL_S = 2
+
+
+def in_parallel(*calls):
+    """Run the zero-argument calls in threads and return their results in order; the first
+    failure is raised. For setup steps that mostly wait (users, projects, propagation)."""
+    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+        futures = [pool.submit(call) for call in calls]
+        return [future.result() for future in futures]
 
 
 # ── Names, remotes, organizations ───────────────────────────────────────────────
@@ -245,6 +256,11 @@ def assert_rejected(response: requests.Response, status: int, identifier: str) -
 # ── Reading ─────────────────────────────────────────────────────────────────────
 
 
+def detail_status(api: CliAnalyticsApi, session_id: str) -> int:
+    """The HTTP status of the caller's session detail read."""
+    return api.request("GET", f"{SESSIONS_PATH}/{session_id}").status_code
+
+
 def session_rows(api: CliAnalyticsApi, session_id: str, repo: str, **filters) -> list:
     """Rows of the session `session_id` in the sessions list the caller sees, narrowed by
     `filters` (projects, subscription_type, project_origin, ...). Empty when it is not listed."""
@@ -271,7 +287,7 @@ def wait_for_session_row(
         lambda: session_rows(api, session_id, repo, **filters),
         bool,
         PRESENCE_TIMEOUT_S,
-        PRESENCE_POLL_S,
+        _ROW_POLL_S,
     )
     assert_that(
         rows,
@@ -343,7 +359,7 @@ def wait_for_cost_sessions(api: CliAnalyticsApi, expected: int, **filters) -> di
         lambda: cost_kpis(api, **filters),
         lambda kpis: kpis["total_sessions"] >= expected,
         PRESENCE_TIMEOUT_S,
-        PRESENCE_POLL_S,
+        _ROW_POLL_S,
     )
 
 
@@ -389,6 +405,15 @@ class OrganizationPlan:
     def pick(self, key: str | None) -> str | None:
         """The name a test row refers to by key ("corporate", "other" or None for no organization)."""
         return {"corporate": self.corporate, "other": self.other, None: None}[key]
+
+
+def classification_headers(subscription: str, organizations: OrganizationPlan) -> dict:
+    """The evidence that makes a session corporate, codemie or unknown."""
+    return {
+        "corporate": {"organization": organizations.corporate},
+        "codemie": {"routed": "1"},
+        "unknown": {},
+    }[subscription]
 
 
 class CorporateList:
@@ -495,8 +520,22 @@ class Provisioner:
         )
         for member in members:
             self._user_utils.assign_user_to_project(member.user_id, name)
-            wait_until_accessible(member.client, [name])
+        if members:
+            in_parallel(
+                *(
+                    lambda member=member: wait_until_accessible(member.client, [name])
+                    for member in members
+                )
+            )
         return name
+
+    def projects(self, count: int, *members: ClassifiedSender) -> list[str]:
+        """`count` fresh shared projects made at the same time; see `project`."""
+        return in_parallel(*(lambda: self.project(*members) for _ in range(count)))
+
+    def senders(self, count: int) -> list[ClassifiedSender]:
+        """`count` fresh ordinary users made at the same time."""
+        return in_parallel(*(self.sender for _ in range(count)))
 
     def account(
         self, spec: AccountSpec, project: str | None = None
@@ -550,6 +589,10 @@ class Provisioner:
             and (project in profile["applications_admin"]) == project_admin,
             f"membership of {project}",
         )
+
+    def add_member(self, account: ClassifiedSender, project: str) -> None:
+        """Make an existing account a member of `project` and wait until it can read it."""
+        self._assign(account, project, False)
 
     def _assign(
         self, account: ClassifiedSender, project: str, project_admin: bool
@@ -661,6 +704,8 @@ class Provisioner:
             delete_projects_strict(self._project_utils, self._projects)
         except AssertionError as e:
             failures.append(str(e))
+
+        # One at a time: deleting many users at once got 502 from the identity provider.
         for email in self._emails:
             try:
                 self._keycloak.delete_user(email)

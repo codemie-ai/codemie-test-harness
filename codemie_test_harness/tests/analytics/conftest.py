@@ -21,11 +21,15 @@ from dataclasses import dataclass
 import pytest
 import requests
 from codemie_sdk import CodeMieClient
-from hamcrest import assert_that, empty
+from hamcrest import assert_that, empty, equal_to
 
 from codemie_test_harness.tests.test_data.cli_account_test_data import (
+    EXTERNAL,
+    EXTERNAL_FORMER_REGULAR,
+    EXTERNAL_NO_PROJECTS,
     GLOBAL_ADMIN,
     PERSONAL_SENDER_KINDS,
+    WORK_PROJECT_SENDERS,
     WORLD_ACCOUNT_KINDS,
     spec_named,
 )
@@ -37,6 +41,13 @@ from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     CliSessionSeed,
     priced_model,
 )
+from codemie_test_harness.tests.test_data.cli_classification_test_data import (
+    ORGANIZATION_ENVELOPES_AT_THE_LIMIT,
+    ORGANIZATION_SPELLINGS,
+    PLACEMENT_ROWS,
+    PROFILE_ROWS,
+    ROUTED_CASES,
+)
 from codemie_test_harness.tests.test_data.projects_test_data import (
     get_project_create_data,
 )
@@ -45,7 +56,9 @@ from codemie_test_harness.tests.utils.analytics_utils import (
     AnalyticsUtils,
 )
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
+    CT_NDJSON,
     CliAnalyticsApi,
+    assert_accepted,
     assert_project_deleted,
     assert_roles_are_real,
     delete_projects_strict,
@@ -59,12 +72,16 @@ from codemie_test_harness.tests.utils.cli_gate_utils import (
     wait_until_listed,
 )
 from codemie_test_harness.tests.utils.cli_classification_utils import (
+    LINKED,
     ClassifiedSender,
     CorporateList,
     OrganizationPlan,
     Provisioner,
+    classification_headers,
+    in_parallel,
     new_remote,
     new_session,
+    read_policy,
     send_evidence,
     unique_organization,
     wait_for_policy,
@@ -77,6 +94,7 @@ from codemie_test_harness.tests.utils.user_lifecycle_utils import (
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.logger_util import setup_logger
 from codemie_test_harness.tests.utils.project_utils import ProjectUtils
+from codemie_test_harness.tests.utils.user_utils import UserUtils
 
 logger = setup_logger(__name__)
 
@@ -461,6 +479,34 @@ def seed_cli_sessions(analytics_utils, ingest_cli_sessions):
 
 
 # ── Session classification and routing ──────────────────────────────────────────
+#
+# The classification, routing and account tests spend their time waiting: for a setting to reach
+# every replica, for a session to show up on the next rollup refresh, and for an absence window
+# to pass. So the waits are shared: the corporate list is set once for the run, the sessions of
+# the parametrized rows are sent together when a module starts, users and projects are made at
+# the same time, and the sessions whose absence the run checks are sent first, so that their
+# windows run while the other tests do. The tests that observe an absence come last in their
+# modules.
+
+
+@pytest.fixture(scope="session")
+def classification_admin_client(keycloak_utils, user_utils):
+    """Global admin of the classification tests, one for the run: it makes their projects and
+    lists the shared sessions."""
+    with new_logged_in_user(
+        keycloak_utils, user_email("clsadmin"), admin=False
+    ) as user:
+        user_utils.update_admin_user(user.user_id, is_admin=True)
+        UserUtils(user.client).wait_until_user_management_effective()
+        yield user.client
+
+
+def _provisioner(keycloak_utils, admin_utils, user_utils, project_utils, admin_client):
+    created = Provisioner(
+        keycloak_utils, admin_utils, user_utils, project_utils, admin_client
+    )
+    yield created
+    created.cleanup()
 
 
 @pytest.fixture
@@ -470,14 +516,16 @@ def provisioner(
     admin_utils,
     user_utils,
     project_utils,
-    gate_admin_client,
+    classification_admin_client,
 ):
     """Users, shared projects and repository registrations made by one test, all removed after it."""
-    created = Provisioner(
-        keycloak_utils, admin_utils, user_utils, project_utils, gate_admin_client
+    yield from _provisioner(
+        keycloak_utils,
+        admin_utils,
+        user_utils,
+        project_utils,
+        classification_admin_client,
     )
-    yield created
-    created.cleanup()
 
 
 @pytest.fixture(scope="module")
@@ -487,64 +535,54 @@ def module_provisioner(
     admin_utils,
     user_utils,
     project_utils,
-    gate_admin_client,
+    classification_admin_client,
 ):
     """Like `provisioner`, for worlds shared by the tests of one module."""
-    created = Provisioner(
-        keycloak_utils, admin_utils, user_utils, project_utils, gate_admin_client
+    yield from _provisioner(
+        keycloak_utils,
+        admin_utils,
+        user_utils,
+        project_utils,
+        classification_admin_client,
     )
-    yield created
-    created.cleanup()
+
+
+@pytest.fixture(scope="session")
+def run_provisioner(
+    cli_analytics_enabled,
+    keycloak_utils,
+    admin_utils,
+    user_utils,
+    project_utils,
+    classification_admin_client,
+):
+    """Like `provisioner`, for the run-wide world of `classification_run`."""
+    yield from _provisioner(
+        keycloak_utils,
+        admin_utils,
+        user_utils,
+        project_utils,
+        classification_admin_client,
+    )
 
 
 @dataclass
-class ClassificationWorld:
-    sender: ClassifiedSender  # an ordinary user, a member of `project`
-    project: str  # shared, CLI analytics enabled
-    admin_api: CliAnalyticsApi  # a global admin: lists the shared sessions
+class SentSession:
+    batch: Batch
+    response: requests.Response
 
 
-@pytest.fixture(scope="module")
-def classification_world(module_provisioner, gate_admin_client):
-    sender = module_provisioner.sender()
-    project = module_provisioner.project(sender)
-    return ClassificationWorld(sender, project, CliAnalyticsApi(gate_admin_client))
+def _send(account: ClassifiedSender, **evidence) -> SentSession:
+    batch = new_session()
+    return SentSession(batch, send_evidence(account.client, batch, **evidence))
 
 
-@dataclass
-class RoutingWorld:
-    """Projects A, B and D are the sender's (D is the default); N is enabled but the sender is
-    no member. The remotes of B and N are registered to them."""
-
-    sender: ClassifiedSender
-    admin_api: CliAnalyticsApi
-    projects: dict
-    remotes: dict
-
-    def project(self, key: str | None) -> str | None:
-        return self.projects.get(key)
-
-    def remote(self, key: str | None) -> str | None:
-        return self.remotes.get(key)
-
-
-@pytest.fixture(scope="module")
-def routing_world(module_provisioner, gate_admin_client):
-    sender = module_provisioner.sender()
-    projects = {key: module_provisioner.project(sender) for key in ("A", "B", "D")}
-    projects["N"] = module_provisioner.project()
-    module_provisioner.set_default(sender, projects["D"])
-    remotes = {"B": new_remote(), "N": new_remote()}
-    module_provisioner.register(projects["B"], remotes["B"])
-    module_provisioner.register(projects["N"], remotes["N"])
-    return RoutingWorld(sender, CliAnalyticsApi(gate_admin_client), projects, remotes)
-
-
-def _corporate_list_scope(customer_config_utils, gate_admin_client):
-    """Generator body of the corporate-list fixtures: yields a setter, restores the setting."""
+def _corporate_list_scope(customer_config_utils, admin_client):
+    """Generator body of the corporate-list fixtures: yields a setter, then puts back the setting
+    found when the fixture started (an own override kept, a default restored)."""
     declaration = customer_config_utils.get_declaration(CLI_ANALYTICS_FEATURE_ID)
     original = declaration["value"]
-    api = CliAnalyticsApi(gate_admin_client)
+    api = CliAnalyticsApi(admin_client)
     handle = CorporateList(customer_config_utils, CLI_ANALYTICS_FEATURE_ID, original)
     yield lambda organizations: handle.set(api, organizations)
     if declaration["overridden"]:
@@ -562,42 +600,499 @@ def _corporate_list_scope(customer_config_utils, gate_admin_client):
 
 
 @pytest.fixture
-def corporate_list(cli_analytics_enabled, customer_config_utils, gate_admin_client):
-    """The installation's corporate organization list: `.set(organizations)` writes it through
-    the customer config and waits until the classification policy shows it; the setting is put
-    back (an own override kept, a default restored) when the test ends."""
-    yield from _corporate_list_scope(customer_config_utils, gate_admin_client)
-
-
-@pytest.fixture(scope="module")
-def module_corporate_list(
-    cli_analytics_enabled, customer_config_utils, gate_admin_client
+def corporate_list(
+    cli_analytics_enabled, customer_config_utils, classification_admin_client
 ):
-    """Like `corporate_list`, for worlds shared by the tests of one module."""
-    yield from _corporate_list_scope(customer_config_utils, gate_admin_client)
+    """The installation's corporate organization list for one test: `.set(organizations)` writes
+    it through the customer config and waits until the classification policy shows it; the list
+    the test started with (the run's list, when `classification_run` set it) is put back after."""
+    yield from _corporate_list_scope(customer_config_utils, classification_admin_client)
+
+
+@pytest.fixture(scope="session")
+def run_corporate_list(
+    cli_analytics_enabled, customer_config_utils, classification_admin_client
+):
+    """Like `corporate_list`, for the whole run."""
+    yield from _corporate_list_scope(customer_config_utils, classification_admin_client)
+
+
+def _stranded_sender(provisioner: Provisioner, user_utils) -> ClassifiedSender:
+    """A user whose only project is the personal project it can no longer receive sessions in.
+
+    An administrator cannot detach a user from its personal project (the membership endpoint
+    answers 403 for it), so the user is changed to the external user type instead: such a user
+    never receives a new session in a personal project, and has no other project, so neither a
+    link, a registration nor a default project is usable.
+    """
+    sender = provisioner.sender()
+    for project_name in user_utils.get_user_project_names(sender.user_id):
+        if project_name.lower() != sender.email.lower():
+            user_utils.remove_user_from_project(sender.user_id, project_name)
+    user_utils.update_admin_user(sender.user_id, user_type=EXTERNAL)
+    assert_that(
+        [name.lower() for name in user_utils.get_user_project_names(sender.user_id)],
+        equal_to([sender.email.lower()]),
+        "setup: the user must keep only its personal project, so it has no other default project",
+    )
+    assert_that(
+        user_utils.get_admin_user(sender.user_id).user_type,
+        equal_to(EXTERNAL),
+        "setup: the user must be of the external type, which has no usable personal project",
+    )
+    return sender
+
+
+@dataclass
+class StrandedProbe:
+    """TC-015: stranded is a CodeMie session of an external user whose only project is the
+    personal project it can no longer receive sessions in, so no destination is usable; control
+    is a CodeMie session of an ordinary user, stored in its default project."""
+
+    stranded: SentSession
+    control: SentSession
+    sent_at: float
+
+
+@pytest.fixture(scope="session")
+def stranded_probe(run_provisioner, user_utils):
+    """Sent once for the run (and at its start when `classification_run` is used), so that the
+    absence window of `stranded` passes while the other tests run. It needs no corporate list."""
+    provisioner = run_provisioner
+
+    def _member() -> ClassifiedSender:
+        member = provisioner.sender()
+        provisioner.set_default(member, provisioner.project(member))
+        return member
+
+    stranded_sender, member = in_parallel(
+        lambda: _stranded_sender(provisioner, user_utils), _member
+    )
+    probe = StrandedProbe(
+        stranded=_send(stranded_sender, routed="1"),
+        control=_send(member, routed="1"),
+        sent_at=0.0,
+    )
+    probe.sent_at = time.monotonic()
+    return probe
+
+
+@dataclass
+class AbsenceProbes:
+    """Sessions whose absence the run checks, sent when the run's corporate list is set, so that
+    their absence windows (ABSENCE_WINDOW_S from `sent_at`) pass while the other tests run.
+
+    owner and other: ordinary members of `project`. personal: the owner's Personal session;
+    shared: the owner's CodeMie session in `project`, listed in the shared list; others_personal:
+    the other user's Personal session. former_regular: an external user that was regular at its
+    first login, a member of `project`; no_destination: its Personal session without a link,
+    for which no project is usable. kind_owners: an account of each kind of
+    PERSONAL_SENDER_KINDS, a member (the project admin: an admin) of `project`; kind_personal:
+    the Personal session each of them sent with a link to `project`.
+    """
+
+    project: str
+    owner: ClassifiedSender
+    other: ClassifiedSender
+    former_regular: ClassifiedSender
+    kind_owners: dict
+    personal: SentSession
+    shared: SentSession
+    others_personal: SentSession
+    no_destination: SentSession
+    kind_personal: dict
+    sent_at: float
+
+
+@dataclass
+class ClassificationRun:
+    """What the tests that need the corporate list share for the whole run: the list names
+    `organizations.corporate` only, and the absence probes were sent under it."""
+
+    organizations: OrganizationPlan
+    probes: AbsenceProbes
+
+
+@pytest.fixture(scope="session")
+def classification_run(run_corporate_list, run_provisioner, stranded_probe):
+    """Sets the run's corporate list and sends the absence probes under it. It takes
+    `stranded_probe` too, so that probe is also sent when a run with these tests starts."""
+    provisioner = run_provisioner
+    plan = OrganizationPlan(unique_organization(), unique_organization())
+    project = provisioner.project()
+
+    def _member() -> ClassifiedSender:
+        sender = provisioner.sender()
+        provisioner.add_member(sender, project)
+        return sender
+
+    _, owner, other, former_regular, *kind_owners = in_parallel(
+        lambda: run_corporate_list([plan.corporate]),
+        _member,
+        _member,
+        lambda: provisioner.account(EXTERNAL_FORMER_REGULAR, project),
+        *(
+            lambda name=name: provisioner.account(spec_named(name), project)
+            for name in PERSONAL_SENDER_KINDS
+        ),
+    )
+    kind_owners = dict(zip(PERSONAL_SENDER_KINDS, kind_owners))
+    linked = {"project": project, **LINKED}
+    probes = AbsenceProbes(
+        project=project,
+        owner=owner,
+        other=other,
+        former_regular=former_regular,
+        kind_owners=kind_owners,
+        personal=_send(owner, organization=plan.other),
+        shared=_send(owner, routed="1", **linked),
+        others_personal=_send(other, organization=plan.other),
+        no_destination=_send(former_regular, organization=plan.other),
+        kind_personal={
+            name: _send(account, organization=plan.other, **linked)
+            for name, account in kind_owners.items()
+        },
+        sent_at=0.0,
+    )
+    probes.sent_at = time.monotonic()
+    return ClassificationRun(plan, probes)
 
 
 @pytest.fixture
-def organizations(corporate_list):
-    """Two fresh organization names; the corporate list is set to the first one only."""
-    plan = OrganizationPlan(unique_organization(), unique_organization())
-    corporate_list([plan.corporate])
-    return plan
+def organizations(classification_run):
+    """The run's two organization names; the corporate list names the first one only."""
+    return classification_run.organizations
+
+
+@dataclass
+class FilterWorld:
+    """TC-013: a sender with two projects, `default` (its default) and `registered`, to which
+    `remote` is registered."""
+
+    sender: ClassifiedSender
+    default: str
+    registered: str
+    remote: str
+
+
+def _filter_world(provisioner: Provisioner) -> FilterWorld:
+    sender = provisioner.sender()
+    default, registered = provisioner.projects(2, sender)
+    provisioner.set_default(sender, default)
+    remote = new_remote()
+    provisioner.register(registered, remote)
+    return FilterWorld(sender, default, registered, remote)
+
+
+@dataclass
+class ClassificationWorld:
+    """sender: an ordinary user, a member of `project` (shared, CLI analytics enabled);
+    admin_api: a global admin that lists the shared sessions; filters: the TC-013 world."""
+
+    sender: ClassifiedSender
+    project: str
+    admin_api: CliAnalyticsApi
+    filters: FilterWorld
 
 
 @pytest.fixture(scope="module")
-def module_organizations(module_corporate_list):
-    """Like `organizations`, for worlds shared by the tests of one module."""
-    plan = OrganizationPlan(unique_organization(), unique_organization())
-    module_corporate_list([plan.corporate])
-    return plan
+def classification_world(module_provisioner, classification_admin_client):
+    provisioner = module_provisioner
+
+    def _sender_project() -> tuple:
+        sender = provisioner.sender()
+        return sender, provisioner.project(sender)
+
+    (sender, project), filters = in_parallel(
+        _sender_project, lambda: _filter_world(provisioner)
+    )
+    return ClassificationWorld(
+        sender, project, CliAnalyticsApi(classification_admin_client), filters
+    )
+
+
+def _params(rows) -> list:
+    """The values of a list of single-value pytest.param rows."""
+    return [row.values[0] for row in rows]
+
+
+@dataclass
+class ClassificationSessions:
+    """The sessions of the classification module, sent together and all listed.
+
+    routed, spellings, at_the_limit: keyed by the row of ROUTED_CASES, ORGANIZATION_SPELLINGS and
+    ORGANIZATION_ENVELOPES_AT_THE_LIMIT; without_organization: the session that names no
+    organization; corporate_bound (TC-021): a Corporate session bound to the project, sent under
+    `corporate_policy`; filtered (TC-013): the filter world's sessions keyed "linked",
+    "profile", "registered", "default" and "personal".
+    """
+
+    routed: dict
+    spellings: dict
+    at_the_limit: dict
+    without_organization: SentSession
+    corporate_bound: SentSession
+    corporate_policy: dict
+    filtered: dict
+
+
+@pytest.fixture(scope="module")
+def classification_sessions(classification_world, classification_run):
+    world, plan = classification_world, classification_run.organizations
+    linked = {"project": world.project, **LINKED}
+    sent = ClassificationSessions(
+        routed={
+            case: _send(
+                world.sender,
+                routed=case.routed_value,
+                organization=plan.pick(case.organization),
+                **linked,
+            )
+            for case in _params(ROUTED_CASES)
+        },
+        spellings={
+            spelling: _send(world.sender, **linked, **spelling(plan.corporate))
+            for spelling in _params(ORGANIZATION_SPELLINGS)
+        },
+        at_the_limit={
+            envelope: _send(world.sender, organization_encoded=envelope, **linked)
+            for envelope in _params(ORGANIZATION_ENVELOPES_AT_THE_LIMIT)
+        },
+        without_organization=_send(world.sender, **linked),
+        corporate_bound=_send(world.sender, organization=plan.corporate, **linked),
+        corporate_policy=read_policy(world.sender.api),
+        filtered=_send_filtered(world.filters, plan),
+    )
+    shared = [
+        *sent.routed.values(),
+        *sent.spellings.values(),
+        sent.without_organization,
+        sent.corporate_bound,
+    ]
+    for session in shared:
+        wait_for_session_row(
+            world.admin_api,
+            session.batch.session_id,
+            session.batch.repo,
+            projects=world.project,
+        )
+    filters = world.filters
+    for key in ("linked", "profile", "registered", "default"):
+        wait_for_session_row(
+            world.admin_api,
+            sent.filtered[key].batch.session_id,
+            sent.filtered[key].batch.repo,
+            users=filters.sender.email,
+        )
+    for session in sent.at_the_limit.values():
+        wait_for_session_row(
+            world.sender.api,
+            session.batch.session_id,
+            session.batch.repo,
+            personal_only="true",
+        )
+    wait_for_session_row(
+        filters.sender.api,
+        sent.filtered["personal"].batch.session_id,
+        sent.filtered["personal"].batch.repo,
+        personal_only="true",
+    )
+    return sent
+
+
+def _send_filtered(filters: FilterWorld, plan: OrganizationPlan) -> dict:
+    """TC-013: one session of each origin, and a Personal one, from the filter world's sender."""
+    sender = filters.sender
+    return {
+        "linked": _send(
+            sender, organization=plan.corporate, project=filters.default, **LINKED
+        ),
+        "profile": _send(
+            sender, routed="1", project=filters.default, project_source="profile"
+        ),
+        "registered": _send(sender, repo_remote=filters.remote),
+        "default": _send(sender, organization=plan.corporate),
+        "personal": _send(sender, organization=plan.other),
+    }
+
+
+@dataclass
+class RoutingWorld:
+    """Projects A, B and D are the sender's (D is the default); N is enabled but the sender is
+    no member. The remotes of B and N are registered to them.
+
+    bound: two sessions bound to a project of their own senders, keyed "membership" and
+    "project" by what the TC-020 test that uses it takes away; owner_conflict: the TC-018 owner,
+    intruder and session. Both are made and sent with the world, so the wait for them to be
+    listed overlaps with the module's other sessions."""
+
+    sender: ClassifiedSender
+    admin_api: CliAnalyticsApi
+    projects: dict
+    remotes: dict
+    bound: dict
+    owner_conflict: "OwnerConflict"
+
+    def project(self, key: str | None) -> str | None:
+        return self.projects.get(key)
+
+    def remote(self, key: str | None) -> str | None:
+        return self.remotes.get(key)
+
+
+@dataclass
+class BoundSession:
+    sender: ClassifiedSender
+    project: str  # the project the session is bound to
+    default: str  # the sender's default project
+    sent: SentSession
+    history: dict | None = None  # the session's row as first listed (`bound_sessions`)
+
+
+def _bound_session(provisioner: Provisioner) -> BoundSession:
+    """A session bound to a project; the sender also has another project, its default."""
+    sender = provisioner.sender()
+    project, default = provisioner.projects(2, sender)
+    provisioner.set_default(sender, default)
+    sent = _send(sender, routed="1", project=project, **LINKED)
+    return BoundSession(sender, project, default, sent)
+
+
+@dataclass
+class OwnerConflict:
+    """TC-018: owner and intruder are members of `project`; sent is the owner's CodeMie session
+    in it, naming an unrelated organization."""
+
+    owner: ClassifiedSender
+    intruder: ClassifiedSender
+    project: str
+    sent: SentSession
+
+
+def _owner_conflict(provisioner: Provisioner) -> OwnerConflict:
+    owner, intruder = provisioner.senders(2)
+    project = provisioner.project(owner, intruder)
+    sent = _send(
+        owner,
+        routed="1",
+        organization="unrelated-claude-account",
+        project=project,
+        **LINKED,
+    )
+    return OwnerConflict(owner, intruder, project, sent)
+
+
+@pytest.fixture(scope="module")
+def routing_world(module_provisioner, classification_admin_client):
+    provisioner = module_provisioner
+
+    def _sender_projects() -> tuple:
+        sender = provisioner.sender()
+        return sender, provisioner.projects(3, sender), provisioner.project()
+
+    (sender, (a, b, d), n), membership, project, owner_conflict = in_parallel(
+        _sender_projects,
+        lambda: _bound_session(provisioner),
+        lambda: _bound_session(provisioner),
+        lambda: _owner_conflict(provisioner),
+    )
+    projects = {"A": a, "B": b, "D": d, "N": n}
+    provisioner.set_default(sender, projects["D"])
+    remotes = {"B": new_remote(), "N": new_remote()}
+    provisioner.register(projects["B"], remotes["B"])
+    provisioner.register(projects["N"], remotes["N"])
+    return RoutingWorld(
+        sender,
+        CliAnalyticsApi(classification_admin_client),
+        projects,
+        remotes,
+        {"membership": membership, "project": project},
+        owner_conflict,
+    )
+
+
+@dataclass
+class RoutingSessions:
+    """The sessions of the parametrized routing rows, sent together and all listed: keyed by the
+    row of PLACEMENT_ROWS and PROFILE_ROWS; personal is the ordinary user's Personal session sent
+    with a profile project."""
+
+    placement: dict
+    profile: dict
+    personal: SentSession
+
+
+@pytest.fixture(scope="module")
+def routing_sessions(routing_world, classification_run):
+    world, plan = routing_world, classification_run.organizations
+    sent = RoutingSessions(
+        placement={
+            row: _send(
+                world.sender,
+                project=world.project(row.link),
+                project_source=row.project_source,
+                repo_remote=world.remote(row.registered),
+                **classification_headers(row.subscription, plan),
+            )
+            for row in _params(PLACEMENT_ROWS)
+        },
+        profile={
+            row: _send(
+                world.sender,
+                organization=plan.corporate,
+                project=world.project(row.profile_project),
+                project_source=row.project_source,
+                repo_remote=world.remote(row.registered),
+            )
+            for row in _params(PROFILE_ROWS)
+        },
+        personal=_send(
+            world.sender,
+            organization=plan.other,
+            project=world.project("A"),
+            project_source="profile",
+            repo_remote=world.remote("B"),
+        ),
+    )
+    for row, session in (*sent.placement.items(), *sent.profile.items()):
+        wait_for_session_row(
+            world.admin_api,
+            session.batch.session_id,
+            session.batch.repo,
+            projects=world.project(row.project),
+        )
+    wait_for_session_row(
+        world.sender.api,
+        sent.personal.batch.session_id,
+        sent.personal.batch.repo,
+        personal_only="true",
+    )
+    return sent
+
+
+@pytest.fixture(scope="module")
+def bound_sessions(routing_world):
+    """The world's bound sessions, each accepted and listed in its project (`history`)."""
+    for bound in routing_world.bound.values():
+        assert_accepted(bound.sent.response, "event-hooks", CT_NDJSON)
+        bound.history = wait_for_session_row(
+            routing_world.admin_api,
+            bound.sent.batch.session_id,
+            bound.sent.batch.repo,
+            projects=bound.project,
+        )
+    return routing_world.bound
 
 
 @dataclass
 class AccountWorld:
     """One shared project with CLI analytics on, one account of each kind that is a member of it
-    (keyed by the kind's name), an ordinary owner who is a member too, and a corporate list that
-    names `organizations.corporate` only."""
+    (keyed by the kind's name), an ordinary owner who is a member too, and the run's corporate
+    list, which names `organizations.corporate` only.
+
+    TC-004: work_project_senders, keyed by the names of WORK_PROJECT_SENDERS, are accounts that
+    cannot have a personal project, members of the project; no_projects is an external user with
+    no project at all, which its test joins to the project."""
 
     provisioner: Provisioner
     admin_api: CliAnalyticsApi
@@ -605,6 +1100,8 @@ class AccountWorld:
     organizations: OrganizationPlan
     owner: ClassifiedSender
     accounts: dict
+    work_project_senders: dict
+    no_projects: ClassifiedSender
 
     def api(self, account: str) -> CliAnalyticsApi:
         """The read API of an account kind, or of the global admin."""
@@ -613,29 +1110,41 @@ class AccountWorld:
         return self.accounts[account].api
 
 
-@pytest.fixture(scope="module")
-def account_world(module_provisioner, module_organizations, gate_admin_client):
-    project = module_provisioner.project()
-    owner = module_provisioner.sender()
-    module_provisioner.join(owner, project)
-    accounts = {
-        name: module_provisioner.account(spec_named(name), project)
-        for name in WORLD_ACCOUNT_KINDS
-    }
-    return AccountWorld(
-        module_provisioner,
-        CliAnalyticsApi(gate_admin_client),
-        project,
-        module_organizations,
-        owner,
-        accounts,
+@pytest.fixture(scope="session")
+def account_world(run_provisioner, classification_run, classification_admin_client):
+    """One for the run: the account tests and their absence checks in
+    test_cli_analytics_unlisted_sessions.py share it."""
+    provisioner = run_provisioner
+    project = provisioner.project()
+
+    def _owner() -> ClassifiedSender:
+        owner = provisioner.sender()
+        provisioner.join(owner, project)
+        return owner
+
+    specs = [
+        *(spec_named(name) for name in WORLD_ACCOUNT_KINDS),
+        *WORK_PROJECT_SENDERS,
+    ]
+    owner, no_projects, *accounts = in_parallel(
+        _owner,
+        lambda: provisioner.account(EXTERNAL_NO_PROJECTS),
+        *(lambda spec=spec: provisioner.account(spec, project) for spec in specs),
     )
-
-
-@dataclass
-class SentSession:
-    batch: Batch
-    response: requests.Response
+    kinds = len(WORLD_ACCOUNT_KINDS)
+    return AccountWorld(
+        provisioner,
+        CliAnalyticsApi(classification_admin_client),
+        project,
+        classification_run.organizations,
+        owner,
+        dict(zip(WORLD_ACCOUNT_KINDS, accounts[:kinds])),
+        {
+            spec.name: account
+            for spec, account in zip(WORK_PROJECT_SENDERS, accounts[kinds:])
+        },
+        no_projects,
+    )
 
 
 @dataclass
@@ -646,7 +1155,8 @@ class AccountSessions:
     maintainer, auditor) with a link to the shared project; corporate: the owner's Corporate
     session in the shared project; private: the owner's Personal session; service: the Personal
     session of the service account with a link to the shared project; member: the regular
-    member's Corporate session in the shared project.
+    member's Corporate session in the shared project; work_project (TC-004): the Personal
+    session of each work-project sender, linked to the shared project.
     """
 
     personal: dict
@@ -654,6 +1164,7 @@ class AccountSessions:
     private: SentSession
     service: SentSession
     member: SentSession
+    work_project: dict
     sent_at: float
 
     @property
@@ -667,16 +1178,11 @@ class AccountSessions:
         return {senders[kind].batch.session_id} if kind in senders else set()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def account_sessions(account_world):
     world = account_world
     other = world.organizations.other
-    linked = {"project": world.project, "project_source": "linked_folder"}
-
-    def _send(account, **evidence) -> SentSession:
-        batch = new_session()
-        return SentSession(batch, send_evidence(account.client, batch, **evidence))
-
+    linked = {"project": world.project, **LINKED}
     personal = {
         name: _send(world.accounts[name], organization=other, **linked)
         for name in PERSONAL_SENDER_KINDS
@@ -689,8 +1195,12 @@ def account_sessions(account_world):
         organization=world.organizations.corporate,
         **linked,
     )
+    work_project = {
+        name: _send(account, organization=other, **linked)
+        for name, account in world.work_project_senders.items()
+    }
     sent_at = time.monotonic()
-    for sent in (corporate, service, member):
+    for sent in (corporate, service, member, *work_project.values()):
         wait_for_session_row(
             world.admin_api,
             sent.batch.session_id,
@@ -708,4 +1218,6 @@ def account_sessions(account_world):
             sent.batch.repo,
             personal_only="true",
         )
-    return AccountSessions(personal, corporate, private, service, member, sent_at)
+    return AccountSessions(
+        personal, corporate, private, service, member, work_project, sent_at
+    )

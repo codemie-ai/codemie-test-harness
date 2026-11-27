@@ -18,10 +18,13 @@ Personal or Unknown, what a Personal session exposes, and the classification hea
 A session is read back through the sessions list: an admin lists the shared (work-project)
 sessions, `projects=<name>` proves the stored project; only the owner lists their own Personal
 sessions. The corporate organization list is shared stand configuration, so the tests that
-change it are not_for_parallel_run and put it back in the fixture teardown.
-"""
+depend on it or change it are not_for_parallel_run; the run sets it once (`classification_run`)
+and puts it back at the end, and a test that changes it puts the run's list back.
 
-import time
+The module's sessions are sent together when it starts (`classification_sessions`), so the wait
+for the rollup is paid once. The Personal-session absence check (TC-003) is in
+test_cli_analytics_unlisted_sessions.py.
+"""
 
 import pytest
 from hamcrest import assert_that, empty, equal_to, has_item, is_not
@@ -47,7 +50,6 @@ from codemie_test_harness.tests.test_data.cli_classification_test_data import (
 )
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     CT_NDJSON,
-    CliAnalyticsApi,
     assert_accepted,
 )
 from codemie_test_harness.tests.utils.cli_classification_utils import (
@@ -59,7 +61,6 @@ from codemie_test_harness.tests.utils.cli_classification_utils import (
     further_event,
     listed_rows,
     listed_session_ids_with,
-    new_remote,
     new_session,
     read_policy,
     routing_of,
@@ -68,10 +69,6 @@ from codemie_test_harness.tests.utils.cli_classification_utils import (
     unique_organization,
     wait_for_cost_sessions,
     wait_for_session_row,
-)
-from codemie_test_harness.tests.utils.cli_gate_utils import (
-    SESSION_PREFIX,
-    observe_absence_window,
 )
 
 
@@ -84,23 +81,15 @@ from codemie_test_harness.tests.utils.cli_gate_utils import (
 @pytest.mark.parametrize("case", ROUTED_CASES)
 @pytest.mark.api
 def test_session_routed_via_codemie_is_classified_codemie_whatever_the_organization(
-    classification_world, organizations, case
+    classification_world, classification_sessions, case
 ):
     """CodeMie routing precedes any Claude account: the routed header gives subscription_type
     codemie for an organization in the corporate list, one outside it and none at all."""
     world = classification_world
-    batch = new_session()
+    sent = classification_sessions.routed[case]
+    batch = sent.batch
 
-    response = send_evidence(
-        world.sender.client,
-        batch,
-        routed=case.routed_value,
-        organization=organizations.pick(case.organization),
-        project=world.project,
-        **LINKED,
-    )
-
-    assert_accepted(response, "event-hooks", CT_NDJSON)
+    assert_accepted(sent.response, "event-hooks", CT_NDJSON)
     row = wait_for_session_row(
         world.admin_api,
         batch.session_id,
@@ -123,22 +112,16 @@ def test_session_routed_via_codemie_is_classified_codemie_whatever_the_organizat
 @pytest.mark.parametrize("spelling", ORGANIZATION_SPELLINGS)
 @pytest.mark.api
 def test_organization_matching_the_corporate_list_is_classified_corporate(
-    classification_world, organizations, spelling
+    classification_world, classification_sessions, organizations, spelling
 ):
     """The policy lists the configured organization, and the plain name, its upper-case spelling,
     its utf8-b64u.v1 encoding and the encoding of a padded upper-case spelling (a value the plain
     header cannot carry) all give subscription_type corporate."""
     world = classification_world
-    policy = read_policy(world.sender.api)
-    batch = new_session()
+    sent = classification_sessions.spellings[spelling]
+    batch = sent.batch
 
-    response = send_evidence(
-        world.sender.client,
-        batch,
-        project=world.project,
-        **LINKED,
-        **spelling(organizations.corporate),
-    )
+    policy = read_policy(world.sender.api)
 
     assert_that(
         policy["organizations"],
@@ -150,7 +133,7 @@ def test_organization_matching_the_corporate_list_is_classified_corporate(
         has_item(ORGANIZATION_ENCODING),
         "the policy must announce the encoded organization header",
     )
-    assert_accepted(response, "event-hooks", CT_NDJSON)
+    assert_accepted(sent.response, "event-hooks", CT_NDJSON)
     row = wait_for_session_row(
         world.admin_api,
         batch.session_id,
@@ -161,71 +144,6 @@ def test_organization_matching_the_corporate_list_is_classified_corporate(
         routing_of(row),
         equal_to(expected_routing(CORPORATE, LINKED_FOLDER)),
         "an organization in the corporate list must be classified corporate",
-    )
-
-
-# ── TC-003: Personal session of an ordinary user ────────────────────────────────
-
-
-# @case classify-cli-sessions-by-subscription_TC_003
-@pytest.mark.cli_analytics
-@pytest.mark.not_for_parallel_run
-@pytest.mark.api
-def test_non_matching_organization_is_personal_owner_only_and_outside_company_spend(
-    provisioner, organizations, gate_admin_client
-):
-    """An ordinary user's session with an organization outside a non-empty corporate list is
-    Personal: the owner lists it with origin personal in its personal_only list, another ordinary
-    user does not, the shared list never holds it (not even an admin's), and the admin's cost
-    view counts only the owner's shared session, not the Personal one.
-    Absence is 'not observed within the window' (observe_absence_window)."""
-    owner, other = provisioner.sender(), provisioner.sender()
-    shared = provisioner.project(owner, other)
-    admin_api = CliAnalyticsApi(gate_admin_client)
-    personal, shared_session = new_session(), new_session()
-    others_personal = new_session()
-
-    personal_response = send_evidence(
-        owner.client, personal, organization=organizations.other
-    )
-    shared_response = send_evidence(
-        owner.client, shared_session, routed="1", project=shared, **LINKED
-    )
-    others_response = send_evidence(
-        other.client, others_personal, organization=organizations.other
-    )
-
-    for response in (personal_response, shared_response, others_response):
-        assert_accepted(response, "event-hooks", CT_NDJSON)
-    owner_row = wait_for_session_row(
-        owner.api, personal.session_id, personal.repo, personal_only="true"
-    )
-    assert_that(
-        routing_of(owner_row),
-        equal_to(expected_routing(PERSONAL, PERSONAL)),
-        "the owner must read the session as Personal in the personal project",
-    )
-    observe_absence_window(
-        other.api,
-        {others_personal.session_id: others_personal.repo},
-        {
-            "owner's Personal session seen by another user": {
-                personal.session_id: personal.repo
-            }
-        },
-        time.monotonic(),
-        filters={"personal_only": "true"},
-    )
-    assert_that(
-        listed_session_ids_with(admin_api, search=SESSION_PREFIX),
-        is_not(has_item(personal.session_id)),
-        "the shared list must not hold a Personal session, not even an admin's",
-    )
-    kpis = wait_for_cost_sessions(admin_api, 1, users=owner.email)
-    assert_that(
-        kpis["total_sessions"],
-        equal_to(1),
-        "the cost view must count the owner's shared session only, not the Personal one",
     )
 
 
@@ -272,18 +190,15 @@ def test_session_with_an_organization_but_an_empty_corporate_list_is_unknown(
 @pytest.mark.not_for_parallel_run
 @pytest.mark.api
 def test_session_without_an_organization_is_unknown_even_with_a_corporate_list(
-    classification_world, organizations
+    classification_world, classification_sessions
 ):
     """A missing organization is Unknown, never Personal, whatever the corporate list holds, and
     the session follows the same work-project routing as a Corporate one."""
     world = classification_world
-    batch = new_session()
+    sent = classification_sessions.without_organization
+    batch = sent.batch
 
-    response = send_evidence(
-        world.sender.client, batch, project=world.project, **LINKED
-    )
-
-    assert_accepted(response, "event-hooks", CT_NDJSON)
+    assert_accepted(sent.response, "event-hooks", CT_NDJSON)
     row = wait_for_session_row(
         world.admin_api,
         batch.session_id,
@@ -327,39 +242,21 @@ def test_claimed_personal_or_corporate_type_without_organization_is_rejected_wit
 @pytest.mark.not_for_parallel_run
 @pytest.mark.api
 def test_subscription_type_and_project_origin_are_stored_and_filterable(
-    provisioner, organizations, gate_admin_client
+    classification_world, classification_sessions
 ):
     """Session rows carry subscription_type and project_origin, the two comma-separated filters
     return exactly the matching sessions (a Personal one only in the owner's personal_only list),
-    and the cost view
-    lists the distinct types and origins of the selected sessions."""
-    admin_api = CliAnalyticsApi(gate_admin_client)
-    sender = provisioner.sender()
-    project_a, project_b = provisioner.project(sender), provisioner.project(sender)
-    provisioner.set_default(sender, project_a)
-    remote = new_remote()
-    provisioner.register(project_b, remote)
-    linked, profile, registered, default, personal = (new_session() for _ in range(5))
-    shared_scope = {"users": sender.email, "projects": f"{project_a},{project_b}"}
-    sent = [
-        send_evidence(
-            sender.client,
-            linked,
-            organization=organizations.corporate,
-            project=project_a,
-            **LINKED,
-        ),
-        send_evidence(
-            sender.client,
-            profile,
-            routed="1",
-            project=project_a,
-            project_source="profile",
-        ),
-        send_evidence(sender.client, registered, repo_remote=remote),
-        send_evidence(sender.client, default, organization=organizations.corporate),
-        send_evidence(sender.client, personal, organization=organizations.other),
-    ]
+    and the cost view lists the distinct types and origins of the selected sessions. The sessions
+    were sent and listed when the module started (`classification_sessions`)."""
+    world, admin_api = classification_world.filters, classification_world.admin_api
+    sender, sent = world.sender, classification_sessions.filtered
+    linked, profile = sent["linked"].batch, sent["profile"].batch
+    registered, default = sent["registered"].batch, sent["default"].batch
+    personal = sent["personal"].batch
+    shared_scope = {
+        "users": sender.email,
+        "projects": f"{world.default},{world.registered}",
+    }
     expected = {
         linked.session_id: (CORPORATE, LINKED_FOLDER),
         profile.session_id: (CODEMIE, PROFILE),
@@ -367,14 +264,8 @@ def test_subscription_type_and_project_origin_are_stored_and_filterable(
         default.session_id: (CORPORATE, DEFAULT_PROJECT),
     }
 
-    for response in sent:
-        assert_accepted(response, "event-hooks", CT_NDJSON)
-    for batch in (linked, profile, registered, default):
-        wait_for_session_row(admin_api, batch.session_id, batch.repo, **shared_scope)
-    wait_for_session_row(
-        sender.api, personal.session_id, personal.repo, personal_only="true"
-    )
-
+    for session in sent.values():
+        assert_accepted(session.response, "event-hooks", CT_NDJSON)
     rows = {
         row["trace_id"]: (row["subscription_type"], row["project_origin"])
         for row in listed_rows(admin_api, **shared_scope)
@@ -425,27 +316,19 @@ def test_subscription_type_and_project_origin_are_stored_and_filterable(
 @pytest.mark.not_for_parallel_run
 @pytest.mark.api
 def test_later_personal_classification_of_a_shared_bound_session_is_rejected(
-    classification_world, corporate_list
+    classification_world, classification_sessions, organizations, corporate_list
 ):
     """After the list changes so the organization no longer matches, a further event of a session
     bound to a shared project is discarded with session_project_conflict: its history stays
     Corporate, nothing is copied into a personal project, and a new session is classified
-    under the current rules."""
+    under the current rules. The bound session was sent under the run's list when the module
+    started (`classification_sessions`)."""
     world = classification_world
-    organization = unique_organization()
-    first_policy = corporate_list([organization])
-    batch = new_session()
-    assert_accepted(
-        send_evidence(
-            world.sender.client,
-            batch,
-            organization=organization,
-            project=world.project,
-            **LINKED,
-        ),
-        "event-hooks",
-        CT_NDJSON,
-    )
+    organization = organizations.corporate
+    sent = classification_sessions.corporate_bound
+    first_policy = classification_sessions.corporate_policy
+    batch = sent.batch
+    assert_accepted(sent.response, "event-hooks", CT_NDJSON)
     bound = wait_for_session_row(
         world.admin_api, batch.session_id, batch.repo, projects=world.project
     )
@@ -558,23 +441,16 @@ def test_invalid_organization_envelope_is_400_organization_invalid(
 @pytest.mark.parametrize("envelope", ORGANIZATION_ENVELOPES_AT_THE_LIMIT)
 @pytest.mark.api
 def test_encoded_organization_at_the_size_limits_is_accepted_and_classified(
-    classification_world, organizations, envelope
+    classification_world, classification_sessions, envelope
 ):
     """A printable encoded organization of exactly 256 code points (and, for four-byte code
     points, exactly 1024 bytes and 1366 payload characters) is not refused: it is decoded,
     does not match the corporate list and so is stored as the owner's Personal session."""
     world = classification_world
-    batch = new_session()
+    sent = classification_sessions.at_the_limit[envelope]
+    batch = sent.batch
 
-    response = send_evidence(
-        world.sender.client,
-        batch,
-        organization_encoded=envelope,
-        project=world.project,
-        **LINKED,
-    )
-
-    assert_accepted(response, "event-hooks", CT_NDJSON)
+    assert_accepted(sent.response, "event-hooks", CT_NDJSON)
     owned = wait_for_session_row(
         world.sender.api, batch.session_id, batch.repo, personal_only="true"
     )

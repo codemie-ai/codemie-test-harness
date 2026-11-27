@@ -17,10 +17,11 @@ what happens to a session whose destination is lost or missing.
 
 The stored project is proven by listing the session as an admin with `projects=<name>`; the
 origin and the route note are read from the same row.
-"""
 
-import time
-from dataclasses import dataclass
+The module's sessions are sent together when it starts (`routing_sessions`, `routing_world`), so
+the wait for the rollup is paid once. The absence check of TC-015 is in
+test_cli_analytics_unlisted_sessions.py.
+"""
 
 import pytest
 from hamcrest import assert_that, empty, equal_to, equal_to_ignoring_case
@@ -28,7 +29,6 @@ from hamcrest import assert_that, empty, equal_to, equal_to_ignoring_case
 from codemie_test_harness.tests.test_data.cli_classification_test_data import (
     CORPORATE,
     DEFAULT_PROJECT,
-    DEFAULT_PROJECT_UNAVAILABLE,
     EVIDENCE_SESSION_CONFLICT,
     FOLDER_NOT_LINKED,
     FOLDER_NOT_LINKED_LABEL,
@@ -42,12 +42,10 @@ from codemie_test_harness.tests.test_data.cli_classification_test_data import (
 )
 from codemie_test_harness.tests.utils.cli_analytics_api_utils import (
     CT_NDJSON,
-    CliAnalyticsApi,
     assert_accepted,
 )
 from codemie_test_harness.tests.utils.cli_classification_utils import (
     LINKED,
-    ClassifiedSender,
     assert_rejected,
     assert_session_discarded,
     evidence_headers,
@@ -65,22 +63,6 @@ from codemie_test_harness.tests.utils.cli_classification_utils import (
     stable_projection,
     wait_for_session_row,
 )
-from codemie_test_harness.tests.utils.cli_gate_utils import (
-    Batch,
-    observe_absence_window,
-)
-
-EXTERNAL_USER_TYPE = "external"
-
-
-def _classification(subscription, organizations):
-    """The headers that make a session corporate, codemie or unknown."""
-    return {
-        "corporate": {"organization": organizations.corporate},
-        "codemie": {"routed": "1"},
-        "unknown": {},
-    }[subscription]
-
 
 # ── TC-005: destination order and accessibility ─────────────────────────────────
 
@@ -91,25 +73,16 @@ def _classification(subscription, organizations):
 @pytest.mark.parametrize("row", PLACEMENT_ROWS)
 @pytest.mark.api
 def test_destination_follows_link_then_registration_then_default(
-    routing_world, organizations, row
+    routing_world, routing_sessions, row
 ):
     """A Corporate, CodeMie or Unknown session goes to the accessible linked project, then to the
     accessible registered repository, then to the default project; an inaccessible link or
     registration is skipped and, when the default is used, noted in route_note."""
     world = routing_world
-    batch = new_session()
-    link = world.project(row.link)
+    sent = routing_sessions.placement[row]
+    batch = sent.batch
 
-    response = send_evidence(
-        world.sender.client,
-        batch,
-        project=link,
-        project_source=row.project_source,
-        repo_remote=world.remote(row.registered),
-        **_classification(row.subscription, organizations),
-    )
-
-    assert_accepted(response, "event-hooks", CT_NDJSON)
+    assert_accepted(sent.response, "event-hooks", CT_NDJSON)
     stored = wait_for_session_row(
         world.admin_api,
         batch.session_id,
@@ -165,24 +138,15 @@ def test_unlinked_session_goes_to_the_default_project_and_is_marked(routing_worl
 @pytest.mark.parametrize("row", PROFILE_ROWS)
 @pytest.mark.api
 def test_profile_project_wins_for_a_corporate_managed_launch(
-    routing_world, organizations, row
+    routing_world, routing_sessions, row
 ):
     """The project of the selected launch profile (project source profile) beats the registered
     repository; without one the registration applies, then the default project."""
     world = routing_world
-    batch = new_session()
-    profile_project = world.project(row.profile_project)
+    sent = routing_sessions.profile[row]
+    batch = sent.batch
 
-    response = send_evidence(
-        world.sender.client,
-        batch,
-        organization=organizations.corporate,
-        project=profile_project,
-        project_source=row.project_source,
-        repo_remote=world.remote(row.registered),
-    )
-
-    assert_accepted(response, "event-hooks", CT_NDJSON)
+    assert_accepted(sent.response, "event-hooks", CT_NDJSON)
     stored = wait_for_session_row(
         world.admin_api,
         batch.session_id,
@@ -201,24 +165,16 @@ def test_profile_project_wins_for_a_corporate_managed_launch(
 @pytest.mark.not_for_parallel_run
 @pytest.mark.api
 def test_personal_session_of_an_ordinary_user_ignores_the_profile_project(
-    routing_world, organizations
+    routing_world, routing_sessions
 ):
     """An ordinary user's Personal session goes to the owner's personal project even when the
     profile names a shared project: the owner lists it with origin personal in its personal_only
     list and the shared project's listing does not hold it."""
     world = routing_world
-    batch = new_session()
+    sent = routing_sessions.personal
+    batch = sent.batch
 
-    response = send_evidence(
-        world.sender.client,
-        batch,
-        organization=organizations.other,
-        project=world.project("A"),
-        project_source="profile",
-        repo_remote=world.remote("B"),
-    )
-
-    assert_accepted(response, "event-hooks", CT_NDJSON)
+    assert_accepted(sent.response, "event-hooks", CT_NDJSON)
     owned = wait_for_session_row(
         world.sender.api, batch.session_id, batch.repo, personal_only="true"
     )
@@ -236,65 +192,6 @@ def test_personal_session_of_an_ordinary_user_ignores_the_profile_project(
     )
 
 
-# ── TC-015: no usable default project ───────────────────────────────────────────
-
-
-@pytest.fixture
-def stranded_sender(provisioner, user_utils):
-    """A user whose only project is the personal project it can no longer receive sessions in.
-
-    An administrator cannot detach a user from its personal project (the membership endpoint
-    answers 403 for it), so the user is changed to the external user type instead: such a user
-    never receives a new session in a personal project, and has no other project, so neither a
-    link, a registration nor a default project is usable.
-    """
-    sender = provisioner.sender()
-    for project_name in user_utils.get_user_project_names(sender.user_id):
-        if project_name.lower() != sender.email.lower():
-            user_utils.remove_user_from_project(sender.user_id, project_name)
-    user_utils.update_admin_user(sender.user_id, user_type=EXTERNAL_USER_TYPE)
-    assert_that(
-        [name.lower() for name in user_utils.get_user_project_names(sender.user_id)],
-        equal_to([sender.email.lower()]),
-        "setup: the user must keep only its personal project, so it has no other default project",
-    )
-    assert_that(
-        user_utils.get_admin_user(sender.user_id).user_type,
-        equal_to(EXTERNAL_USER_TYPE),
-        "setup: the user must be of the external type, which has no usable personal project",
-    )
-    return sender
-
-
-# @case classify-cli-sessions-by-subscription_TC_015
-@pytest.mark.cli_analytics
-@pytest.mark.api
-def test_session_without_any_usable_destination_is_a_retryable_503_and_stored_nowhere(
-    provisioner, stranded_sender, gate_admin_client
-):
-    """A session of an external user (no personal project to receive it) with no link, no
-    registration and no other project gets a retryable 503 default_project_unavailable, and no
-    other project receives it: a control session of another user is listed, this one is never
-    listed within the window."""
-    admin_api = CliAnalyticsApi(gate_admin_client)
-    member = provisioner.sender()
-    reachable = provisioner.project(member)
-    provisioner.set_default(member, reachable)
-    stranded, control = new_session(), new_session()
-
-    stranded_response = send_evidence(stranded_sender.client, stranded, routed="1")
-    control_response = send_evidence(member.client, control, routed="1")
-
-    assert_rejected(stranded_response, 503, DEFAULT_PROJECT_UNAVAILABLE)
-    assert_accepted(control_response, "event-hooks", CT_NDJSON)
-    observe_absence_window(
-        admin_api,
-        {control.session_id: control.repo},
-        {"session without a destination": {stranded.session_id: stranded.repo}},
-        time.monotonic(),
-    )
-
-
 # ── TC-018: the owner is the authenticated user ─────────────────────────────────
 
 
@@ -302,26 +199,16 @@ def test_session_without_any_usable_destination_is_a_retryable_503_and_stored_no
 @pytest.mark.cli_analytics
 @pytest.mark.api
 def test_session_owner_is_the_authenticated_user_not_the_claude_account(
-    provisioner, gate_admin_client
+    routing_world,
 ):
     """The owner of a session is the user who sent it whatever organization the request names; a
     second member of the project that sends an event for that session is discarded with
-    session_owner_conflict."""
-    admin_api = CliAnalyticsApi(gate_admin_client)
-    owner, intruder = provisioner.sender(), provisioner.sender()
-    project = provisioner.project(owner, intruder)
-    batch = new_session()
+    session_owner_conflict. The owner's session was sent with the module world."""
+    conflict, admin_api = routing_world.owner_conflict, routing_world.admin_api
+    owner, intruder, project = conflict.owner, conflict.intruder, conflict.project
+    batch = conflict.sent.batch
 
-    owner_response = send_evidence(
-        owner.client,
-        batch,
-        routed="1",
-        organization="unrelated-claude-account",
-        project=project,
-        **LINKED,
-    )
-
-    assert_accepted(owner_response, "event-hooks", CT_NDJSON)
+    assert_accepted(conflict.sent.response, "event-hooks", CT_NDJSON)
     stored = wait_for_session_row(
         admin_api, batch.session_id, batch.repo, projects=project
     )
@@ -341,46 +228,18 @@ def test_session_owner_is_the_authenticated_user_not_the_claude_account(
 # ── TC-020: a bound session is not moved ────────────────────────────────────────
 
 
-@dataclass
-class BoundSession:
-    sender: ClassifiedSender
-    project: str  # the project the session is bound to
-    default: str  # the sender's default project
-    batch: Batch
-    admin_api: CliAnalyticsApi
-    history: dict  # the session's row as first listed
-
-
-@pytest.fixture
-def bound_session(provisioner, gate_admin_client):
-    """A session bound to a project; the sender also has another project, its default."""
-    sender = provisioner.sender()
-    project, default = provisioner.project(sender), provisioner.project(sender)
-    provisioner.set_default(sender, default)
-    batch = new_session()
-    assert_accepted(
-        send_evidence(sender.client, batch, routed="1", project=project, **LINKED),
-        "event-hooks",
-        CT_NDJSON,
-    )
-    admin_api = CliAnalyticsApi(gate_admin_client)
-    history = wait_for_session_row(
-        admin_api, batch.session_id, batch.repo, projects=project
-    )
-    return BoundSession(sender, project, default, batch, admin_api, history)
-
-
 # @case classify-cli-sessions-by-subscription_TC_020
 @pytest.mark.cli_analytics
 @pytest.mark.api
 def test_bound_session_is_rejected_after_the_owner_loses_membership(
-    user_utils, bound_session
+    user_utils, routing_world, bound_sessions
 ):
     """Once the owner is removed from the session's project, a further event is finally discarded
     with session_project_unavailable, the stored history is unchanged and the session is not
     moved to the owner's default project."""
+    bound_session = bound_sessions["membership"]
     sender, project = bound_session.sender, bound_session.project
-    batch, admin_api = bound_session.batch, bound_session.admin_api
+    batch, admin_api = bound_session.sent.batch, routing_world.admin_api
     user_utils.remove_user_from_project(sender.user_id, project)
 
     response = post_until_discarded(
@@ -412,13 +271,14 @@ def test_bound_session_is_rejected_after_the_owner_loses_membership(
 @pytest.mark.cli_analytics
 @pytest.mark.api
 def test_bound_session_is_rejected_after_its_project_is_deleted(
-    provisioner, bound_session
+    module_provisioner, routing_world, bound_sessions
 ):
     """Once the session's project is deleted, a further event is finally discarded with
     session_project_unavailable and the session is not moved to the owner's default project."""
+    bound_session = bound_sessions["project"]
     sender, project = bound_session.sender, bound_session.project
-    batch, admin_api = bound_session.batch, bound_session.admin_api
-    provisioner.delete_project(project)
+    batch, admin_api = bound_session.sent.batch, routing_world.admin_api
+    module_provisioner.delete_project(project)
 
     response = post_until_discarded(
         sender.client,

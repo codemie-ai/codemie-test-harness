@@ -107,6 +107,11 @@ def spec_named(name: str) -> AccountSpec:
     return specs_named(name)[0].values[0]
 
 
+# TC-004: kinds that cannot have a personal project and send a Personal session to a work project.
+WORK_PROJECT_SENDER_KINDS = ("external-former-regular", "service-account")
+WORK_PROJECT_SENDERS = tuple(spec_named(name) for name in WORK_PROJECT_SENDER_KINDS)
+
+
 # ── Reading CLI analytics by account kind ───────────────────────────────────────
 
 # Every account kind reads the aggregates and the sessions list; the kind decides what they hold.

@@ -33,12 +33,13 @@ from codemie_test_harness.tests.utils.cli_classification_utils import (
 )
 
 
-@pytest.fixture
-def registration_world(provisioner, gate_admin_client):
-    """An admin API, one shared project and the personal project of a fresh user."""
-    admin_api = CliAnalyticsApi(gate_admin_client)
-    owner = provisioner.sender()
-    shared = provisioner.project()
+@pytest.fixture(scope="module")
+def registration_world(module_provisioner, classification_admin_client):
+    """An admin API, one shared project and the personal project of a fresh user; the tests only
+    read or are refused, so they share it."""
+    admin_api = CliAnalyticsApi(classification_admin_client)
+    owner = module_provisioner.sender()
+    shared = module_provisioner.project()
     status = poll_until(
         lambda: admin_api.request("GET", f"/v1/projects/{owner.email}").status_code,
         lambda code: code == 200,
