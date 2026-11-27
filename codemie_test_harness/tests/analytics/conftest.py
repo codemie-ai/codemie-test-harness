@@ -389,6 +389,24 @@ def ingest_cli_sessions(
 
 
 @pytest.fixture(scope="module")
+def ingest_cli_usage_row(
+    cli_analytics_project, cli_analytics_users, ingest_cli_sessions
+):
+    """Sends the CLI's usage row of a seed already sent by ``ingest_cli_sessions`` to
+    the module's project, as the seed's user (a member of it since then). It does not
+    wait for the rollup. The BE drops a usage row it already has, so sending one again
+    changes nothing."""
+
+    def _send(seed: CliSessionSeed) -> None:
+        cli_analytics_users[seed.user].analytics_utils.ingest_cli_event_hooks(
+            seed.usage_row_events(cli_analytics_project),
+            project=cli_analytics_project,
+        )
+
+    return _send
+
+
+@pytest.fixture(scope="module")
 def catalog_priced_model(client):
     """A model the stand's catalog prices, or None when there is none. Seeds that
     check no money can still use it; tests that check money take ``cost_model``."""

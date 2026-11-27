@@ -22,11 +22,10 @@ from hamcrest import (
     close_to,
     empty,
     equal_to,
+    greater_than_or_equal_to,
     has_entries,
     has_length,
-    instance_of,
     is_,
-    not_,
 )
 
 from codemie_test_harness.tests.test_data.cli_analytics_request_costs_test_data import (
@@ -55,9 +54,31 @@ def dated_cache_cost_model(llm_catalog) -> tuple[str, CatalogRates]:
     return model
 
 
+@pytest.fixture(scope="module")
+def split_cache_cost_model(cache_cost_model) -> tuple[str, CatalogRates]:
+    """``cache_cost_model`` when it prices one-hour cache writes apart from five-minute
+    ones: on a stand that prices them alike no test can tell the two rates apart."""
+    model, rates = cache_cost_model
+    if rates.cache_write_1h == rates.cache_write:
+        pytest.skip(f"{model} prices five-minute and one-hour cache writes alike")
+    return cache_cost_model
+
+
 def _requests(data: dict) -> list[dict]:
     """The API requests Session Detail lists for the session."""
     return [event for event in data["events"] if event["event_type"] == "api_request"]
+
+
+def _listed_input_tokens(detail: dict | None) -> int:
+    """Input tokens of the requests a session detail lists; 0 for no detail."""
+    if detail is None:
+        return 0
+    return sum(event["input_tokens"] or 0 for event in _requests(detail["data"]))
+
+
+def _listed_cost(data: dict) -> float:
+    """What the requests a session detail lists cost together."""
+    return sum(event["cost_usd"] or 0 for event in _requests(data))
 
 
 def _session_detail(analytics_utils, seed: CliSessionSeed) -> dict:
@@ -65,15 +86,28 @@ def _session_detail(analytics_utils, seed: CliSessionSeed) -> dict:
     tokens: the rollup has the session's requests."""
     detail = analytics_utils.wait_for_cli_session_detail(
         seed.session_id,
-        lambda d: sum(e["input_tokens"] or 0 for e in _requests(d["data"]))
-        >= seed.input_tokens,
+        lambda d: _listed_input_tokens(d) >= seed.input_tokens,
     )
     assert_that(  # repro:precondition
-        detail,
-        instance_of(dict),
-        f"setup: session {seed.session_id} was never rolled up",
+        _listed_input_tokens(detail),
+        greater_than_or_equal_to(seed.input_tokens),
+        f"setup: session {seed.session_id} never listed its {seed.input_tokens} "
+        "input tokens",
     )
     return detail
+
+
+def _costed_session_detail(analytics_utils, seed: CliSessionSeed, money: float) -> dict:
+    """The session detail body once the session and its listed requests cost
+    ``money``, or the last one read when they never do. The detail does not say
+    whether the rollup has merged the usage row yet, and a request it has not merged
+    reads like one priced at the wrong rate, so a timeout here fails at the cost
+    assertions."""
+    return analytics_utils.wait_for_cli_session_detail(
+        seed.session_id,
+        lambda d: abs((d["data"]["cost_usd"] or 0) - money) <= COST_TOLERANCE
+        and abs(_listed_cost(d["data"]) - money) <= COST_TOLERANCE,
+    )
 
 
 def _assert_requests_add_up(data: dict, money: float, what: str) -> None:
@@ -84,7 +118,7 @@ def _assert_requests_add_up(data: dict, money: float, what: str) -> None:
         f"{what}: session cost, its tokens at the catalog rates",
     )
     assert_that(  # repro:symptom
-        sum(event["cost_usd"] or 0 for event in _requests(data)),
+        _listed_cost(data),
         close_to(data["cost_usd"], COST_TOLERANCE),
         f"{what}: the listed requests' costs add up to the session cost",
     )
@@ -121,30 +155,28 @@ def test_hooks_only_requests_are_priced_with_their_cache_writes(
 @pytest.mark.cli_analytics
 @pytest.mark.api
 def test_one_hour_cache_writes_of_a_request_are_priced_at_the_one_hour_rate(
-    analytics_utils, seed_cli_sessions, cache_cost_model
+    analytics_utils, seed_cli_sessions, ingest_cli_usage_row, split_cache_cost_model
 ):
     """A request whose OTel record gives its cache writes as one total, while the CLI's
     usage row of the same request says they are one-hour writes, is priced at the
     one-hour rate, the rate of the session cost, not at the five-minute rate."""
-    model, rates = cache_cost_model
-    assert_that(  # repro:precondition
-        rates.cache_write_1h,
-        not_(equal_to(rates.cache_write)),
-        f"setup: {model} prices five-minute and one-hour cache writes alike",
-    )
+    model, rates = split_cache_cost_model
     seed = get_one_hour_cache_write_seed(model)
-    seed_cli_sessions([seed])
+    seed = seed_cli_sessions([seed])[seed.key]
+    # The usage row is sent only once the OTel record is listed, so the session read
+    # below holds both: never the usage row alone, which already splits the writes.
+    _session_detail(analytics_utils, seed)
+    ingest_cli_usage_row(seed)
+    money = session_catalog_cost(seed, rates)
 
-    data = _session_detail(analytics_utils, seed)["data"]
+    data = _costed_session_detail(analytics_utils, seed, money)["data"]
     requests = _requests(data)
     assert_that(  # repro:symptom
         [(event["input_tokens"], event["cache_creation_tokens"]) for event in requests],
         equal_to([(seed.input_tokens, seed.cache_creation_1h_tokens)]),
         "the request reported by OTel and the CLI is listed once, with its cache writes",
     )
-    _assert_requests_add_up(
-        data, session_catalog_cost(seed, rates), "session with one-hour cache writes"
-    )
+    _assert_requests_add_up(data, money, "session with one-hour cache writes")
 
 
 @pytest.mark.cli_analytics

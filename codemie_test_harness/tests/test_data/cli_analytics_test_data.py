@@ -385,9 +385,10 @@ class CliSessionSeed:
     cache, so the session's context per call is ``cache_read_tokens / requests``, and
     ``cache_creation_5m_tokens`` / ``cache_creation_1h_tokens`` the tokens written to
     it for five minutes and for an hour. A seed with ``cost_usd`` makes one request.
-    With ``usage_row`` that request is also sent as the CLI's usage row, under the same
+    ``usage_row_events`` is that request as the CLI's usage row too, under the same
     request id, as Claude Code with telemetry on reports it: the OTel record carries the
     cache writes as one total, the usage row splits them into five-minute and one-hour.
+    ``events`` leaves the usage row out, so it can be sent once the OTel record is in.
     ``tool_calls_succeeded`` and ``tool_calls_failed`` are the
     tool calls the session makes: each has a tool start, and a tool end when it succeeded or
     a tool error when it failed, so the session counts that many tool calls and a success
@@ -411,7 +412,6 @@ class CliSessionSeed:
     cache_creation_5m_tokens: int = 0
     cache_creation_1h_tokens: int = 0
     requests: int = 1
-    usage_row: bool = False
     tool_calls_succeeded: int = 0
     tool_calls_failed: int = 0
     session_id: str = field(
@@ -429,8 +429,8 @@ class CliSessionSeed:
     def cache_creation_tokens(self) -> int:
         return self.cache_creation_5m_tokens + self.cache_creation_1h_tokens
 
-    def events(self, project_name: str) -> list[dict]:
-        """Hook events for ``POST /v1/analytics/cli-analytics/event-hooks``."""
+    def _envelope(self, project_name: str) -> dict:
+        """The fields every hook event of the session carries."""
         envelope = {
             "timestamp": to_iso(self.started_at, self.utc_offset_hours),
             "session_id": self.session_id,
@@ -441,6 +441,11 @@ class CliSessionSeed:
             envelope["cwd"] = self.repository
         if self.branch:
             envelope["git_branch"] = self.branch
+        return envelope
+
+    def events(self, project_name: str) -> list[dict]:
+        """Hook events for ``POST /v1/analytics/cli-analytics/event-hooks``."""
+        envelope = self._envelope(project_name)
         events = [
             {
                 **envelope,
@@ -478,7 +483,7 @@ class CliSessionSeed:
                     "command_source": "plugin",
                 }
             )
-        if self.cost_usd is None or self.usage_row:
+        if self.cost_usd is None:
             events.extend(self._usage_events(envelope))
         events.extend(self._tool_events(envelope))
         return events
@@ -519,6 +524,12 @@ class CliSessionSeed:
         """The part of a session total that request ``number`` (from 1) carries."""
         share = total // self.requests
         return share + total % self.requests if number == 1 else share
+
+    def usage_row_events(self, project_name: str) -> list[dict]:
+        """The CLI's usage row of the seed's request, a hook event of its own: what
+        ``events`` sends for a seed without ``cost_usd``, and leaves out for one with it,
+        whose request the OTel record reports."""
+        return self._usage_events(self._envelope(project_name))
 
     def _usage_events(self, envelope: dict) -> list[dict]:
         return [

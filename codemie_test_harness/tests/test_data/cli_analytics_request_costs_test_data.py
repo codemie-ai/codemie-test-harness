@@ -52,8 +52,9 @@ def get_hooks_only_requests_seed(model: str) -> CliSessionSeed:
 
 def get_one_hour_cache_write_seed(model: str) -> CliSessionSeed:
     """One request Claude Code reports twice, as with telemetry on: its OTel record,
-    whose cache writes are one total, and the CLI's usage row, which says they are all
-    one-hour writes (codemie-claude turns one-hour prompt caching on)."""
+    whose cache writes are one total, and the CLI's usage row (``usage_row_events``),
+    which says they are all one-hour writes (codemie-claude turns one-hour prompt
+    caching on)."""
     return CliSessionSeed(
         key="one_hour_cache_write",
         started_at=seed_day_start() + timedelta(hours=14),
@@ -62,7 +63,6 @@ def get_one_hour_cache_write_seed(model: str) -> CliSessionSeed:
         cache_read_tokens=5_000,
         cache_creation_1h_tokens=20_000,
         cost_usd=0.0001,
-        usage_row=True,
         model=model,
     )
 
