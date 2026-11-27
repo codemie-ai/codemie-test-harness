@@ -19,14 +19,16 @@ from dataclasses import dataclass
 
 import pytest
 from codemie_sdk import CodeMieClient
-from hamcrest import assert_that, empty
+from hamcrest import assert_that, empty, equal_to
 
 from codemie_test_harness.tests.test_data.cli_analytics_test_data import (
     CLI_ANALYTICS_USERS,
     DISABLED,
     E7,
     FLAG_OFF_DOMAIN,
+    CatalogRates,
     CliSessionSeed,
+    cache_priced_model,
     priced_model,
 )
 from codemie_test_harness.tests.test_data.projects_test_data import (
@@ -387,6 +389,24 @@ def ingest_cli_sessions(
 
 
 @pytest.fixture(scope="module")
+def ingest_cli_usage_row(
+    cli_analytics_project, cli_analytics_users, ingest_cli_sessions
+):
+    """Sends the CLI's usage row of a seed already sent by ``ingest_cli_sessions`` to
+    the module's project, as the seed's user (a member of it since then). It does not
+    wait for the rollup. The BE drops a usage row it already has, so sending one again
+    changes nothing."""
+
+    def _send(seed: CliSessionSeed) -> None:
+        cli_analytics_users[seed.user].analytics_utils.ingest_cli_event_hooks(
+            seed.usage_row_events(cli_analytics_project),
+            project=cli_analytics_project,
+        )
+
+    return _send
+
+
+@pytest.fixture(scope="module")
 def catalog_priced_model(client):
     """A model the stand's catalog prices, or None when there is none. Seeds that
     check no money can still use it; tests that check money take ``cost_model``."""
@@ -399,6 +419,25 @@ def cost_model(catalog_priced_model):
     if catalog_priced_model is None:
         pytest.skip("no LLM with an input and output price in the catalog")
     return catalog_priced_model
+
+
+@pytest.fixture(scope="module")
+def llm_catalog(client) -> list[dict]:
+    """The stand's model catalog as ``GET /v1/llm_models`` answers it. The SDK's model
+    list drops the cache rates, so the catalog is read raw."""
+    response = CliAnalyticsApi(client).request("GET", "/v1/llm_models")
+    assert_that(response.status_code, equal_to(200), response.text[:300])
+    return response.json()
+
+
+@pytest.fixture(scope="module")
+def cache_cost_model(llm_catalog) -> tuple[str, CatalogRates]:
+    """A model the stand's catalog prices for every token kind, cache writes of both
+    durations included, with its rates."""
+    model = cache_priced_model(llm_catalog)
+    if model is None:
+        pytest.skip("no LLM in the catalog prices input, output and every cache kind")
+    return model
 
 
 @pytest.fixture(scope="module")

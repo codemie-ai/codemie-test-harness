@@ -14,6 +14,7 @@
 
 """Test data for CLI Analytics API tests (/v1/analytics/cli-analytics/*)."""
 
+import re
 import uuid
 from dataclasses import dataclass, field, replace
 from datetime import datetime, time, timedelta, timezone
@@ -384,6 +385,10 @@ class CliSessionSeed:
     cache, so the session's context per call is ``cache_read_tokens / requests``, and
     ``cache_creation_5m_tokens`` / ``cache_creation_1h_tokens`` the tokens written to
     it for five minutes and for an hour. A seed with ``cost_usd`` makes one request.
+    ``usage_row_events`` is that request as the CLI's usage row too, under the same
+    request id, as Claude Code with telemetry on reports it: the OTel record carries the
+    cache writes as one total, the usage row splits them into five-minute and one-hour.
+    ``events`` leaves the usage row out, so it can be sent once the OTel record is in.
     ``tool_calls_succeeded`` and ``tool_calls_failed`` are the
     tool calls the session makes: each has a tool start, and a tool end when it succeeded or
     a tool error when it failed, so the session counts that many tool calls and a success
@@ -424,8 +429,8 @@ class CliSessionSeed:
     def cache_creation_tokens(self) -> int:
         return self.cache_creation_5m_tokens + self.cache_creation_1h_tokens
 
-    def events(self, project_name: str) -> list[dict]:
-        """Hook events for ``POST /v1/analytics/cli-analytics/event-hooks``."""
+    def _envelope(self, project_name: str) -> dict:
+        """The fields every hook event of the session carries."""
         envelope = {
             "timestamp": to_iso(self.started_at, self.utc_offset_hours),
             "session_id": self.session_id,
@@ -436,6 +441,11 @@ class CliSessionSeed:
             envelope["cwd"] = self.repository
         if self.branch:
             envelope["git_branch"] = self.branch
+        return envelope
+
+    def events(self, project_name: str) -> list[dict]:
+        """Hook events for ``POST /v1/analytics/cli-analytics/event-hooks``."""
+        envelope = self._envelope(project_name)
         events = [
             {
                 **envelope,
@@ -514,6 +524,12 @@ class CliSessionSeed:
         """The part of a session total that request ``number`` (from 1) carries."""
         share = total // self.requests
         return share + total % self.requests if number == 1 else share
+
+    def usage_row_events(self, project_name: str) -> list[dict]:
+        """The CLI's usage row of the seed's request, a hook event of its own: what
+        ``events`` sends for a seed without ``cost_usd``, and leaves out for one with it,
+        whose request the OTel record reports."""
+        return self._usage_events(self._envelope(project_name))
 
     def _usage_events(self, envelope: dict) -> list[dict]:
         return [
@@ -915,14 +931,20 @@ class CatalogRates:
         )
 
 
-def cache_priced_model(models: list[dict]) -> tuple[str, CatalogRates] | None:
+def cache_priced_model(
+    models: list[dict], name_pattern: str | None = None
+) -> tuple[str, CatalogRates] | None:
     """The enabled, non-router model of a raw ``GET /v1/llm_models`` answer whose
     catalog entry prices every token kind (input, output, cache read, five-minute and
-    one-hour cache write), first by ``base_name``, with its rates."""
+    one-hour cache write), first by ``base_name``, with its rates. With
+    ``name_pattern`` only a ``base_name`` that fully matches that regex qualifies."""
     priced = [
         (model["base_name"], CatalogRates.from_cost(model["cost"]))
         for model in models
-        if model.get("enabled") and not model.get("is_router") and model.get("cost")
+        if model.get("enabled")
+        and not model.get("is_router")
+        and model.get("cost")
+        and (name_pattern is None or re.fullmatch(name_pattern, model["base_name"]))
     ]
     priced = [
         (name, rates)
