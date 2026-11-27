@@ -111,13 +111,6 @@ def test_skill_attached_in_chat_returns_field_reference_on_demand(
 @pytest.mark.ado
 @pytest.mark.assistant
 @pytest.mark.api
-# Expected tool 'get_work_item' is not triggered after attach: the template's merged toolkit
-# entry has tools: [], so the toolkit category is added without enabling a callable tool.
-# Needs confirmation with the developer/PO whether that is the intended behavior.
-@pytest.mark.xfail(
-    reason="Needs confirmation with developer/PO: attaching the Skill merges the toolkit category but enables no tool",
-    strict=False,
-)
 def test_attaching_skill_auto_merges_ado_work_item_toolkit(
     assistant_utils,
     assistant_factory,
