@@ -1443,8 +1443,8 @@ class ChatPage(BasePage):
             row = self.mention_file_rows.filter(
                 has=self.page.get_by_text(name, exact=True)
             )
-            expect(row).to_have_count(1)
-            expect(row).to_have_attribute("data-value", name)
+            expect(row).to_have_count(1, timeout=timeout)
+            expect(row).to_have_attribute("data-value", name, timeout=timeout)
         return self
 
     @step
@@ -1522,14 +1522,9 @@ class ChatPage(BasePage):
 
     @property
     def generated_files(self) -> GeneratedFiles:
-        """Files the chat's assistant messages published (the generated-files block)."""
+        """Files the chat's assistant messages published (the generated-files block).
+        The shared conversation view renders the same message list, so this serves it too."""
         return GeneratedFiles(self.chat_history_container)
-
-    @property
-    def shared_generated_files(self) -> GeneratedFiles:
-        """Files published in a shared conversation view (/share/conversations/<token>),
-        searched on the whole page because that view has no chat history container."""
-        return GeneratedFiles(self.page.locator("body"))
 
     @step
     def open_tool_output(self, tool_name: str) -> ToolOutputPreview:

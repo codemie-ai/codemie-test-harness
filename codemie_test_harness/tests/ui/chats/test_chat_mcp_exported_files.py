@@ -28,11 +28,13 @@ The filesystem server writes text only, so a csv file checks its chip, and a she
 MCP server running python3 writes the xlsx.
 """
 
+from datetime import datetime
+
 import pytest
 from hamcrest import assert_that, contains_string, empty, is_not
 from requests import HTTPError
 
-from codemie_sdk.models.conversation import ConversationCreateRequest
+from codemie_sdk.models.conversation import ConversationCreateRequest, HistoryItem
 from codemie_test_harness.tests.enums.tools import McpServerFilesystem
 from codemie_test_harness.tests.test_data.mcp_export_files_test_data import (
     CHINESE_NAME_STEM,
@@ -53,7 +55,6 @@ from codemie_test_harness.tests.test_data.mcp_server_test_data import (
 from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
 from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
 from codemie_test_harness.tests.ui.test_data.sandbox_file_link_test_data import (
-    ECHO_SYSTEM_PROMPT,
     build_invented_sandbox_link,
 )
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
@@ -133,28 +134,47 @@ def open_chat(page):
 
 
 @pytest.fixture
-def echo_chat(client, assistant_factory, assistant_utils):
-    """Factory ``(prompt) -> chat id``: a new conversation with an assistant that repeats
-    the text it is given, in which the prompt is asked through the API.
+def seeded_reply_chat(client, assistant_factory, conversation_utils):
+    """Factory ``(assistant reply text) -> chat id``: a new conversation whose saved
+    history holds one user message and the given text as the assistant's answer.
 
-    The conversation is deleted on teardown, also when the prompt fails; the assistant
-    is deleted by ``assistant_factory``.
+    The answer is written to the history through the API, not produced by a model, so
+    the text reaches the chat exactly as given. The conversation is deleted on
+    teardown; the assistant is deleted by ``assistant_factory``.
     """
     created_ids = []
 
-    def _ask(prompt: str) -> str:
-        echoer = assistant_factory.create(system_prompt=ECHO_SYSTEM_PROMPT)
+    def _seed(reply: str) -> str:
+        replier = assistant_factory.create()
         conversation = client.conversations.create(
-            ConversationCreateRequest(initial_assistant_id=echoer.id, folder="")
+            ConversationCreateRequest(initial_assistant_id=replier.id, folder="")
         )
         chat_id = conversation.get("id")
         created_ids.append(chat_id)
-        assistant_utils.ask_assistant(
-            echoer, prompt, conversation_id=chat_id, add_request_uuid=False
+        conversation_utils.upsert_history(
+            conversation_id=chat_id,
+            history=[
+                HistoryItem(
+                    role="User",
+                    message="share the report",
+                    messageRaw="<p>share the report</p>",
+                    historyIndex=0,
+                    date=datetime.now(),
+                    fileNames=[],
+                ),
+                HistoryItem(
+                    role="Assistant",
+                    message=reply,
+                    historyIndex=0,
+                    date=datetime.now(),
+                    fileNames=[],
+                ),
+            ],
+            assistant_id=replier.id,
         )
         return chat_id
 
-    yield _ask
+    yield _seed
 
     for chat_id in created_ids:
         try:
@@ -168,7 +188,7 @@ def reader_chat_page(new_context, platform_user):
     """A ``ChatPage`` of a second, signed-in user in its own browser context, who is not
     the owner of the chats the test creates."""
     page = new_context().new_page()
-    user_id = platform_user.client.users.about_me().user_id
+    user_id = platform_user.user_id
     LoginPage(page).login_suppressing_popups(
         platform_user.email,
         platform_user.password,
@@ -307,23 +327,24 @@ def test_exported_file_with_non_latin_name_shows_decoded_name_and_downloads(
 @pytest.mark.timeout(600)
 @pytest.mark.ui
 def test_sandbox_link_with_invented_token_gets_no_chip(
-    export_chat, echo_chat, open_chat, chat_history
+    export_chat, seeded_reply_chat, open_chat, chat_history
 ):
     """A sandbox link whose token the back end never issued gets no chip and no sandbox:
     link, while a link to a file the back end did export shows its chip in the same run.
 
     AC-6: the strict token decoder refuses an invented token.
 
-    The saved history must hold the invented link in the assistant's answer and the
-    page must show its label, so an answer that dropped the link cannot pass. The
-    exported file is the positive control: the same chip logic does show a real chip.
+    The answer is written to the saved history through the API, so no model has to copy
+    the link. The history must hold the link and the page must show its label, so a chat
+    that lost the link cannot pass. The exported file is the positive control: the same
+    chip logic does show a real chip.
     """
     exported = build_csv_file()
     control_page = open_chat(export_chat(export_prompt(exported)))
     control_page.generated_files.should_show_file(exported.name, exported.mime_type)
 
     invented = build_invented_sandbox_link()
-    invented_chat_id = echo_chat(invented.prompt)
+    invented_chat_id = seeded_reply_chat(invented.reply)
     assert_that(
         " ".join(
             item.message for item in _assistant_items(chat_history(invented_chat_id))
@@ -358,10 +379,8 @@ def test_exported_file_chip_in_shared_conversation_downloads_for_second_user(
 
     reader_chat_page.navigate_to_shared_conversation(share_token)
 
-    reader_chat_page.shared_generated_files.should_show_file(
-        exported.name, exported.mime_type
-    )
-    download = reader_chat_page.shared_generated_files.download_file()
-    reader_chat_page.shared_generated_files.should_be_saved_as(
+    reader_chat_page.generated_files.should_show_file(exported.name, exported.mime_type)
+    download = reader_chat_page.generated_files.download_file()
+    reader_chat_page.generated_files.should_be_saved_as(
         download, exported.name, exported.content
     )

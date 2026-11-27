@@ -26,16 +26,19 @@ from codemie_test_harness.tests.utils.base_utils import get_random_name
 
 SANDBOX_LINK_PREFIX = "sandbox:/v1/files/"
 
-# Valid base64 in the token alphabet that decodes to one part, not to the three parts of
-# a token the back end issued: the front end must refuse it, so it gets no chip.
-INVENTED_ARTIFACT_TOKEN = base64.b64encode(
-    b"invented token that no backend issued"
-).decode()
 
-ECHO_SYSTEM_PROMPT = (
-    "You repeat the text the user gives you between the << and >> markers exactly as "
-    "written, markdown links included, and add nothing else. You never call a tool."
-)
+def serialize_token(*parts: str) -> str:
+    """Build a file token the way the back end's StringSerializer does: each part as
+    `<length>~<part>`, joined, then standard base64 with padding."""
+    raw = "".join(f"{len(part)}~{part}" for part in parts)
+    return base64.b64encode(raw.encode("utf-8")).decode("utf-8")
+
+
+# Encoded exactly like an issued token (same serializer, padded standard base64, length a
+# multiple of 4, valid UTF-8, token alphabet) but holding one part instead of the three
+# `mime`, `owner`, `name`. The only thing wrong with it is its part count, so the front
+# end's strict decoder must refuse it for that reason.
+INVENTED_ARTIFACT_TOKEN = serialize_token("invented-file.txt")
 
 FILE_BODY = "alpha\nbeta"
 
@@ -50,13 +53,6 @@ class InventedSandboxLink:
     @property
     def reply(self) -> str:
         return f"Here is the file: [{self.label}]({self.link})"
-
-    @property
-    def prompt(self) -> str:
-        return (
-            "Repeat the text between the markers exactly, keeping the markdown link "
-            f"unchanged.\n<<{self.reply}>>"
-        )
 
 
 def build_invented_sandbox_link() -> InventedSandboxLink:
