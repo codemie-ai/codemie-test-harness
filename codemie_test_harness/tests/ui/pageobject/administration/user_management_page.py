@@ -620,3 +620,130 @@ class UserManagementPage(BasePage):
             emails, timeout=30000
         )
         return self
+
+    # ── Budget filter ─────────────────────────────────────────────────────────
+    # FE: usersManagement/components/UsersManagementFilters.tsx:139 renders BudgetSelector
+    # (label 'Budget', id 'budget-selector', search 'Search for budget', multi-select with
+    # checkboxes, option label = budget name; BudgetSelector.tsx:98-112, store/budgets.ts:216).
+    # The selection is the `budgets` URL query key; 'Clear All' resets every filter.
+    # Recon: the Project filter opens a 'Search for project' box the same way; an empty
+    # filtered list shows the cell 'No data available' (components/Table/EmptyList.tsx:32).
+
+    @property
+    def budget_filter(self):
+        """Budget filter multiselect above the users table."""
+        return self.page.locator("#budget-selector")
+
+    @property
+    def budget_filter_value(self):
+        """Label of the budget filter that lists the selected budget names."""
+        return self.budget_filter.locator(".p-multiselect-label")
+
+    @property
+    def clear_all_filters_button(self):
+        """'Clear All' button of the filter bar (shown while any filter is set)."""
+        return self.page.get_by_role("button", name="Clear All")
+
+    @property
+    def empty_list_cell(self):
+        """Empty-state cell of the users table."""
+        return self.page.get_by_role("cell", name="No data available", exact=True)
+
+    def _filter_option(self, label: str):
+        """Option of the open filter dropdown whose text contains `label`."""
+        return self.page.get_by_role("option").filter(has_text=label)
+
+    def _toggle_filter_option(self, multiselect, search_placeholder: str, label: str):
+        """Open a filter multiselect, search for `label`, click its option, close the panel."""
+        multiselect.click()
+        self.page.get_by_placeholder(search_placeholder).fill(label)
+        option = self._filter_option(label)
+        expect(option).to_have_count(1, timeout=15000)
+        option.click()
+        self.page.keyboard.press("Escape")
+        self.page.wait_for_load_state("networkidle", timeout=15000)
+
+    @step
+    def toggle_budget_in_filter(self, budget_name: str):
+        """Check or uncheck a budget in the Budget filter (it is a multi-select)."""
+        self._toggle_filter_option(self.budget_filter, "Search for budget", budget_name)
+        return self
+
+    @step
+    def select_project_in_filter(self, project: str):
+        """Check a project in the Project filter; the page keeps it for later visits."""
+        self._toggle_filter_option(self.project_filter, "Search for project", project)
+        return self
+
+    @step
+    def clear_all_filters(self):
+        """Click 'Clear All' in the filter bar."""
+        expect(self.clear_all_filters_button).to_be_visible(timeout=15000)
+        self.clear_all_filters_button.click()
+        self.page.wait_for_load_state("networkidle", timeout=15000)
+        return self
+
+    @step
+    def should_be_filtered_by_budget_only_in_url(self, budget_id: str):
+        """Assert the browser is on the Users management page with exactly ?budgets=<id> and
+        no other query parameter."""
+        expect(self.page).to_have_url(
+            re.compile(
+                re.escape(self.PATH)
+                + r"\?budgets="
+                + re.escape(quote(budget_id, safe="-_.~"))
+                + r"$"
+            ),
+            timeout=15000,
+        )
+        return self
+
+    @step
+    def should_not_be_filtered_by_budget_in_url(self):
+        """Assert the browser is on the Users management page with no `budgets` parameter."""
+        expect(self.page).to_have_url(
+            re.compile(re.escape(self.PATH) + r"(\?(?!(.*&)?budgets=).*)?$"),
+            timeout=15000,
+        )
+        return self
+
+    @step
+    def should_show_budget_selected_in_filter(self, budget_name: str):
+        """Assert the Budget filter control displays the budget as selected."""
+        expect(self.budget_filter).to_be_visible(timeout=15000)
+        expect(self.budget_filter_value).to_contain_text(budget_name, timeout=15000)
+        return self
+
+    @step
+    def should_not_show_budget_selected_in_filter(self, budget_name: str):
+        """Assert the Budget filter control does not display the budget as selected."""
+        expect(self.budget_filter).to_be_visible(timeout=15000)
+        expect(self.budget_filter_value).not_to_contain_text(budget_name, timeout=15000)
+        return self
+
+    @step
+    def should_not_show_project_selected_in_filter(self, project: str):
+        """Assert the Project filter control does not display the project as selected."""
+        expect(self.project_filter).to_be_visible(timeout=15000)
+        expect(self.project_filter_value).not_to_contain_text(project, timeout=15000)
+        return self
+
+    @step
+    def should_list_only_users(self, emails: list[str]):
+        """Assert the (filtered) users table lists exactly these users and no other row,
+        without typing in the search box (which would add a filter of its own)."""
+        expect(self.page_heading).to_be_visible(timeout=15000)
+        expect(self.user_rows).to_have_count(len(emails), timeout=30000)
+        for email in emails:
+            expect(self._user_row(email)).to_have_count(1, timeout=15000)
+        return self
+
+    @step
+    def should_show_empty_list_without_error(self):
+        """Assert the users table shows its empty state ('No data available') and that no
+        error toast or 'Not found' page is shown instead."""
+        expect(self.page_heading).to_be_visible(timeout=15000)
+        expect(self.empty_list_cell).to_be_visible(timeout=30000)
+        expect(self.page.get_by_text("Not found", exact=True)).to_have_count(0)
+        self.toast.should_not_show(variants=("error",))
+        return self
