@@ -19,8 +19,16 @@ import re
 # Category split of the budget group for the two-category bulk scenario.
 BULK_TWO_CATEGORY_DISTRIBUTION = {"platform": 60.0, "cli": 40.0}
 
-# Hard limit typed into the CLI card of the bulk modal; fits the 40.0 CLI share.
-BULK_CLI_TYPED_HARD_LIMIT = 30.0
+# Hard limit typed into the CLI card of the bulk modal. The modal caps each selected member at
+# the category share divided by the number of selected members: 40.0 / 2 = 20.0 per member.
+BULK_CLI_TYPED_HARD_LIMIT = 20.0
+
+# Per-member overrides for two selected members, sized so that the two members together fit
+# each category share above (platform 60.0 -> 30.0 each, cli 40.0 -> 20.0 each).
+BULK_PLATFORM_MEMBER_MAX = 30.0
+BULK_PLATFORM_MEMBER_SOFT = 15.0
+BULK_CLI_MEMBER_MAX = 20.0
+BULK_CLI_MEMBER_SOFT = 10.0
 
 # Hard limit the Platform card shows after 'Use project allocation': the platform amount of
 # the single-category group of the project fixture (100.0), with or without decimals.

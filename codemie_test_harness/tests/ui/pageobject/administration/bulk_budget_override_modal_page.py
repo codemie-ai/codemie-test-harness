@@ -1,3 +1,17 @@
+# Copyright 2026 EPAM Systems, Inc. (“EPAM”)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Page object for the bulk 'Budget Override — N users' modal on the Project Details page.
 
 Opened from the Members tab: select members, then 'Bulk Actions' > 'Override budgets'.
@@ -153,4 +167,10 @@ class BulkBudgetOverrideModalPage(BasePage):
     def should_be_closed(self):
         """Verify the bulk modal is closed."""
         expect(self.dialog).not_to_be_visible()
+        return self
+
+    @step
+    def should_disable_save_override(self):
+        """Verify 'Save Override' is disabled, i.e. no category is pending a change."""
+        expect(self.save_override_button).to_be_disabled()
         return self
