@@ -328,3 +328,98 @@ class ProjectModelsSection(BasePage):
             re.compile(rf"of {expected_count} models available")
         )
         return self
+
+    # ── Model status (Disabled rows hidden, Deprecated rows kept) ─────────────
+
+    @property
+    def select_all_checkbox(self):
+        """Table header checkbox that ticks (or unticks) every visible row."""
+        return self.page.get_by_role("columnheader").get_by_role("checkbox")
+
+    @property
+    def default_model_error(self):
+        """Error under 'Project default model' when the stored default is not available
+        (DefaultModelsSelector renders it with role="alert").
+        """
+        return self.page.get_by_role("alert").filter(
+            has_text="Selected model is not available"
+        )
+
+    def _search_single_row(self, model_name: str):
+        """Filter the table to `model_name` and return its row once it is the only match."""
+        self.search_models_input.fill(model_name)
+        row = self.model_row_exact(model_name)
+        expect(row).to_have_count(1, timeout=10000)
+        return row
+
+    @step
+    def set_model_checked(self, model_name: str, checked: bool):
+        """Tick or untick the row of `model_name`, then clear the search box."""
+        checkbox = self._search_single_row(model_name).get_by_role("checkbox")
+        if checkbox.is_checked() != checked:
+            checkbox.click()
+        expect(checkbox).to_be_checked(checked=checked)
+        self.search_models_input.fill("")
+        return self
+
+    @step
+    def tick_every_visible_row(self):
+        """Tick every row with the table header checkbox."""
+        expect(self.select_all_checkbox).to_be_visible(timeout=10000)
+        self.select_all_checkbox.click()
+        expect(self.select_all_checkbox).to_be_checked()
+        return self
+
+    @step
+    def should_list_model(self, model_name: str, checked: bool):
+        """Verify `model_name` has a row whose checkbox is (or is not) ticked."""
+        checkbox = self._search_single_row(model_name).get_by_role("checkbox")
+        expect(checkbox).to_be_checked(checked=checked)
+        self.search_models_input.fill("")
+        return self
+
+    @step
+    def should_not_list_model(self, model_name: str):
+        """Verify searching for `model_name` leaves no model row (only the empty-state row,
+        which has no checkbox).
+        """
+        self.search_models_input.fill(model_name)
+        expect(self.visible_model_rows().get_by_role("checkbox")).to_have_count(
+            0, timeout=10000
+        )
+        self.search_models_input.fill("")
+        return self
+
+    @step
+    def should_show_counter(self, selected: int, total: int):
+        """Verify the counter reads '<selected> of <total> models available'."""
+        expect(self.models_available_counter).to_have_text(
+            re.compile(rf"^{selected} of {total} models available"), timeout=10000
+        )
+        return self
+
+    @step
+    def should_have_reset_enabled(self):
+        """Verify 'Reset to global settings' can be clicked."""
+        expect(self.reset_to_global_settings_button).to_be_enabled(timeout=10000)
+        return self
+
+    @step
+    def should_have_apply_disabled(self):
+        """Verify 'Apply changes' cannot be clicked."""
+        expect(self.apply_changes_button).to_be_disabled(timeout=10000)
+        return self
+
+    @step
+    def should_show_default_model_error(self):
+        """Verify 'Project default model' shows 'Selected model is not available'."""
+        expect(self.default_model_error).to_be_visible(timeout=10000)
+        return self
+
+    @step
+    def should_not_have_default_model_selected(self, field_label: str, model_name: str):
+        """Verify the closed default-model select does not show `model_name`."""
+        expect(self.default_model_trigger(field_label)).not_to_contain_text(
+            model_name, timeout=10000
+        )
+        return self

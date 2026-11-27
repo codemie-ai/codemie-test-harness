@@ -14,6 +14,8 @@
 
 from collections import Counter
 
+from codemie_sdk.models.llm import LLMModel, ModelStatus
+
 from codemie_test_harness.tests.utils.base_utils import BaseUtils
 
 
@@ -58,3 +60,29 @@ def global_default_model_label(client) -> str:
         f"{len(defaults)}: {[m.label for m in defaults]}"
     )
     return defaults[0].label
+
+
+def selectable_chat_models(client, exclude: tuple[str, ...] = ()) -> list[LLMModel]:
+    """Enabled web chat models a project admin can tick and pick as the project default.
+
+    Read from the live catalog: status Enabled (a Deprecated model is not offered
+    as a default), not a router, not CLI only, and a label that is part of no other
+    label (so its row on the Models tab can be found by label alone). Models whose
+    base name is in `exclude` are left out.
+    """
+    all_labels = [
+        model.label.lower()
+        for model in client.llms.list(include_all=True)
+        if model.label
+    ]
+    return [
+        model
+        for model in client.llms.list()
+        if model.label
+        and model.base_name not in exclude
+        and model.enabled
+        and model.status in (None, ModelStatus.ENABLED)
+        and not model.is_router
+        and not model.forbidden_for_web
+        and sum(1 for label in all_labels if model.label.lower() in label) == 1
+    ]
