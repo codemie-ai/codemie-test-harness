@@ -23,7 +23,11 @@ Use Conventional Commits. The PR title is the checked format (`.github/workflows
 
 ## Merge Strategy
 
-Not stated in any repository file. This guide does not state one.
+Source: the GitHub repository settings (`gh api repos/codemie-ai/codemie-test-harness`, read 2026-11-12). No repository file states it.
+
+- Squash merge and rebase merge are allowed. Merge commits are disabled.
+- A squash commit takes the PR title as its title and has an empty body. So the PR title must be the final commit subject.
+- Auto-merge is on. The branch is deleted after the merge.
 
 ## Pull Requests
 
