@@ -207,6 +207,60 @@ class SkillsUtils(BaseUtils):
         # Fetch full skill details (including content field)
         return self.client.skills.get(skill_from_list.id)
 
+    def send_import_skill_request(
+        self,
+        file_content: str,
+        filename: str,
+        project_name: str,
+        visibility: SkillVisibility = SkillVisibility.PROJECT,
+    ):
+        """Send an import request without waiting for the skill to be listed.
+
+        Args:
+            file_content: Markdown file content (will be base64-encoded)
+            filename: Name of the file
+            project_name: Project to import the skill into
+            visibility: Skill visibility setting
+
+        Returns:
+            The import response (SkillDetailResponse)
+        """
+        request = SkillImportRequest(
+            file_content=base64.b64encode(file_content.encode("utf-8")).decode("ascii"),
+            filename=filename,
+            project=project_name,
+            visibility=visibility,
+        )
+        return self.client.skills.import_skill(request)
+
+    def send_move_skill_request(self, skill_id: str, project_name: str):
+        """Send an update that only changes the skill's project, without waiting for the list.
+
+        Args:
+            skill_id: Skill identifier
+            project_name: Target project
+
+        Returns:
+            The update response (SkillDetailResponse)
+        """
+        return self.client.skills.update(
+            skill_id, SkillUpdateRequest(project=project_name)
+        )
+
+    def list_project_skill_names(self, project_name: str) -> List[str]:
+        """Names of the skills of one project, as seen by this client.
+
+        Args:
+            project_name: Project to list
+
+        Returns:
+            Skill names (first 100 entries of the project)
+        """
+        response = self.client.skills.list(
+            per_page=100, filters={"project": [project_name]}
+        )
+        return [skill.name for skill in response.skills]
+
     def update_skill(
         self,
         skill_id: str,
@@ -216,6 +270,7 @@ class SkillsUtils(BaseUtils):
         visibility: Optional[SkillVisibility] = None,
         categories: Optional[List[str]] = None,
         enabled_builtin_subagents: Optional[List[str]] = None,
+        mcp_servers: Optional[List[MCPServerDetails]] = None,
     ):
         """Update an existing skill.
 
@@ -226,6 +281,7 @@ class SkillsUtils(BaseUtils):
             content: New markdown content
             visibility: New visibility setting
             categories: New category IDs
+            mcp_servers: New mcp_servers list (None leaves the stored list untouched)
 
         Returns:
             Updated skill object
@@ -237,6 +293,7 @@ class SkillsUtils(BaseUtils):
             visibility=visibility,
             categories=categories,
             enabled_builtin_subagents=enabled_builtin_subagents,
+            mcp_servers=mcp_servers,
         )
 
         response = self.client.skills.update(skill_id, request)
@@ -424,4 +481,14 @@ class SkillsUtils(BaseUtils):
     def generate_instructions(self, description: str, skill_name: str | None = None):
         return self.client.skills.generate_instructions(
             description=description, skill_name=skill_name
+        )
+
+    def generate_skill(self, text: str):
+        """Ask the platform to generate skill details; nothing is created."""
+        return self.client.skills.generate(text=text)
+
+    def refine_skill(self, instructions: str, refine_prompt: str):
+        """Ask the platform for recommendations on a skill draft."""
+        return self.client.skills.refine(
+            instructions=instructions, refine_prompt=refine_prompt
         )

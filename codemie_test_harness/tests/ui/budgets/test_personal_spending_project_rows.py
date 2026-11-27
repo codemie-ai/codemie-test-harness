@@ -30,21 +30,29 @@ from codemie_test_harness.tests.ui.budgets.personal_spending_steps import (
     assert_api_lists_platform_and_cli_rows_of_the_project,
     assert_default_project_rows_come_first_and_only_they_are_flagged,
     assert_other_member_spend_is_recorded,
+    assert_other_member_spend_moved_only_the_project_percentage,
     assert_project_is_not_the_default_before_the_admin_sets_it,
     assert_setting_the_default_changed_which_rows_are_flagged,
     assert_spent_category_row_keeps_its_combined_total,
     assert_viewer_has_not_spent_and_sees_the_combined_project_total,
+    find_cli_row,
     generate_spend_as_other_member,
     make_project_the_default,
+    project_row_names,
     read_budget_usage,
+    read_listed_cli_row,
     read_rows,
+    set_up_project_rows,
     switch_enforcement_off,
     wait_for_cli_row_to_be_listed,
     wait_for_default_project_rows_first,
+    wait_for_shared_project_rows,
     wait_for_viewer_row_with_combined_total,
 )
 from codemie_test_harness.tests.ui.test_data.personal_spending_test_data import (
+    LIMIT_LABEL_ROWS,
     SPENT_CATEGORY,
+    LimitLabelRow,
 )
 from codemie_test_harness.tests.ui.pageobject.budgets.personal_spending_page import (
     PersonalSpendingPage,
@@ -109,6 +117,7 @@ def test_personal_spending_default_badge_follows_is_default_flag_of_rows(
 
 
 # @case per-project-spending-personal-page_TC_021
+# @case spendings-view-show-personal-project_TC_005
 @pytest.mark.enterprise
 @pytest.mark.budget
 @pytest.mark.timeout(1800)
@@ -125,7 +134,20 @@ def test_personal_spending_shows_combined_project_total_for_user_who_has_not_spe
 ):
     switch_enforcement_off(admin_project_utils, scaled_spent_category_budget)
 
-    # The other member spends and the spend is collected before the page is opened.
+    # Before the other member spends: the viewer's own spending and Available, and a project
+    # percentage that has no other member's spend in it yet.
+    wait_for_cli_row_to_be_listed(
+        project_admin_setup_client, scaled_spent_category_budget
+    )
+    spending_before = PersonalSpendingPage(page).open()
+    row_before = read_listed_cli_row(
+        project_admin_setup_client, scaled_spent_category_budget
+    )
+    spending_before.should_show_table()
+    spending_before.should_show_usage_block(row_before)
+    spending_before.should_show_usage_bar(row_before)
+
+    # The other member spends and the spend is collected before the page is opened again.
     spend = generate_spend_as_other_member(
         scaled_spent_category_budget,
         member_override_ui_setup,
@@ -150,3 +172,61 @@ def test_personal_spending_shows_combined_project_total_for_user_who_has_not_spe
     )
     spending.should_show_table()
     spending.should_match_budget_usage(api_rows)
+    # Every amount is in cents: a spend with more digits is rounded half up, not shown in full.
+    spending.should_show_amounts_with_two_decimals(api_rows)
+
+    # After: only the project percentage moved; the viewer's own spending and Available did not.
+    spent_row = find_cli_row(api_rows, scaled_spent_category_budget)
+    assert_other_member_spend_moved_only_the_project_percentage(row_before, spent_row)
+    spending.should_show_usage_block(spent_row)
+    spending.should_show_usage_bar(spent_row)
+
+
+# @case spendings-view-show-personal-project_TC_003
+@pytest.mark.enterprise
+@pytest.mark.budget
+@pytest.mark.ui
+def test_personal_spending_shared_project_row_shows_own_spending_and_available_separately(
+    page, two_category_budget, project_admin_setup_client
+):
+    project_rows = wait_for_shared_project_rows(
+        project_admin_setup_client, two_category_budget
+    )
+
+    spending = PersonalSpendingPage(page).open()
+
+    spending.should_show_table()
+    spending.should_show_usage_blocks(project_rows)
+
+
+# @case spendings-view-show-personal-project_TC_004
+@pytest.mark.enterprise
+@pytest.mark.budget
+@pytest.mark.parametrize(
+    "row_kind",
+    list(LIMIT_LABEL_ROWS.values()),
+    ids=list(LIMIT_LABEL_ROWS),
+)
+@pytest.mark.ui
+def test_personal_spending_limit_label_and_shared_tooltip_follow_the_row_type(
+    page,
+    two_category_budget,
+    project_admin_setup_client,
+    admin_project_utils,
+    user_utils,
+    row_kind: LimitLabelRow,
+):
+    set_up_project_rows(
+        admin_project_utils,
+        user_utils,
+        project_admin_setup_client,
+        two_category_budget,
+        row_kind,
+    )
+
+    spending = PersonalSpendingPage(page).open()
+    names = project_row_names(two_category_budget)
+
+    spending.should_show_table()
+    spending.should_show_limit_label(names, row_kind.limit_label)
+    spending.should_mark_shared_limit_only_when(names, row_kind.is_shared_limit)

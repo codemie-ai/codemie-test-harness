@@ -94,8 +94,13 @@ class UserManagementPage(BasePage):
         return self.user_rows.filter(has_text=email)
 
     def _user_email_button(self, email: str):
-        """Button labelled with the user's email address (opens User Details dialog)."""
-        return self._user_row(email).get_by_role("button", name=email)
+        """Button labelled with the user's email address (opens User Details dialog).
+
+        Must be exact: the row's 'More options' button has an `aria-labelledby` that
+        includes the user-name element, so its computed accessible name contains the
+        email too and a substring match resolves to both buttons.
+        """
+        return self._user_row(email).get_by_role("button", name=email, exact=True)
 
     def _row_menu_button(self, email: str):
         """'More options' button in the actions cell of the user's row."""
@@ -117,13 +122,6 @@ class UserManagementPage(BasePage):
     def _deactivated_badge(self, email: str):
         """'Deactivated' status badge in the Name cell of the user's row."""
         return self._user_row(email).get_by_text("Deactivated", exact=True)
-
-    def _status_toast(self, action: str):
-        """Info toast shown after a successful status change."""
-        past = "deactivated" if action == "deactivate" else "reactivated"
-        return self.page.locator(".codemie-toast-info").filter(
-            has_text=f"User {past} successfully"
-        )
 
     @property
     def user_details_dialog(self):
@@ -354,13 +352,14 @@ class UserManagementPage(BasePage):
     @step
     def should_see_status_toast(self, action: str):
         """Assert the success toast of the status change is shown."""
-        expect(self._status_toast(action)).to_be_visible(timeout=10000)
+        past = "deactivated" if action == "deactivate" else "reactivated"
+        self.toast.should_show(f"User {past} successfully", ("info",))
         return self
 
     @step
     def should_see_error_toast_with_text(self, text: str):
         """Assert an error toast is shown and its text contains ``text``."""
-        expect(self.error_toast).to_contain_text(text, timeout=10000)
+        self.toast.should_show_error_text(text)
         return self
 
     @step
@@ -468,6 +467,15 @@ class UserManagementPage(BasePage):
         expect(
             self.user_details_dialog.locator("input[type=radio]:checked")
         ).to_have_count(1, timeout=10000)
+        return self
+
+    @step
+    def should_see_single_project_in_details(self, project: str):
+        """Assert the User Details projects table lists exactly one project: the given one."""
+        expect(self.details_projects_table.locator("tbody tr")).to_have_count(
+            1, timeout=10000
+        )
+        expect(self._details_project_row(project)).to_have_count(1, timeout=10000)
         return self
 
     @step

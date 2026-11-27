@@ -23,6 +23,7 @@ from .workflow_execution_state import WorkflowExecutionState
 from .unsaved_changes_dialog import UnsavedChangesDialog
 from .missing_integrations_validation_dialog import MissingIntegrationsValidationDialog
 from .expanded_yaml_dialog import ExpandedYamlDialog
+from .favorite_star import FavoriteStar
 
 __all__ = [
     "WorkflowCard",
@@ -36,4 +37,5 @@ __all__ = [
     "UnsavedChangesDialog",
     "MissingIntegrationsValidationDialog",
     "ExpandedYamlDialog",
+    "FavoriteStar",
 ]

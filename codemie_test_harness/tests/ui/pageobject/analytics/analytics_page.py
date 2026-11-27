@@ -52,6 +52,11 @@ STANDARD_TABS_PATTERN = re.compile(
 )
 
 
+# A formatted tile value: digits with locale group/decimal separators, an optional
+# percent sign (formatMetricValue: toLocaleString, or toFixed(2) + "%").
+HEADROOM_TILE_NUMBER = re.compile(r"^\s*\d[\d,.\s\u00a0\u202f]*%?\s*$")
+
+
 class AnalyticsPage(BasePage):
     """Analytics Dashboard page object."""
 
@@ -144,11 +149,17 @@ class AnalyticsPage(BasePage):
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @step
-    def navigate_to(self):
-        """Navigate to the Analytics page and wait for the dashboard to render."""
-        self.page.goto(self.PATH)
-        self.page.wait_for_load_state("networkidle", timeout=30000)
-        expect(self.page_heading).to_be_visible(timeout=15000)
+    def navigate_to(self, time_period: str | None = None):
+        """Navigate to the Analytics page and wait for the dashboard to render.
+
+        ``time_period`` (e.g. ``"last_hour"``) is passed as the page's URL filter, which
+        takes precedence over the filters saved in the browser.
+        """
+        path = f"{self.PATH}?time_period={time_period}" if time_period else self.PATH
+        # No "networkidle" wait: the dashboard widgets keep requesting data, so on a busy
+        # environment the network never goes idle. Widgets wait for their own content.
+        self.page.goto(path, wait_until="domcontentloaded")
+        expect(self.page_heading).to_be_visible(timeout=30000)
         return self
 
     @step
@@ -182,6 +193,11 @@ class AnalyticsPage(BasePage):
     def open_cli_analytics(self) -> CLIAnalyticsPage:
         """Open the CLI Analytics tab, wait for its default section data and return its page object."""
         cli_analytics = CLIAnalyticsPage(self.page)
+        tab = self.page.get_by_role("tab", name=CLIAnalyticsPage.TAB_NAME, exact=True)
+        expect(tab).to_be_visible(timeout=15000)
+        if tab.get_attribute("aria-selected") == "true":
+            # Already the default tab (e.g. OSS standalone): its data loaded in navigate_to.
+            return cli_analytics.should_be_visible()
         with cli_analytics.expect_section_data(CLIAnalyticsPage.DEFAULT_SECTION):
             self.click_tab(CLIAnalyticsPage.TAB_NAME)
         return cli_analytics.should_be_visible()
@@ -235,6 +251,62 @@ class AnalyticsPage(BasePage):
             f"Analytics end_date {end.isoformat()} is not close to now "
             f"({now.isoformat()}, {age:.0f}s away)"
         )
+        return self
+
+    # ── Headroom (context compression) section of the Insights tab ──────────────
+
+    @property
+    def headroom_section_heading(self) -> Locator:
+        """'Context Compression' section heading (h2) of the Insights tab."""
+        return self.page.get_by_role("heading", name="Context Compression", level=2)
+
+    def headroom_widget_heading(self, title: str) -> Locator:
+        """Heading (h3) of a Headroom widget: Headroom Summary, Savings Over Time, ..."""
+        return self.page.get_by_role("heading", name=title, exact=True, level=3)
+
+    @property
+    def headroom_summary_card(self) -> Locator:
+        """Card of the 'Headroom Summary' widget: the nearest ancestor of its heading
+        that holds the summary tiles (found by the 'Unique Sessions' tile, rendered in
+        upper case).
+        """
+        return self.headroom_widget_heading("Headroom Summary").locator(
+            "xpath=ancestor::*[.//*[contains(translate(normalize-space(text()),"
+            " 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'),"
+            " 'UNIQUE SESSIONS')]][1]"
+        )
+
+    def headroom_summary_tile_label(self, label: str) -> Locator:
+        """Label of one summary tile, matched whole and case-insensitively."""
+        return self.headroom_summary_card.get_by_text(
+            re.compile(rf"^\s*{re.escape(label)}\s*$", re.IGNORECASE)
+        ).first
+
+    def headroom_summary_tile_value(self, label: str) -> Locator:
+        """Value of one summary tile: the paragraph after the row that holds its label
+        (MetricCard renders the label row, then the formatted value).
+        """
+        return self.headroom_summary_tile_label(label).locator(
+            "xpath=../following-sibling::p[1]"
+        )
+
+    @step
+    def should_show_headroom_section(
+        self, widget_titles: list[str], summary_labels: list[str]
+    ):
+        """Verify the Context Compression section, its widgets and the summary tiles.
+
+        Each tile shows a number of its own; zero values are allowed (a stand with no
+        compressed request shows zeros), the absent-value marker '-' is not.
+        """
+        expect(self.headroom_section_heading).to_be_visible(timeout=30000)
+        for title in widget_titles:
+            expect(self.headroom_widget_heading(title)).to_be_visible()
+        for label in summary_labels:
+            expect(self.headroom_summary_tile_label(label)).to_be_visible()
+            expect(self.headroom_summary_tile_value(label)).to_have_text(
+                HEADROOM_TILE_NUMBER
+            )
         return self
 
     @step

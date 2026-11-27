@@ -18,6 +18,11 @@ import pytest
 from hamcrest import assert_that, contains_string
 from playwright.sync_api import expect
 
+from codemie_test_harness.tests.enums.tools import AgentWorkspaceTool
+from codemie_test_harness.tests.test_data.workspace_script_test_data import (
+    FEATURE_COMPONENT_ID,
+    JIRA_TOOL,
+)
 from codemie_test_harness.tests.ui.pageobject.components import UnsavedChangesDialog
 from codemie_test_harness.tests.ui.pageobject.workflows.edit_workflow_page import (
     EditWorkflowPage,
@@ -25,8 +30,20 @@ from codemie_test_harness.tests.ui.pageobject.workflows.edit_workflow_page impor
 from codemie_test_harness.tests.ui.pageobject.workflows.workflows_page import (
     WorkflowsPage,
 )
+from codemie_test_harness.tests.ui.test_data.workflows_test_data import (
+    OWNER_INTEGRATION_RAW_MESSAGE,
+    OWNER_INTEGRATION_TOAST,
+    OWNER_INTEGRATION_TOAST_MAX_OPEN_MS,
+    OWNER_INTEGRATION_TOAST_MIN_OPEN_MS,
+    WORKFLOW_UPDATED_TOAST,
+)
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.constants import test_project_name
+from codemie_test_harness.tests.utils.workspace_script_utils import (
+    tool_state,
+    unique_script_name,
+)
+from codemie_test_harness.tests.utils.yaml_utils import ToolModel
 
 original_yaml_config = """
 assistants:
@@ -391,3 +408,46 @@ def test_edit_workflow_config_panel_basic_tab(page, test_workflow):
     # Test valid Icon URL is required
     config_panel.fill_icon_url("0")
     config_panel.should_have_valid_icon_url_is_required_message()
+
+
+# @case script-step-owner-integration-warning_TC_001
+@pytest.mark.jira
+@pytest.mark.workflow
+@pytest.mark.requires_capability(FEATURE_COMPONENT_ID)
+@pytest.mark.ui
+def test_save_global_workflow_shows_owner_integration_warning(
+    page, create_script_workflow, publish_workflow_as_global, jira_user_integration
+):
+    """Saving a global workflow whose script step may call a tool through the author's own
+    integration shows one formatted warning toast that stays open for 8 seconds.
+
+    The raw backend message and the generic warning toast are not shown for this warning.
+    """
+    run_tool, run_state = tool_state(
+        "run_script",
+        AgentWorkspaceTool.EXECUTE_WORKSPACE_SCRIPT.value,
+        {"script_path": unique_script_name("owner")},
+        tool_access=[
+            ToolModel(name=JIRA_TOOL, integration_alias=jira_user_integration.alias)
+        ],
+    )
+    workflow = create_script_workflow([run_tool], [run_state])
+    publish_workflow_as_global(workflow.id)
+
+    edit_page = EditWorkflowPage(page)
+    edit_page.navigate_to(workflow.id)
+    edit_page.should_be_on_edit_workflow_page()
+    edit_page.toast.start_recording()
+    edit_page.click_save()
+
+    edit_page.toast.should_show_only_one(OWNER_INTEGRATION_TOAST, "warn")
+    edit_page.toast.should_show(WORKFLOW_UPDATED_TOAST)
+    edit_page.toast.should_close_between(
+        OWNER_INTEGRATION_TOAST,
+        "warn",
+        OWNER_INTEGRATION_TOAST_MIN_OPEN_MS,
+        OWNER_INTEGRATION_TOAST_MAX_OPEN_MS,
+    )
+    # Checked over the whole save, so a toast shown late or already closed still counts.
+    edit_page.toast.should_have_recorded_none_with(OWNER_INTEGRATION_RAW_MESSAGE)
+    edit_page.toast.should_have_recorded_one("warn")

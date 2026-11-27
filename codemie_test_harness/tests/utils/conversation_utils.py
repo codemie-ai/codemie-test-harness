@@ -36,6 +36,11 @@ from codemie_sdk.models.assistant import AssistantChatRequest
 from codemie_test_harness.tests.utils.base_utils import BaseUtils
 
 
+# The history upsert route requires ``assistant_id`` and documents it as "can be placeholder
+# for imports"; the SDK request model leaves it optional, so a CLI sync has to send one.
+CLI_IMPORT_ASSISTANT_ID = "cli-import"
+
+
 class ConversationUtils(BaseUtils):
     def list_conversations(self, is_finished: Optional[bool] = None):
         return self.client.conversations.list(is_finished=is_finished)
@@ -118,6 +123,30 @@ class ConversationUtils(BaseUtils):
             history=history, assistant_id=assistant_id, folder=folder
         )
         return self.client.conversations.upsert_history(conversation_id, request)
+
+    def upsert_history_as_cli(
+        self,
+        conversation_id: str,
+        history: List[HistoryItem],
+        cli_client: str,
+        folder: str = None,
+        assistant_id: str = None,
+    ):
+        """Upsert history the way a CLI agent syncs a chat.
+
+        The backend derives the chat's write-once import source from the
+        ``X-CodeMie-Client`` header (e.g. ``codemie-gemini``). The route rejects a
+        body without ``assistant_id`` (422), so ``CLI_IMPORT_ASSISTANT_ID`` is sent
+        when none is given.
+        """
+        request = UpsertHistoryRequest(
+            history=history,
+            assistant_id=assistant_id or CLI_IMPORT_ASSISTANT_ID,
+            folder=folder,
+        )
+        return self.client.conversations.upsert_history(
+            conversation_id, request, headers={"X-CodeMie-Client": cli_client}
+        )
 
     def delete_history(self, conversation_id: str):
         """Clear all history from a conversation."""
@@ -219,6 +248,14 @@ class ConversationUtils(BaseUtils):
             assistant_id=assistant_id,
         )
         return self.client.conversations.delete_feedback(delete_request)
+
+    def list_feedback(self):
+        """List the feedback entries visible to the current user."""
+        return self.client.conversations.list_feedback()
+
+    def get_feedback(self, document_id: str):
+        """Get a feedback entry by id."""
+        return self.client.conversations.get_feedback(document_id)
 
     # Conversation finishing
 

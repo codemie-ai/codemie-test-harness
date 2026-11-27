@@ -40,8 +40,22 @@ from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
 from codemie_test_harness.tests.ui.pageobject.components.export_conversation_dialog import (
     ExportConversationDialog,
 )
+from codemie_test_harness.tests.ui.pageobject.components.generated_files import (
+    GeneratedFiles,
+)
+from codemie_test_harness.tests.ui.pageobject.components.tool_output_preview import (
+    ToolOutputPreview,
+)
 from codemie_test_harness.tests.ui.pageobject.chats.configuration_panel import (
     ConfigurationPanel,
+)
+from codemie_test_harness.tests.ui.pageobject.chats.workspace_browser_popup import (
+    WorkspaceBrowserPopup,
+)
+from codemie_test_harness.tests.ui.test_data.mcp_discovery_failure_test_data import (
+    MCP_SERVER_UNAVAILABLE_BADGE,
+    MCP_SERVER_UNAVAILABLE_HEADING,
+    MCP_SERVER_UNAVAILABLE_SUBTITLE,
 )
 
 
@@ -368,6 +382,11 @@ class ChatPage(BasePage):
         return self.page.locator('button[data-tooltip-content="Clear Chat"]')
 
     @property
+    def browse_files_button(self) -> Locator:
+        """The Browse files button of the chat header; rendered once the chat has a message."""
+        return self.page.locator('button[aria-label="Browse files"]')
+
+    @property
     def add_attachment_button(self) -> Locator:
         """Add attachment button with paperclip icon."""
         return self.page.locator(
@@ -378,6 +397,14 @@ class ChatPage(BasePage):
     def file_input(self) -> Locator:
         """Native hidden file input backing the attach-file control."""
         return self.page.locator('input[type="file"]')
+
+    @property
+    def composer_file_input(self) -> Locator:
+        """File input of the chat composer (scoped to the prompt box; a chat that already
+        has messages renders further file inputs elsewhere on the page)."""
+        return self.page.get_by_test_id("chat-prompt").get_by_label(
+            "Select files to upload"
+        )
 
     @property
     def attachment_remove_buttons(self) -> Locator:
@@ -465,6 +492,14 @@ class ChatPage(BasePage):
         return self
 
     @step
+    def open_conversation(self, chat_id: str):
+        """Open an existing conversation and wait until its message input is shown."""
+        self.page.set_viewport_size({"width": 1920, "height": 980})
+        self.navigate_to(chat_id)
+        self.chat_input.wait_for(state="visible", timeout=15000)
+        return self
+
+    @step
     def navigate_to_shared_conversation(self, share_token: str):
         """Open the read-only shared view of a conversation (/share/conversations/<token>)."""
         self.page.goto(f"/share/conversations/{share_token}")
@@ -500,6 +535,38 @@ class ChatPage(BasePage):
     def click_execution_info(self):
         """Click the execution info button."""
         self.execution_info_button.click()
+        return self
+
+    @property
+    def headroom_tokens_saved_label(self) -> Locator:
+        """'Tokens saved (Headroom):' row label of the Usage details overlay.
+
+        The row is rendered only when the conversation metrics carry
+        headroom_tokens_saved > 0 (codemie-ui ChatHeader.tsx).
+        """
+        return self.page.get_by_text("Tokens saved (Headroom):", exact=True)
+
+    @property
+    def headroom_tokens_saved_value(self) -> Locator:
+        """Value box next to the 'Tokens saved (Headroom):' label, e.g. '10,239 (99%)'."""
+        return self.headroom_tokens_saved_label.locator("xpath=following-sibling::*[1]")
+
+    @step
+    def open_usage_details(self):
+        """Open the chat header 'Usage details' overlay."""
+        self._dismiss_release_notification_if_present()
+        self.should_have_execution_info_button_visible()
+        self.execution_info_button.click()
+        expect(self.page.get_by_text("Chat totals, auto-updated")).to_be_visible()
+        return self
+
+    @step
+    def should_show_headroom_tokens_saved(self):
+        """Verify Usage details shows a positive 'Tokens saved (Headroom)' figure."""
+        expect(self.headroom_tokens_saved_label).to_be_visible(timeout=30000)
+        expect(self.headroom_tokens_saved_value).to_have_text(
+            re.compile(r"^\s*[1-9][\d,]*( \(\d+%\))?\s*$")
+        )
         return self
 
     @step
@@ -545,6 +612,24 @@ class ChatPage(BasePage):
             timeout=15000,
         ):
             self.page.locator('input[type="file"]').set_input_files(file_path)
+        return self
+
+    @step
+    def attach_file_to_composer(self, file_path: str):
+        """
+        Attach a file through the composer's own file input.
+
+        Unlike attach_file, this stays unambiguous in a chat that already has messages,
+        where the page holds several file inputs.
+
+        Args:
+            file_path: Absolute path to the file to attach
+        """
+        with self.page.expect_response(
+            lambda r: "files/bulk" in r.url and r.request.method == "POST",
+            timeout=15000,
+        ):
+            self.composer_file_input.set_input_files(file_path)
         return self
 
     @step
@@ -1255,7 +1340,7 @@ class ChatPage(BasePage):
     def should_not_have_error_toast(self):
         """Assert no error toast visible — regression guard.
         Must be called during the action (inside capture_requests_during lambda) to catch transient toasts."""
-        expect(self.error_toast).to_be_hidden()
+        self.toast.should_not_show(variants=("error",))
         return self
 
     @step
@@ -1380,6 +1465,49 @@ class ChatPage(BasePage):
         tool_block = self.tool_blocks.filter(has_text=tool_name_pattern)
         expect(tool_block.first).to_be_visible(timeout=timeout)
         return self
+
+    def tool_card_button(self, tool_name: str) -> Locator:
+        """Header button of a tool card; its accessible name is the tool's display name
+        (e.g. "Code Executor") and aria-expanded tells whether the card is open.
+
+        Takes the first card: the model may call the tool more than once in a turn,
+        and every call renders its own header."""
+        return self.chat_history_container.get_by_role(
+            "button", name=tool_name, exact=True
+        ).first
+
+    def tool_card(self, tool_name: str) -> Locator:
+        """Tool card of a tool: the thought container (data-thought-id) that holds the
+        card header button, the Input section and the Result section. The first such
+        card, matching tool_card_button()."""
+        # The inner locator is page-rooted: filter(has=...) queries it relative to each card.
+        return (
+            self.chat_history_container.locator("[data-thought-id]")
+            .filter(has=self.page.get_by_role("button", name=tool_name, exact=True))
+            .first
+        )
+
+    @property
+    def generated_files(self) -> GeneratedFiles:
+        """Files the chat's assistant messages published (the generated-files block)."""
+        return GeneratedFiles(self.chat_history_container)
+
+    @step
+    def open_tool_output(self, tool_name: str) -> ToolOutputPreview:
+        """
+        Open the tool card of a tool and return its plain-text Result component.
+
+        A card starts closed (aria-expanded=false); one click on its header opens it.
+
+        Args:
+            tool_name: Display name of the tool (e.g., "Code Executor")
+        """
+        header = self.tool_card_button(tool_name)
+        expect(header).to_be_visible()
+        if header.get_attribute("aria-expanded") != "true":
+            header.click()
+        expect(header).to_have_attribute("aria-expanded", "true")
+        return ToolOutputPreview(self.tool_card(tool_name))
 
     @step
     def should_have_any_tool_used(self, *tool_name_patterns: str, timeout: int = 30000):
@@ -1597,6 +1725,34 @@ class ChatPage(BasePage):
         """
         self.processed_in_field.last.wait_for(state="visible", timeout=timeout)
         return self
+
+    @step
+    def send_message_and_wait_for_reply(
+        self, message: str, reply_number: int, timeout: int = 120000
+    ):
+        """
+        Send a message and wait until the assistant has finished its reply to it.
+
+        Args:
+            message: The message text to send
+            reply_number: Ordinal of the reply being waited for (1 for the first
+                message of the chat, 2 for the second, ...). Each finished reply
+                carries a "Processed in" line, so the Nth one marks the Nth reply done.
+            timeout: Timeout in milliseconds
+        """
+        self.send_message(message)
+        expect(self.processed_in_field.nth(reply_number - 1)).to_be_visible(
+            timeout=timeout
+        )
+        self.wait_for_idle_state(timeout=timeout)
+        return self
+
+    @step
+    def open_workspace_browser(self) -> WorkspaceBrowserPopup:
+        """Open the agent workspace popup with the chat header "Browse files" button."""
+        expect(self.browse_files_button).to_be_visible(timeout=30000)
+        self.browse_files_button.click()
+        return WorkspaceBrowserPopup(self.page).should_be_visible()
 
     @step
     def scroll_to_bottom_of_chat(self):
@@ -1994,6 +2150,73 @@ class ChatPage(BasePage):
         self.should_not_show_premium_notice()
         return self
 
+    # ==================== MODEL STATUS IN THE MODEL PICKER ====================
+
+    def model_picker_option(self, model_name: str) -> Locator:
+        """Option of a model in the open model picker, found by its label."""
+        return self.page.get_by_role("option").filter(has_text=model_name)
+
+    @step
+    def open_model_picker(self):
+        """Open the model picker from the default state and wait for its search box."""
+        self.model_selector_button.click()
+        self.page.get_by_role("combobox", name="Search LLM models").wait_for(
+            state="visible", timeout=5000
+        )
+        return self
+
+    @step
+    def search_model_in_picker(self, model_name: str):
+        """Type a model name in the search box of the open model picker."""
+        self.page.get_by_role("combobox", name="Search LLM models").fill(model_name)
+        return self
+
+    @step
+    def click_model_in_picker(self, model_name: str):
+        """Click the option of a model in the open model picker."""
+        option = self.model_picker_option(model_name)
+        option.wait_for(state="visible", timeout=5000)
+        option.click()
+        return self
+
+    @step
+    def try_to_pick_blocked_model_in_picker(self, model_name: str):
+        """Click the option of a blocked model anyway; a disabled option ignores the click."""
+        self.model_picker_option(model_name).click(force=True)
+        return self
+
+    @step
+    def should_block_model_in_picker(self, model_name: str):
+        """Assert the picker option of a model is disabled."""
+        expect(self.model_picker_option(model_name)).to_be_disabled()
+        return self
+
+    @step
+    def should_show_deprecated_meta_in_picker(self, model_name: str):
+        """Assert the picker option of a model carries the 'Deprecated' meta label."""
+        meta = self.model_picker_option(model_name).locator(
+            '[data-testid="llm-option-meta"]'
+        )
+        expect(meta).to_contain_text("Deprecated")
+        return self
+
+    @step
+    def should_not_list_model_in_picker(self, model_name: str):
+        """Assert the open picker lists other models but not this one.
+
+        Waits for the first option first, so an absent model is not mistaken for a
+        picker that has not loaded yet.
+        """
+        expect(self.page.get_by_role("option").first).to_be_visible(timeout=10000)
+        expect(self.model_picker_option(model_name)).to_have_count(0)
+        return self
+
+    @step
+    def should_keep_default_model_selected(self):
+        """Assert the picker trigger still reads 'Default', i.e. no model was picked."""
+        expect(self.model_selector_button).to_be_visible()
+        return self
+
     # ==================== TOOL-CALL CONFIRMATION ELEMENTS ====================
     # Rendered by ChatAiMessage.tsx when thought.interrupted===true
     #
@@ -2322,4 +2545,119 @@ class ChatPage(BasePage):
         self.page.route(
             f"**/v1/conversations/{conversation_id}", handle_get_conversation
         )
+        return self
+
+    # ==================== MCP AUTH GATE (discovery/sign-in failure prompts) ====================
+    # Rendered by ChatAiMcpAuthPrompt.tsx below an assistant turn when its MCP server(s)
+    # fail auth discovery or still require sign-in. Each row is AssistantAuthGateRow.tsx,
+    # whose status badge is a StatusBadge: <div role="status" aria-label="<text>">
+    # (StatusBadge.tsx) — the same role="status" pattern already used above by
+    # interrupted_thought_text / in_progress_thought_status.
+
+    _MCP_UNAVAILABLE_BADGE_SELECTOR = (
+        f'[role="status"][aria-label="{MCP_SERVER_UNAVAILABLE_BADGE}"]'
+    )
+
+    @property
+    def mcp_auth_prompt(self) -> Locator:
+        """The MCP auth-gate prompt container rendered below an assistant turn
+        (data-testid="chat-ai-auth-prompt", ChatAiMcpAuthPrompt.tsx)."""
+        return self.chat_history_container.get_by_test_id("chat-ai-auth-prompt")
+
+    @property
+    def mcp_auth_gate_status_badges(self) -> Locator:
+        """Every 'Server unavailable' status badge inside the current auth prompt."""
+        return self.mcp_auth_prompt.locator(self._MCP_UNAVAILABLE_BADGE_SELECTOR)
+
+    def mcp_auth_gate_row(self, server_name: str, error_context: str) -> Locator:
+        """The AssistantAuthGateRow container of one server: the innermost div around
+        the server's name that holds a 'Server unavailable' badge and the error text.
+
+        AssistantAuthGateRow.tsx renders a header (name + badge) and the error-context
+        InfoWarning as siblings inside the row's outer div, so the header alone never
+        holds the error text. Starting from the name and walking up, the first ancestor
+        that has both the badge and the error text is therefore the row itself. Any
+        list wrapper around several rows also matches but is an ancestor of the row,
+        and ``.last`` (document order lists ancestors first) skips past it. A wrapper
+        can only win when this row lacks the error text; ``should_have_mcp_auth_gate_row``
+        guards that by requiring exactly one badge inside the match.
+        """
+        return (
+            self.mcp_auth_prompt.get_by_text(server_name, exact=True)
+            .locator(
+                "xpath=ancestor::div[.//*[@role='status' and "
+                f"@aria-label='{MCP_SERVER_UNAVAILABLE_BADGE}']]"
+            )
+            .filter(has_text=error_context)
+            .last
+        )
+
+    @step
+    def send_message_and_wait_for_mcp_auth_prompt(
+        self, message: str, timeout: int = 30000
+    ):
+        """Send a chat message and wait for the MCP auth-gate prompt to render."""
+        self.send_message(message)
+        expect(self.mcp_auth_prompt).to_be_visible(timeout=timeout)
+        return self
+
+    @step
+    def should_have_mcp_discovery_failure_prompt_visible(self):
+        """Verify the discovery-failure prompt heading and subtitle are shown
+        (ChatAiMcpAuthPrompt.getPromptHeading/getPromptSubtitle)."""
+        expect(self.mcp_auth_prompt).to_be_visible()
+        expect(
+            self.mcp_auth_prompt.get_by_text(MCP_SERVER_UNAVAILABLE_HEADING)
+        ).to_be_visible()
+        expect(
+            self.mcp_auth_prompt.get_by_text(MCP_SERVER_UNAVAILABLE_SUBTITLE)
+        ).to_be_visible()
+        return self
+
+    @step
+    def should_not_have_mcp_discovery_failure_prompt(self):
+        """Verify the discovery-failure UI is absent: no 'MCP server unavailable'
+        heading and no 'Server unavailable' badge anywhere in the auth prompt."""
+        expect(
+            self.mcp_auth_prompt.get_by_text(MCP_SERVER_UNAVAILABLE_HEADING)
+        ).to_have_count(0)
+        expect(self.mcp_auth_gate_status_badges).to_have_count(0)
+        return self
+
+    @step
+    def should_have_mcp_auth_gate_row(self, server_name: str, error_context: str):
+        """Verify a discovery_failed row's name, error text and 'Server unavailable' badge
+        all sit in the same row.
+
+        The match is the innermost container holding the name, the badge and the error
+        text (``mcp_auth_gate_row``); exactly one badge inside it proves it is a single
+        row and not a wrapper around several rows that merely share the same error text.
+        """
+        row = self.mcp_auth_gate_row(server_name, error_context)
+        expect(row).to_be_visible()
+        expect(row.get_by_text(error_context)).to_be_visible()
+        expect(row.locator(self._MCP_UNAVAILABLE_BADGE_SELECTOR)).to_have_count(1)
+        return self
+
+    @step
+    def should_have_mcp_auth_gate_status_badge_count(self, count: int):
+        """Verify the number of 'Server unavailable' status badges rendered."""
+        expect(self.mcp_auth_gate_status_badges).to_have_count(count)
+        return self
+
+    @step
+    def should_have_mcp_sign_in_prompt_visible(self, heading: str):
+        """Verify the pre-existing sign-in auth gate (non-discovery_failed) is shown
+        with the expected heading — AC-9 regression anchor.
+
+        Grounded to the heading only (change-analysis.json AC-9's observable is
+        getPromptHeading's return value). A sign-in control's presence is not
+        asserted here: the live run found no element matching the expected
+        Authenticate/Re-authenticate/Open-sign-in-in-a-new-tab control for this row's
+        actual rendered state, and no observable in change-analysis.json or
+        AssistantAuthGateRow.tsx's own shipped tests grounds which control (if any)
+        renders for it — see cases.json automation.uncovered_scope for this case.
+        """
+        expect(self.mcp_auth_prompt).to_be_visible()
+        expect(self.mcp_auth_prompt.get_by_text(heading, exact=True)).to_be_visible()
         return self

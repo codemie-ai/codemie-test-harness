@@ -21,6 +21,10 @@ from pathlib import Path
 from hamcrest import assert_that, equal_to
 from playwright.sync_api import Download, Locator, Page, expect
 from reportportal_client import step
+from codemie_test_harness.tests.ui.pageobject.components.toast import (
+    ALL_VARIANTS,
+    Toast,
+)
 
 EXPANDED_EDITOR_NAME = "yaml_config_expanded"
 
@@ -45,6 +49,7 @@ class ExpandedYamlDialog:
 
     def __init__(self, page: Page):
         self.page = page
+        self.toast = Toast(page)
 
     # ====================
     # PROPERTIES
@@ -135,10 +140,6 @@ class ExpandedYamlDialog:
     def yaml_error(self) -> Locator:
         """'YAML Error: <message>' text above the frame."""
         return self.dialog.get_by_text(re.compile(r"^YAML Error:"))
-
-    def toast(self, text: str) -> Locator:
-        """Toast notification with the given header text."""
-        return self.page.locator(".codemie-toast-header").filter(has_text=text)
 
     # ====================
     # ACTIONS
@@ -398,7 +399,7 @@ class ExpandedYamlDialog:
     @step
     def should_show_copied_toast(self):
         """Verify the 'Copied to clipboard' toast."""
-        expect(self.toast("Copied to clipboard")).to_be_visible()
+        self.toast.should_show("Copied to clipboard", ALL_VARIANTS)
 
     @step
     def should_have_copied_to_clipboard(self, expected: str):
@@ -412,9 +413,9 @@ class ExpandedYamlDialog:
     @step
     def should_show_download_toast(self, download: Download):
         """Verify the 'Code downloaded as <fileName>' toast for the given download."""
-        expect(
-            self.toast(f"Code downloaded as {download.suggested_filename}")
-        ).to_be_visible()
+        self.toast.should_show(
+            f"Code downloaded as {download.suggested_filename}", ALL_VARIANTS
+        )
 
     @step
     def should_have_downloaded_content(self, download: Download, expected: str):

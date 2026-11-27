@@ -15,8 +15,8 @@
 import re
 from typing import Optional
 
-from hamcrest import assert_that, is_not, empty, matches_regexp
-from playwright.sync_api import expect
+from hamcrest import assert_that, is_, is_not, empty, matches_regexp
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, expect
 from reportportal_client import step
 
 from codemie_test_harness.tests.test_data.google_datasource_test_data import (
@@ -35,6 +35,7 @@ from codemie_test_harness.tests.ui.pageobject.datasources.datasource_sidebar imp
 )
 from codemie_test_harness.tests.ui.test_data.datasource_test_data import (
     DataSourceType,
+    GIT_INTEGRATION_PLACEHOLDER,
     SUMMARIZATION_METHODS_LIST,
     DATA_SOURCE_TYPES_LIST,
     FILE_INSTRUCTIONS,
@@ -60,6 +61,9 @@ class CreateEditDatasourcePage(BasePage):
     """Create Data Source page object with property-based element locators."""
 
     page_url = "/data-sources/create"
+
+    # How long to wait for the one-time 'Guided Tour Available' dialog on the edit form.
+    GUIDED_TOUR_WAIT_MS = 3000
 
     def __init__(self, page):
         super().__init__(page)
@@ -189,6 +193,16 @@ class CreateEditDatasourcePage(BasePage):
         return self.integration_input.locator(".p-dropdown-label")
 
     @property
+    def integration_clear_icon(self):
+        """Clear (X) icon of the integration dropdown.
+
+        PrimeReact renders it only while a value is selected and the dropdown is
+        clearable. Source-derived class name (`.p-dropdown-clear-icon`); not yet
+        observed on a stand with a saved integration.
+        """
+        return self.integration_input.locator(".p-dropdown-clear-icon")
+
+    @property
     def refresh_integrations_button(self):
         """Refresh button next to the integrations dropdown.
 
@@ -309,6 +323,20 @@ class CreateEditDatasourcePage(BasePage):
     @property
     def embeddings_model_dropdown(self):
         return self.page.locator("span#embeddingsModel button")
+
+    @property
+    def embeddings_model_combobox(self):
+        """Picker field labelled 'Model used for embeddings'; holds the selected model."""
+        return self.page.get_by_role("combobox", name="Embeddings Model Type")
+
+    @property
+    def guided_tour_dismiss_button(self):
+        """'Maybe Later' button of the 'Guided Tour Available' dialog.
+
+        The dialog can appear on the first visit to the edit form and blocks
+        every click on the form until it is dismissed.
+        """
+        return self.page.get_by_role("button", name="Maybe Later")
 
     # -------------------------------
     # Confluence DataSource Type Elements
@@ -572,6 +600,12 @@ class CreateEditDatasourcePage(BasePage):
         return self
 
     @step
+    def clear_integration(self):
+        """Click the clear (X) icon of the integration dropdown."""
+        self.integration_clear_icon.click()
+        return self
+
+    @step
     def click_create(self):
         self.create_button.click()
         return self
@@ -606,6 +640,26 @@ class CreateEditDatasourcePage(BasePage):
         for it to re-enable confirms the update has been applied before the next step.
         """
         self.refresh_integrations_button.click()
+        expect(self.refresh_integrations_button).to_be_enabled(timeout=30000)
+        return self
+
+    @step
+    def reload_integration_settings(self):
+        """Re-fetch the integration settings and wait until the form has applied them.
+
+        The create form picks its integration options, and any auto-selection,
+        from the settings list. Clicking Refresh sends
+        GET .../v1/settings/user/available; waiting for that response and for the
+        button to re-enable gives a definite "settings loaded" point, so a check
+        made afterwards cannot run before an auto-select would have fired.
+        """
+        with self.page.expect_response(
+            lambda response: response.request.method == "GET"
+            and re.search(r"/v1/settings/user/available/?(\?|$)", response.url),
+            timeout=30000,
+        ) as response_info:
+            self.refresh_integrations_button.click()
+        assert_that(response_info.value.ok, is_(True))
         expect(self.refresh_integrations_button).to_be_enabled(timeout=30000)
         return self
 
@@ -658,13 +712,35 @@ class CreateEditDatasourcePage(BasePage):
         summarization_method: Optional[str] = None,
         embeddings_model: Optional[str] = None,
         integration: Optional[str] = None,
+        expect_empty_integration: bool = False,
     ):
         """
         Creates a Git DataSource with required and optional fields.
+
+        Args:
+            integration: Alias to pick in the integration dropdown; the pick is
+                verified to stick before the form is submitted.
+            expect_empty_integration: When True, assert the form leaves the
+                integration empty: after the integration settings have loaded,
+                the dropdown still shows its placeholder (Git is never
+                auto-selected). Cannot be combined with `integration`.
+
+        Raises:
+            ValueError: if both `integration` and `expect_empty_integration` are given.
         """
+        if integration and expect_empty_integration:
+            raise ValueError(
+                "create_git_datasource: `integration` and `expect_empty_integration=True` "
+                "contradict each other; pass only one of them"
+            )
         name = self._base_create_datasource(
             name, project_name, description, DataSourceType.GIT, shared, integration
         )
+        if integration:
+            self.should_see_selected_integration(integration)
+        if expect_empty_integration:
+            self.reload_integration_settings()
+            self.should_see_integration_left_empty()
         if repo_link:
             self.fill_repo_link(repo_link)
         if branch:
@@ -839,9 +915,39 @@ class CreateEditDatasourcePage(BasePage):
         return self
 
     @step
+    def should_see_repo_link_placeholder(self, placeholder: str):
+        """Verify the Repository Link input is visible and shows the given placeholder."""
+        expect(self.repo_link_input).to_be_visible()
+        expect(self.repo_link_input).to_have_attribute("placeholder", placeholder)
+        return self
+
+    @step
     def select_embeddings_model(self, value: str):
         self.embeddings_model_dropdown.click()
         self.dropdown_values(value).click()
+        return self
+
+    @step
+    def dismiss_guided_tour_if_shown(self):
+        """Dismiss the 'Guided Tour Available' dialog when it shows up.
+
+        The dialog appears unpredictably, so wait a bounded time for it; when it
+        never shows up there is nothing to dismiss.
+        """
+        try:
+            self.guided_tour_dismiss_button.wait_for(
+                state="visible", timeout=self.GUIDED_TOUR_WAIT_MS
+            )
+        except PlaywrightTimeoutError:
+            return self
+        self.guided_tour_dismiss_button.click()
+        expect(self.guided_tour_dismiss_button).to_be_hidden()
+        return self
+
+    @step
+    def should_see_selected_embeddings_model(self, label: str):
+        """Assert the embeddings model picker shows the given model label."""
+        expect(self.embeddings_model_combobox).to_have_value(label)
         return self
 
     # -------------------------------
@@ -1141,7 +1247,40 @@ class CreateEditDatasourcePage(BasePage):
 
     @step
     def should_see_selected_integration(self, integration: str):
-        expect(self.integration_input).to_have_text(integration)
+        """Assert the integration dropdown label shows the given alias.
+
+        The UI appends the integration scope to the alias, e.g. "<alias> (project)",
+        so the label must equal the alias optionally followed by a "(project)" or
+        "(user)" suffix. Anything else, including the placeholder or a different
+        parenthesised text, fails. Scoped to the label so the clear icon and the
+        trigger never affect the match.
+        """
+        expect(self.integration_dropdown).to_have_text(
+            re.compile(rf"^{re.escape(integration)}(\s*\((project|user)\))?$")
+        )
+        return self
+
+    @step
+    def should_see_integration_left_empty(self):
+        """Assert the Git create form holds no integration once its settings have loaded.
+
+        Call after `reload_integration_settings()`. The integration section then
+        renders either the dropdown (eligible integrations exist) or only the
+        "Add User Integration" button (none exist). Wait for one of them; when the
+        dropdown is rendered it must show its placeholder, so an auto-selected
+        alias fails here. The button-only state is empty by definition.
+        """
+        expect(
+            self.integration_input.or_(self.add_integration_button).first
+        ).to_be_visible()
+        if self.integration_input.is_visible():
+            self.should_see_integration_empty()
+        return self
+
+    @step
+    def should_see_integration_empty(self):
+        """Assert the Git form's integration dropdown shows its placeholder, not a selected alias."""
+        expect(self.integration_dropdown).to_have_text(GIT_INTEGRATION_PLACEHOLDER)
         return self
 
     @step
@@ -1278,10 +1417,7 @@ class CreateEditDatasourcePage(BasePage):
         error_dialog = self.page.locator('dialog:has-text("Repository not found")')
         expect(error_dialog).not_to_be_visible()
         # Also check for error toast notifications
-        error_toast = self.page.locator(
-            '.codemie-toast:has-text("Repository not found")'
-        )
-        expect(error_toast).not_to_be_visible()
+        self.toast.should_not_show("Repository not found")
         return self
 
     @step
@@ -1413,15 +1549,6 @@ class CreateEditDatasourcePage(BasePage):
     # -------------------------------
 
     @property
-    def optional_integration_hint(self):
-        """'Integration is optional' informational banner in IntegrationSection for Git datasource.
-
-        Uses a stable partial-text match on a unique sentence fragment so the locator
-        remains valid if the hint spans multiple DOM nodes or if surrounding copy changes.
-        """
-        return self.page.get_by_text("Integration is optional", exact=False)
-
-    @property
     def public_access_error_toast(self):
         """Error notification shown when repository is not publicly accessible.
 
@@ -1433,12 +1560,6 @@ class CreateEditDatasourcePage(BasePage):
         return self.page.get_by_role("alert").filter(
             has_text="Failed to connect to git"
         )
-
-    @step
-    def should_see_optional_integration_hint(self):
-        """Verify optional integration hint is visible on the Git datasource form."""
-        expect(self.optional_integration_hint).to_be_visible()
-        return self
 
     @step
     def should_see_public_access_error_notification(self):

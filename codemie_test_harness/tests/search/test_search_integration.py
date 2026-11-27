@@ -125,6 +125,7 @@ def pytest_generate_tests(metafunc):
 @pytest.mark.user_integration
 @pytest.mark.search
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_search_user_integration(search_utils, user_filters, user_integration_name):
     response = search_utils.list_integrations(
         setting_type=IntegrationType.USER, filters=user_filters
@@ -139,6 +140,7 @@ def test_search_user_integration(search_utils, user_filters, user_integration_na
 @pytest.mark.project_integration
 @pytest.mark.search
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_search_project_integration(
     search_utils, project_filters, project_integration_name
 ):

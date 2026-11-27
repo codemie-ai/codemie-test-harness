@@ -104,6 +104,21 @@ class IntegrationUtils(BaseUtils):
             None,
         )
 
+    def _list_all(
+        self, setting_type: IntegrationType, per_page: int = 200
+    ) -> list[Integration]:
+        """Every integration of this scope visible to the caller, read page by page."""
+        rows: list[Integration] = []
+        page = 0
+        while True:
+            chunk = self.client.integrations.list(
+                setting_type, page=page, per_page=per_page
+            )
+            rows.extend(chunk)
+            if len(chunk) < per_page:
+                return rows
+            page += 1
+
     def get_integration_by_project_and_alias(
         self, project_name: str, alias: str, setting_type: IntegrationType
     ) -> Optional[Integration]:
@@ -115,7 +130,7 @@ class IntegrationUtils(BaseUtils):
         return next(
             (
                 row
-                for row in self.client.integrations.list(setting_type, per_page=200)
+                for row in self._list_all(setting_type)
                 if row.project_name == project_name and row.alias == alias
             ),
             None,
@@ -127,7 +142,7 @@ class IntegrationUtils(BaseUtils):
         """Ids of every listed integration of this scope that belongs to the project."""
         return [
             row.id
-            for row in self.client.integrations.list(setting_type, per_page=200)
+            for row in self._list_all(setting_type)
             if row.project_name == project_name
         ]
 
@@ -234,6 +249,34 @@ class IntegrationUtils(BaseUtils):
         filters: Optional[Dict[str, Any]] = None,
     ):
         return self.client.integrations.list(setting_type, page, per_page, filters)
+
+    def list_combined(
+        self,
+        scope: Optional[str] = "all",
+        page: int = 0,
+        per_page: int = 10,
+        filters: Optional[Dict[str, Any] | str] = None,
+    ):
+        """One page of integrations across scopes, with the pagination of the whole result.
+
+        Thin wrapper around ``client.integrations.list_combined`` (GET /v1/settings).
+        ``scope=None`` sends no scope; ``filters`` may be a raw string to send a malformed value.
+        """
+        return self.client.integrations.list_combined(
+            scope=scope, page=page, per_page=per_page, filters=filters
+        )
+
+    def delete_integrations_by_alias(self, alias: str):
+        """Delete every integration of either scope this client lists under ``alias``.
+
+        Cleanup for rows a UI flow created: only the alias is known, not the scope or the id.
+        """
+        rows = self.list_combined(
+            scope="all", per_page=100, filters={"search": alias}
+        ).data
+        for row in rows:
+            if row.alias == alias:
+                self.delete_integration_if_exists(row)
 
     def transfer_settings(
         self,

@@ -22,14 +22,21 @@ SDK does not cover; the first goes through the repo's ``RequestHandler``, the se
 returns the raw response.
 """
 
+import time
 from dataclasses import dataclass
 from typing import Callable, List, Optional
 
 import requests
 from codemie_sdk import CodeMieClient
-from codemie_sdk.models.assistant import Assistant, AssistantUpdateRequest
+from codemie_sdk.models.assistant import (
+    Assistant,
+    AssistantUpdateRequest,
+    SubAssistantPublishSettings,
+)
 from codemie_sdk.models.marketplace_management import (
     MarketplaceAssistantsResponse,
+    MarketplaceAuditStatus,
+    MarketplaceCleanupResponse,
     MarketplaceForcePublishResponse,
     MarketplaceOverview,
     MarketplacePendingResponse,
@@ -48,9 +55,18 @@ from codemie_test_harness.tests.utils.assistant_utils import AssistantUtils
 from codemie_test_harness.tests.utils.base_utils import BaseUtils, poll_until
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.http_utils import RequestHandler
+from codemie_test_harness.tests.utils.logger_util import setup_logger
+
+logger = setup_logger(__name__)
 
 _BASE_PATH = "/v1/marketplace-management/entities"
 PAGE_SIZE = 100
+CLEANUP_PAGE_SIZE = 200
+# A full audit takes minutes and has no server-side timeout; the admin UI polls it for up to 30 minutes.
+AUDIT_TIMEOUT = 1800.0
+AUDIT_POLL_INTERVAL = 5.0
+AUDIT_START_ATTEMPTS = 3
+HTTP_CONFLICT = 409
 CONFIG_PATH = "/v1/marketplace-management/entities/assistants/config"
 CORE_GATES_COMPONENT_ID = "marketplaceCoreGates"
 # Fields of the gates section of the audit config. The PUT body is not partial: it
@@ -200,6 +216,71 @@ class MarketplaceManagementUtils(BaseUtils):
             lambda page: self.get_marketplace_assistants(status=status, page=page)
         )
 
+    # ---- cleanup list and audit run ----------------------------------------
+
+    def get_cleanup(self, **filters) -> MarketplaceCleanupResponse:
+        """One page of the Cleanup list (the SDK defaults apply to what ``filters`` leaves out)."""
+        return self._service.list_cleanup(**filters)
+
+    def list_all_cleanup(self, **filters) -> list:
+        """Every row of the Cleanup list over all pages; ``total`` counts the whole filtered set."""
+        items: list = []
+        page = 1
+        while True:
+            result = self._service.list_cleanup(
+                page=page, page_size=CLEANUP_PAGE_SIZE, **filters
+            )
+            items.extend(result.items)
+            if page * result.page_size >= result.total or not result.items:
+                return items
+            page += 1
+
+    def wait_for_audit(
+        self, timeout: float = AUDIT_TIMEOUT, run_id: Optional[str] = None
+    ) -> MarketplaceAuditStatus:
+        """Audit status, re-read until no run is active or the timeout ends; the last read is returned.
+
+        With ``run_id`` the wait is for that run: a read still showing an earlier finished run
+        does not count, because a run just started may not be marked running yet.
+        """
+        return poll_until(
+            self._service.get_audit_status,
+            lambda status: not status.is_running
+            and (run_id is None or status.run_id == run_id),
+            timeout=timeout,
+            interval=AUDIT_POLL_INTERVAL,
+        )
+
+    def run_audit(self, timeout: float = AUDIT_TIMEOUT) -> MarketplaceAuditStatus:
+        """Run an audit that starts after this call and return the status it ended with.
+
+        One run is active per deployment, so a start answered with 409 means another run is
+        in flight. That run may have begun before the caller's data existed, so it is waited
+        out and a fresh run is started instead of being reused. ``timeout`` is one budget for
+        all attempts, and the last attempt does not wait for a run it cannot follow. The status
+        is returned without judging it: a caller asserts ``is_running``, ``status`` and ``error``.
+        """
+        deadline = time.monotonic() + timeout
+        for attempt in range(AUDIT_START_ATTEMPTS):
+            try:
+                started = self._service.start_audit()
+            except requests.HTTPError as error:
+                if (
+                    error.response is None
+                    or error.response.status_code != HTTP_CONFLICT
+                ):
+                    raise
+                if attempt < AUDIT_START_ATTEMPTS - 1:
+                    self.wait_for_audit(max(deadline - time.monotonic(), 0.0))
+                continue
+            return self.wait_for_audit(
+                max(deadline - time.monotonic(), 0.0), run_id=started.run_id
+            )
+        raise RuntimeError(
+            f"an audit could not be started in {AUDIT_START_ATTEMPTS} attempts: "
+            "another run was active every time"
+        )
+
     # ---- decisions ---------------------------------------------------------
 
     def approve(
@@ -266,6 +347,7 @@ class MarketplaceManagementUtils(BaseUtils):
         ignore_recommendations: bool = True,
         force_publish: bool = False,
         override_notice: Optional[str] = None,
+        sub_assistants_settings: Optional[List[SubAssistantPublishSettings]] = None,
     ) -> dict:
         return self.client.assistants.publish(
             assistant_id,
@@ -273,6 +355,7 @@ class MarketplaceManagementUtils(BaseUtils):
             ignore_recommendations=ignore_recommendations,
             force_publish=force_publish,
             override_notice=override_notice,
+            sub_assistants_settings=sub_assistants_settings,
         )
 
     # ---- dispatch by endpoint name -----------------------------------------
@@ -332,6 +415,23 @@ def personal_project_of(user) -> Optional[str]:
     return next((p.name for p in user.projects or [] if p.is_default), None)
 
 
+def delete_submitter_assistant(
+    submitter: "MarketplaceSubmitter", admin_client: CodeMieClient, assistant_id: str
+) -> None:
+    """Delete an assistant of the submitter in any review state (pending, rejected, approved).
+
+    The owner deletes it; the admin client is the fallback. A failure of both is logged as
+    an error, because the assistant is then left behind.
+    """
+    try:
+        submitter.assistant_utils.delete_assistant_by_id(assistant_id)
+    except Exception:
+        try:
+            admin_client.assistants.delete(assistant_id)
+        except Exception as e:
+            logger.error(f"Failed to delete assistant {assistant_id}: {e}")
+
+
 class MarketplaceSubmitter:
     """A plain (non-admin) user who owns assistants and submits them to the marketplace."""
 
@@ -365,6 +465,7 @@ class MarketplaceSubmitter:
             categories=submission.categories,
             conversation_starters=submission.conversation_starters,
             project_name=self.project,
+            mcp_servers=submission.mcp_servers,
         )
         return SubmittedAssistant(
             id=created.id,

@@ -42,6 +42,9 @@ from codemie_test_harness.tests.ui.test_data.datasource_test_data import DataSou
 from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestDataFactory,
 )
+from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    SAVED_TOAST,
+)
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 
 # Alias pattern: type-YYYY-MM-DD_HH-MM  (e.g., git-2026-06-01_16-45)
@@ -80,6 +83,7 @@ def _alias_datetime_within_tolerance(
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_alias_auto_generation_happy_path(page):
     """
     TC-001: Alias auto-generation happy path.
@@ -136,9 +140,8 @@ def test_alias_auto_generation_happy_path(page):
     create_integration_page.create_integration()
 
     # Assert — Integration appears in the list under the auto-generated alias
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
-    ).should_be_on_integrations_page().should_see_specific_integration(
+    integrations_page.toast.should_show_success(SAVED_TOAST)
+    integrations_page.should_be_on_integrations_page().should_see_specific_integration(
         auto_generated_alias
     )
 
@@ -147,6 +150,7 @@ def test_alias_auto_generation_happy_path(page):
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_manual_alias_override_retained(page):
     """
     TC-002 Part A: Manual alias override is retained after submission.
@@ -183,9 +187,10 @@ def test_manual_alias_override_retained(page):
     create_integration_page.create_integration()
 
     # Assert — Integration saved with the custom alias
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
-    ).should_be_on_integrations_page().should_see_specific_integration(custom_alias)
+    integrations_page.toast.should_show_success(SAVED_TOAST)
+    integrations_page.should_be_on_integrations_page().should_see_specific_integration(
+        custom_alias
+    )
 
 
 @pytest.mark.sanity

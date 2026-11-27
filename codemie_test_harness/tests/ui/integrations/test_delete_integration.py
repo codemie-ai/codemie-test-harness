@@ -33,6 +33,10 @@ from codemie_test_harness.tests.ui.pageobject.components.delete_confirmation_dia
 from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestDataFactory,
 )
+from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    DELETED_TOAST,
+    SAVED_TOAST,
+)
 
 
 @pytest.mark.smoke
@@ -40,6 +44,7 @@ from codemie_test_harness.tests.ui.test_data.integration_test_data import (
 @pytest.mark.integration
 @pytest.mark.ui
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_delete_integration_with_confirmation(page: Page):
     """
     Test deleting an integration with confirmation dialog.
@@ -74,10 +79,8 @@ def test_delete_integration_with_confirmation(page: Page):
 
     # Wait for integration to be created
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_created"]
-    )
-    integrations_page.should_not_see_message()
+    integrations_page.toast.should_show_success(SAVED_TOAST)
+    integrations_page.toast.should_disappear()
 
     # Act - Delete the integration
     integration_row = integrations_page.get_integration_row_by_alias(
@@ -93,9 +96,7 @@ def test_delete_integration_with_confirmation(page: Page):
 
     # Assert - Verify deletion success
     integrations_page.wait_for_page_load()
-    integrations_page.should_see_message(
-        IntegrationTestDataFactory.success_messages["integration_deleted"]
-    )
+    integrations_page.toast.should_show(DELETED_TOAST)
 
     # Verify integration is no longer in the list
     integrations_page.should_not_see_integration(integration_test_data.alias)

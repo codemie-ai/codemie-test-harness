@@ -26,6 +26,9 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.integrations.integrations_list_page import (
+    labelled,
+)
 from codemie_test_harness.tests.ui.test_data.integration_test_data import (
     IntegrationTestData,
 )
@@ -41,7 +44,7 @@ class CreateIntegrationPage(BasePage):
     # Header elements
     @property
     def page_title(self) -> Locator:
-        """Page title element showing 'New User Integration'."""
+        """Page title element showing 'New Integration'."""
         return self.page.locator("h1.text-lg")
 
     @property
@@ -650,19 +653,6 @@ class CreateIntegrationPage(BasePage):
         return self
 
     @step
-    def should_see_creation_success(self):
-        """Assert the integration creation success toast is visible with success content.
-
-        Checks both visibility and that the toast header contains the expected
-        success text, distinguishing it from an error toast that shares the same
-        CSS selector structure.
-        """
-        toast_header = self.page.locator(".codemie-toast .codemie-toast-header")
-        expect(toast_header).to_be_visible(timeout=10000)
-        expect(toast_header).to_contain_text("successfully", ignore_case=True)
-        return self
-
-    @step
     def fill_gitlab_webhook_token(self, token: str):
         """Fill the GitLab Webhook Secret Token field."""
         self.expand_gitlab_settings_accordion()
@@ -823,17 +813,6 @@ class CreateIntegrationPage(BasePage):
     def all_inline_validation_messages(self) -> Locator:
         """All inline validation error messages."""
         return self.page.locator(".input-error-message")
-
-    # Toast notification elements
-    @property
-    def error_toast_header(self) -> Locator:
-        """Error toast notification header."""
-        return self.page.locator(".codemie-toast-err .codemie-toast-header")
-
-    @property
-    def error_toast_content(self) -> Locator:
-        """Error toast notification content message."""
-        return self.page.locator(".codemie-toast-err .codemie-toast-content")
 
     # Navigation methods
     @step
@@ -1564,14 +1543,21 @@ class CreateIntegrationPage(BasePage):
     def should_be_on_create_user_integration_page(self):
         """Verify that the user is on the create user integration page."""
         expect(self.page).to_have_url("/integrations/user/new")
-        expect(self.page_title).to_have_text("New User Integration")
+        expect(self.page_title).to_have_text("New Integration")
         return self
 
     @step
     def should_be_on_create_project_integration_page(self):
         """Verify that the user is on the create project integration page."""
         expect(self.page).to_have_url("/integrations/project/new")
-        expect(self.page_title).to_have_text("New Project Integration")
+        expect(self.page_title).to_have_text("New Integration")
+        return self
+
+    @step
+    def should_be_on_new_integration_form(self):
+        """Verify that the user is on the New Integration form opened from the list's button."""
+        expect(self.page).to_have_url(re.compile(r"/integrations/new(\?|$)"))
+        expect(self.page_title).to_have_text("New Integration")
         return self
 
     @step
@@ -1656,10 +1642,7 @@ class CreateIntegrationPage(BasePage):
             header (str): Expected toast header text
             content (str): Expected toast content message
         """
-        expect(self.error_toast_header).to_be_visible()
-        expect(self.error_toast_header).to_have_text(header)
-        expect(self.error_toast_content).to_be_visible()
-        expect(self.error_toast_content).to_contain_text(content)
+        self.toast.should_show_error(header, content)
         return self
 
     @step
@@ -1703,8 +1686,36 @@ class CreateIntegrationPage(BasePage):
 
     @step
     def should_see_dropdown_option(self, selection):
-        option = self.page.get_by_role("option", name=selection, exact=True)
+        """The open Credential Type list offers the type, matched by its label text.
+
+        An option may carry a scope badge ('User only') and a hint ('Switches Scope to User')
+        next to the label, so its accessible name is longer than the label.
+        """
+        expect(self._credential_type_option(selection)).to_be_visible()
+
+    def _credential_type_option(self, label: str) -> Locator:
+        """Option of the open Credential Type list whose label is the given text."""
+        return labelled(self.page.get_by_role("option"), label)
+
+    @step
+    def should_see_dropdown_option_badge(self, label: str, badge: str):
+        """The option shows the scope badge next to its label."""
+        expect(self._credential_type_option(label)).to_contain_text(badge)
+        return self
+
+    @step
+    def should_see_dropdown_option_hint(self, label: str, hint: str):
+        """The option shows the hint next to its label."""
+        expect(self._credential_type_option(label)).to_contain_text(hint)
+        return self
+
+    @step
+    def should_not_see_dropdown_option_hint(self, label: str, hint: str):
+        """The option shows no such hint: it does not change the form's Scope."""
+        option = self._credential_type_option(label)
         expect(option).to_be_visible()
+        expect(option).not_to_contain_text(hint)
+        return self
 
     # ====================
     # TEST CONNECTION METHODS
@@ -1767,18 +1778,13 @@ class CreateIntegrationPage(BasePage):
     @step
     def should_see_test_connection_success(self):
         """Verify that test connection was successful."""
-        # Look for success toast message - success toasts use the generic codemie-toast class
-        # with codemie-toast-header child (similar pattern to assistants_page.py line 120)
-        success_message = self.page.locator(".codemie-toast .codemie-toast-header")
-        expect(success_message).to_be_visible(timeout=15000)
+        self.toast.should_show_any(timeout=15000)
         return self
 
     @step
     def should_see_test_connection_failure(self):
         """Verify that test connection failed with error message."""
-        # Look for error toast message or error indicator
-        error_message = self.page.locator(".codemie-toast-err")
-        expect(error_message).to_be_visible(timeout=15000)
+        expect(self.toast.error).to_be_visible(timeout=15000)
         return self
 
     @step
@@ -1789,7 +1795,7 @@ class CreateIntegrationPage(BasePage):
         Returns:
             str: Error message text
         """
-        error_message = self.page.locator(".codemie-toast-err")
+        error_message = self.toast.error
         error_message.wait_for(state="visible", timeout=15000)
         return error_message.text_content().strip()
 
@@ -1804,7 +1810,7 @@ class CreateIntegrationPage(BasePage):
         Returns:
             self: For method chaining
         """
-        error_message = self.page.locator(".codemie-toast-err")
+        error_message = self.toast.error
         error_message.wait_for(state="visible", timeout=15000)
 
         # Verify error message is not empty

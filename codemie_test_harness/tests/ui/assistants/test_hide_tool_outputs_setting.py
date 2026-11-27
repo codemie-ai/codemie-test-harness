@@ -42,23 +42,6 @@ from codemie_test_harness.tests.ui.test_data.hide_tool_outputs_test_data import 
     HIDE_TOOL_OUTPUTS_ENABLED_NOTE,
     HIDE_TOOL_OUTPUTS_HINT,
 )
-from codemie_test_harness.tests.utils.logger_util import setup_logger
-
-logger = setup_logger(__name__)
-
-
-@pytest.fixture
-def ui_created_assistant_names(assistant_utils):
-    """Names of assistants created through the UI form; deleted on teardown."""
-    names = []
-    yield names
-    for name in names:
-        try:
-            assistant_utils.delete_assistant(
-                assistant_utils.get_assistant_by_name(name)
-            )
-        except Exception as e:
-            logger.warning(f"Failed to delete UI-created assistant {name}: {e}")
 
 
 @pytest.mark.assistant

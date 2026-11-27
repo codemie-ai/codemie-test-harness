@@ -23,6 +23,10 @@ from reportportal_client import step
 from codemie_test_harness.tests.ui.pageobject.components.expanded_yaml_dialog import (
     ExpandedYamlDialog,
 )
+from codemie_test_harness.tests.ui.pageobject.components.headroom_settings import (
+    HeadroomSettings,
+)
+from codemie_test_harness.tests.ui.pageobject.components.toast import Toast
 from codemie_test_harness.tests.ui.pageobject.workflows.workflow_version_history_popup import (
     WorkflowVersionHistoryPopup,
 )
@@ -112,6 +116,33 @@ class WorkflowConfigPanel:
     def icon_url_input(self) -> Locator:
         """Icon URL input field."""
         return self.page.get_by_role("textbox", name="Icon URL")
+
+    # ------ Icon Upload Elements (in Basic Tab) ------
+    @property
+    def icon_upload_button(self) -> Locator:
+        """The 'Upload logo' button that opens the icon file chooser.
+
+        The round avatar next to it is a second control labelled 'Upload image' while the icon is
+        empty; the text button is the one present in both states, so it is the one targeted.
+        """
+        return self.config_panel.get_by_role("button", name="Upload logo", exact=True)
+
+    @property
+    def icon_delete_button(self) -> Locator:
+        """Removes the icon from the field."""
+        return self.config_panel.get_by_role("button", name="Delete logo")
+
+    @property
+    def icon_preview(self) -> Locator:
+        """Preview image of the chosen icon."""
+        return self.config_panel.get_by_alt_text("Preview", exact=True)
+
+    @property
+    def icon_hint(self) -> Locator:
+        """Upload limits hint under the icon input."""
+        return self.config_panel.get_by_text(
+            "Must be PNG, JPEG or SVG and max size 512kb"
+        )
 
     # ------ Categories Field Elements (in Basic Tab) ------
     @property
@@ -213,6 +244,26 @@ class WorkflowConfigPanel:
         """Edit mode tab in YAML editor (previously named 'Edit Current Version')."""
         return self.page.get_by_role("tab", name="Edit mode")
 
+    # ------ Headroom Elements (in Advanced Tab) ------
+    @property
+    def headroom_accordion(self) -> Locator:
+        """'Context compression (Headroom)' accordion button; collapsed by default."""
+        return self.config_panel.get_by_role(
+            "button", name=re.compile(r"Context compression \(Headroom\)")
+        )
+
+    @property
+    def headroom_region(self) -> Locator:
+        """Region the expanded Headroom accordion shows (switch, checkboxes, Strategy)."""
+        return self.config_panel.get_by_role(
+            "region", name="Context compression (Headroom)"
+        )
+
+    @property
+    def headroom(self) -> HeadroomSettings:
+        """Workflow-level Headroom controls."""
+        return HeadroomSettings(self.page, self.headroom_region)
+
     # ------ Footer Buttons (in Config Panel) ------
     @property
     def save_button(self) -> Locator:
@@ -298,10 +349,9 @@ class WorkflowConfigPanel:
         self.project_dropdown.press("Enter")
         self.page.get_by_role("listbox").wait_for(state="visible")
         self.page.keyboard.type(project_name)
-        self.page.get_by_role("option").filter(has_text=project_name).first.wait_for(
-            state="visible"
-        )
-        self.page.get_by_role("option").filter(has_text=project_name).first.click()
+        option = self.page.get_by_role("option", name=project_name, exact=True)
+        option.wait_for(state="visible")
+        option.click()
 
     # ------ Shared Switch Actions ------
     @step
@@ -334,6 +384,18 @@ class WorkflowConfigPanel:
     def fill_icon_url(self, icon_url: str):
         """Fill the icon URL field."""
         self.icon_url_input.fill(icon_url)
+
+    @step
+    def upload_icon(self, file_path):
+        """Choose an icon file through the file chooser of the icon upload button."""
+        with self.page.expect_file_chooser() as chooser_info:
+            self.icon_upload_button.click()
+        chooser_info.value.set_files(str(file_path))
+
+    @step
+    def remove_icon(self):
+        """Remove the icon with the 'Delete logo' button."""
+        self.icon_delete_button.click()
 
     # ------ Categories Actions ------
     @step
@@ -487,6 +549,25 @@ class WorkflowConfigPanel:
         popup.wait_for_visible()
         return popup
 
+    # ------ Headroom Actions ------
+    @step
+    def open_headroom_settings(self) -> HeadroomSettings:
+        """Open the Advanced tab, expand the Headroom accordion and return its controls."""
+        self.switch_to_advanced_tab()
+        expect(self.headroom_accordion).to_be_visible()
+        if self.headroom_accordion.get_attribute("aria-expanded") != "true":
+            self.headroom_accordion.click()
+        expect(self.headroom_accordion).to_have_attribute("aria-expanded", "true")
+        self.headroom.should_be_visible()
+        return self.headroom
+
+    @step
+    def save_configuration(self):
+        """Save the panel and wait for its confirmation; the panel closes."""
+        self.save_button.click()
+        Toast(self.page).should_show("Workflow configuration has been saved", ("info",))
+        self.wait_for_closed()
+
     # ------ Footer Button Actions ------
     @step
     def click_save(self):
@@ -556,6 +637,33 @@ class WorkflowConfigPanel:
     def should_have_icon_url_field_value(self, expected_value: str):
         """Verify that the icon URL field has the expected value."""
         expect(self.icon_url_input).to_have_value(expected_value)
+
+    @step
+    def should_show_icon_preview(self):
+        """Verify the chosen icon is previewed."""
+        expect(self.icon_preview).to_be_visible()
+
+    @step
+    def should_not_show_icon_preview(self):
+        """Verify no icon preview is shown."""
+        expect(self.icon_preview).to_have_count(0)
+
+    @step
+    def should_have_uploaded_icon_name(self, extension: str):
+        """Verify the icon field holds the server-generated file name with the extension."""
+        expect(self.icon_url_input).to_have_value(
+            re.compile(rf"^[0-9a-f]{{32}}\.{extension}$")
+        )
+
+    @step
+    def should_have_icon_hint(self):
+        """Verify the icon input shows the PNG, JPEG, SVG and 512 KB limits."""
+        expect(self.icon_hint).to_be_visible()
+
+    @step
+    def should_show_icon_error(self, message: str):
+        """Verify an icon upload error message is shown (inline or in a toast)."""
+        expect(self.page.get_by_text(message).first).to_be_visible()
 
     @step
     def should_have_empty_icon_url_field(self):

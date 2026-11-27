@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from codemie_test_harness.tests.ui.pageobject.components.toast import ALL_VARIANTS
 from codemie_test_harness.tests.ui.pageobject.assistants.assistant_view_page import (
     AssistantViewPage,
 )
@@ -184,11 +185,6 @@ class AssistantsPage(BasePage):
         return self.publish_confirmation_dialog.get_by_text(
             "Already on Marketplace, no action needed"
         )
-
-    @property
-    def updating_successful_popup(self):
-        """Updating successful popup."""
-        return self.page.locator(".codemie-toast .codemie-toast-header")
 
     # Navigation methods
     @step
@@ -431,8 +427,7 @@ class AssistantsPage(BasePage):
     @step
     def should_see_updating_popup(self, text: str):
         """Verify that an update popup is visible."""
-        expect(self.updating_successful_popup).to_be_visible()
-        expect(self.updating_successful_popup).to_have_text(text)
+        self.toast.should_show(text, ALL_VARIANTS, exact=True)
         return self
 
     @step

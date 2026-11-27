@@ -488,7 +488,7 @@ def build_command(nodeids, workers, reruns, flags, shell):
     args = ["pytest"]
     n = min(workers, len(nodeids))
     if n > 1:
-        args += ["-n", str(n)]
+        args += ["-n", str(n), "--dist=loadgroup"]
     if reruns:
         args += ["--reruns", str(reruns)]
     args += flags
@@ -673,7 +673,7 @@ def cmd_run(a):
     for b in plan["batches"]:
         args = [pytest_exe]
         if b["workers"] > 1:
-            args += ["-n", str(b["workers"])]
+            args += ["-n", str(b["workers"]), "--dist=loadgroup"]
         if b["reruns"]:
             args += ["--reruns", str(b["reruns"])]
         args += b["flags"] + ["-v", "-rfE", f"--junitxml={b['junit']}"]

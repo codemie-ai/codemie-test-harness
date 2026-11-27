@@ -37,6 +37,7 @@ class Toolkit(str, Enum):
     REPORT_PORTAL = "Report Portal"
     AGENT_WORKSPACE = "AgentWorkspace"
     XWIKI = "XWiki"
+    PLATFORM_TOOLS = "Platform Tools"
 
 
 class GitTool(str, Enum):
@@ -368,6 +369,12 @@ class McpServerPuppeteer(str, Enum):
     PUPPETEER_SELECT = "puppeteer_select"
     PUPPETEER_HOVER = "puppeteer_hover"
     PUPPETEER_EVALUATE = "puppeteer_evaluate"
+
+
+class PlatformTool(str, Enum):
+    """Enum for Platform Tools tool names."""
+
+    GET_ASSISTANTS = "get_assistants"
 
 
 class BuiltinSubagentTool(str, Enum):

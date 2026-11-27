@@ -60,6 +60,12 @@ from codemie_test_harness.tests.ui.pageobject.integrations.create_integration_pa
 from codemie_test_harness.tests.ui.pageobject.integrations.edit_integration_page import (
     EditIntegrationPage,
 )
+from codemie_test_harness.tests.ui.pageobject.integrations.integrations_page import (
+    IntegrationsPage,
+)
+from codemie_test_harness.tests.ui.test_data.unified_integrations_ui_test_data import (
+    SAVED_TOAST,
+)
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.env_resolver import EnvironmentResolver
 
@@ -137,7 +143,8 @@ def test_scheduler_form_shows_timezone_field_and_allows_selection(
     create_page.create_integration()
 
     # Assert — success toast confirms creation
-    create_page.should_see_creation_success()
+    integrations_page = IntegrationsPage(page)
+    integrations_page.toast.should_show_success(SAVED_TOAST)
 
 
 @pytest.mark.integration
@@ -195,6 +202,7 @@ def test_scheduler_edit_page_displays_saved_timezone(
 @pytest.mark.ui
 @pytest.mark.parametrize("tz, expected_label", _TIMEZONE_OFFSET_CASES)
 @pytest.mark.prod_regression
+@pytest.mark.oss_standalone
 def test_scheduler_timezone_dropdown_option_shows_utc_offset(
     page: Page,
     tz: str,

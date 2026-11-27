@@ -19,7 +19,7 @@ Covers:
           offered a Create Budget control
 
 The maintainer (and the personal project named after their email) is created by the
-`maintainer_credentials` fixture; the browser logs in as that maintainer.
+`maintainer_user` fixture; the browser logs in as that maintainer.
 """
 
 import pytest
@@ -34,6 +34,7 @@ from codemie_test_harness.tests.ui.pageobject.administration.project_management_
 
 @pytest.mark.ui
 @pytest.mark.project
+@pytest.mark.budget
 @pytest.mark.parametrize("acting_credentials", ["maintainer"], indirect=True)
 def test_maintainer_personal_project_has_no_create_budget_button(
     page, acting_credentials

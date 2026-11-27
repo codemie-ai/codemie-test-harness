@@ -16,9 +16,10 @@
 
 PUT /v1/settings/project/{id} and PUT /v1/settings/user/{id} move the integration to the
 ``project_name`` of the request while keeping its id. Covers TC_002, TC_003, TC_004, TC_006
-and TC_007.
+and TC_007, plus the refusal to move a subsystem-managed row.
 """
 
+import time
 from typing import List, Optional
 
 import pytest
@@ -43,8 +44,16 @@ from codemie_test_harness.tests.test_data.integration_project_change_test_data i
     ACCESS_DENIED_DETAILS,
     ALIAS_COLLISION_DETAILS,
     INTEGRATION_UPDATED_MESSAGE,
+    MANAGED_ALIAS_DETAILS,
+    NOT_OWNER_ACCESS_DENIED_MESSAGE,
+    NOT_OWNER_UPDATE_DETAILS,
+    RESERVED_IDENTIFIERS_MESSAGE,
+    SCHEDULE_MANAGED_ALIAS,
     git_datasource_source,
+    non_owner_caller_test_data,
     project_change_scope_test_data,
+    project_managed_alias_test_data,
+    user_managed_alias_test_data,
 )
 from codemie_test_harness.tests.utils.base_utils import (
     assert_error_details,
@@ -53,6 +62,7 @@ from codemie_test_harness.tests.utils.base_utils import (
 )
 from codemie_test_harness.tests.utils.credentials_manager import CredentialsManager
 from codemie_test_harness.tests.utils.integration_utils import IntegrationUtils
+from codemie_test_harness.tests.utils.logger_util import expected_http_errors
 
 
 def _integration_request(
@@ -153,6 +163,7 @@ def create_code_datasource_in_project(datasource_utils, default_embedding_llm):
 @pytest.mark.project_integration
 @pytest.mark.api
 @pytest.mark.parametrize("setting_type", project_change_scope_test_data)
+@pytest.mark.oss_standalone
 def test_change_integration_project_moves_integration_keeping_id(
     project, integration_utils, create_integration_in_project, setting_type
 ):
@@ -184,14 +195,14 @@ def test_change_integration_project_moves_integration_keeping_id(
 
 
 @pytest.fixture
-def source_project_admin_member(project, user_utils, non_admin_user):
+def source_project_admin_member(project, user_utils, platform_user):
     """Plain user (no platform role) who is admin of a fresh source project but not of a fresh target.
 
     The project integration is created by the platform admin, so the user owns nothing: the
     backend lets them update it only because they are admin of its (source) project
     (``ProjectSetting.is_managed_by``). They hold no membership at all in the target project.
     """
-    _, member_id, member_client = non_admin_user
+    member_id, member_client = platform_user.user_id, platform_user.client
     source = project()
     target = project()
     user_utils.assign_user_to_project(member_id, source.name, is_project_admin=True)
@@ -221,6 +232,7 @@ def integration_visible_to_source_admin_member(
 @pytest.mark.integration
 @pytest.mark.project_integration
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_change_integration_project_denied_without_target_project_admin(
     integration_utils, integration_visible_to_source_admin_member
 ):
@@ -228,7 +240,7 @@ def test_change_integration_project_denied_without_target_project_admin(
     """A caller who is admin of the source but not of the target project gets 403; the integration stays put."""
     source, target, member_utils, created = integration_visible_to_source_admin_member
 
-    with pytest.raises(HTTPError) as exc_info:
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
         member_utils.update_integration(
             _integration_request(
                 target.name,
@@ -262,6 +274,7 @@ def test_change_integration_project_denied_without_target_project_admin(
 @pytest.mark.integration
 @pytest.mark.project_integration
 @pytest.mark.api
+@pytest.mark.oss_standalone
 def test_change_integration_project_rejected_on_alias_collision(
     project, integration_utils, create_integration_in_project
 ):
@@ -425,4 +438,364 @@ def test_change_integration_project_unlinks_source_project_datasources(
         datasource_utils.get_datasource(datasource.id).setting_id,
         any_of(none(), equal_to("")),
         "Datasource left in the source project still references the moved integration.",
+    )
+
+
+@pytest.fixture
+def owner_project(project, user_utils, platform_user):
+    """Fresh project whose only plain member is ``platform_user``, the owner of the personal integration."""
+    created = project()
+    user_utils.assign_user_to_project(platform_user.user_id, created.name)
+    return created
+
+
+def _wait_until_member_sees_project(
+    member_utils, project_name, create_integration_in_project
+):
+    """Wait until the member's role in the project is effective on the backend.
+
+    The role change reaches the backend through a cache, so a project integration created by
+    the platform admin must be listed for the member before the test acts as that member.
+    """
+    anchor = create_integration_in_project(project_name)
+    wait_for_entity(
+        lambda: member_utils.list_integrations(IntegrationType.PROJECT, per_page=200),
+        entity_name=anchor.alias,
+        timeout=60,
+    )
+
+
+def _create_as_member_once_effective(create, timeout=60, interval=3):
+    """Run ``create`` until the backend accepts it, i.e. until the member's role is effective.
+
+    A plain member cannot list project integrations, so there is nothing to poll for them; their
+    own create call is the access check. Only 403/404 mean the access is not effective yet and are
+    retried; any other status is a real defect and propagates at once. ``create`` must reuse one
+    alias across attempts, so a row created before a failed follow-up lookup is never duplicated.
+    The last rejection is raised when the timeout elapses.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            with expected_http_errors():
+                return create()
+        except HTTPError as error:
+            status = error.response.status_code if error.response is not None else None
+            if status not in (403, 404) or time.monotonic() >= deadline:
+                raise
+            time.sleep(interval)
+
+
+@pytest.fixture
+def owner_personal_integration(
+    owner_project, platform_user, integration_utils, create_integration_in_project
+):
+    """Personal (USER-type) integration that ``platform_user`` created in ``owner_project``.
+
+    The factory records the row as USER, which is wrong once the owner converts it to PROJECT, so
+    this fixture deletes the row by the type it has at teardown, tolerating it being gone.
+    """
+    owner_utils = IntegrationUtils(platform_user.client)
+    alias = get_random_name()
+    created = _create_as_member_once_effective(
+        lambda: create_integration_in_project(
+            owner_project.name,
+            alias=alias,
+            setting_type=IntegrationType.USER,
+            utils=owner_utils,
+        )
+    )
+    yield owner_utils, created
+
+    try:
+        if created.id in integration_utils.list_integration_ids_in_project(
+            owner_project.name, IntegrationType.PROJECT
+        ):
+            integration_utils.delete_integration_by_id(
+                created.id, IntegrationType.PROJECT
+            )
+        else:
+            owner_utils.delete_integration_by_id(created.id, IntegrationType.USER)
+    except HTTPError as error:
+        if error.response is None or error.response.status_code != 404:
+            raise
+
+
+@pytest.fixture
+def project_admin_non_owner_utils(
+    owner_project, second_platform_user, user_utils, create_integration_in_project
+):
+    """Client of a plain user who is admin of ``owner_project`` but not the integration owner."""
+    user_utils.assign_user_to_project(
+        second_platform_user.user_id, owner_project.name, is_project_admin=True
+    )
+    member_utils = IntegrationUtils(second_platform_user.client)
+    _wait_until_member_sees_project(
+        member_utils, owner_project.name, create_integration_in_project
+    )
+    return member_utils
+
+
+@pytest.fixture
+def platform_admin_non_owner_utils(admin_user):
+    """Client of a platform admin who is not the integration owner."""
+    return IntegrationUtils(admin_user.client)
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.parametrize("non_owner_fixture", non_owner_caller_test_data)
+@pytest.mark.api
+def test_convert_personal_integration_to_project_denied_for_non_owner_allowed_for_owner(
+    request,
+    integration_utils,
+    owner_project,
+    owner_personal_integration,
+    non_owner_fixture,
+):
+    # @case personal-integration-conversion-owner-only_TC_001
+    # Denial and owner success stay in one test on purpose: the owner step relies on the denied state.
+    """A non-owner gets 403 'Access denied' and the integration stays personal; the owner converts it."""
+    non_owner_utils = request.getfixturevalue(non_owner_fixture)
+    owner_utils, personal = owner_personal_integration
+
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
+        non_owner_utils.update_integration(
+            _integration_request(
+                owner_project.name,
+                personal.alias,
+                IntegrationType.PROJECT,
+                personal.id,
+            )
+        )
+
+    assert_error_details(
+        exc_info.value.response,
+        403,
+        NOT_OWNER_ACCESS_DENIED_MESSAGE,
+        field="message",
+    )
+    assert_error_details(exc_info.value.response, 403, NOT_OWNER_UPDATE_DETAILS)
+    unchanged = owner_utils.get_integration_by_id(personal.id, IntegrationType.USER)
+    assert_that(
+        unchanged,
+        not_none(),
+        "Personal integration disappeared after the denied conversion.",
+    )
+    assert_that(
+        unchanged.project_name,
+        equal_to(owner_project.name),
+        "Personal integration changed project after the denied conversion.",
+    )
+    assert_that(
+        integration_utils.list_integration_ids_in_project(
+            owner_project.name, IntegrationType.PROJECT
+        ),
+        is_not(has_item(personal.id)),
+        "Personal integration became a project integration despite the non-owner caller.",
+    )
+
+    response = owner_utils.update_integration(
+        _integration_request(
+            owner_project.name,
+            personal.alias,
+            IntegrationType.PROJECT,
+            personal.id,
+        )
+    )
+
+    assert_that(
+        response["message"],
+        equal_to(INTEGRATION_UPDATED_MESSAGE),
+        "Owner conversion response message is not as expected.",
+    )
+    assert_that(
+        integration_utils.list_integration_ids_in_project(
+            owner_project.name, IntegrationType.PROJECT
+        ),
+        has_item(personal.id),
+        "Integration is not a project integration after the owner converted it.",
+    )
+
+
+def _assert_managed_move_refused(
+    response, integration_utils, setting_type, created, source, target, alias
+):
+    """The move got 422 'Reserved integration identifiers' naming ``alias``; the row stayed in its source project."""
+    assert_error_details(
+        response,
+        422,
+        RESERVED_IDENTIFIERS_MESSAGE,
+        field="message",
+    )
+    assert_error_details(response, 422, f"{MANAGED_ALIAS_DETAILS} {alias}")
+    stayed = integration_utils.get_integration_by_project_and_alias(
+        source.name, alias, setting_type
+    )
+    assert_that(
+        stayed,
+        not_none(),
+        f"Managed integration '{alias}' is no longer in its source project after the refused move.",
+    )
+    assert_that(
+        stayed.id,
+        equal_to(created.id),
+        "Managed integration id changed after the refused move.",
+    )
+    assert_that(
+        integration_utils.list_integration_ids_in_project(target.name, setting_type),
+        is_not(has_item(created.id)),
+        "Managed integration reached the target project despite the refusal.",
+    )
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.parametrize("managed_alias", project_managed_alias_test_data)
+@pytest.mark.oss_standalone
+@pytest.mark.api
+def test_change_project_of_managed_integration_refused_on_project_route(
+    project, integration_utils, create_integration_in_project, managed_alias
+):
+    # @case one-row-transfer-subsystem-rows_TC_001
+    """PUT /v1/settings/project with a changed project_name on a subsystem-managed row gives 422; the row stays."""
+    source = project()
+    target = project()
+    created = create_integration_in_project(source.name, alias=managed_alias)
+
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
+        integration_utils.update_integration(
+            _integration_request(
+                target.name, managed_alias, IntegrationType.PROJECT, created.id
+            )
+        )
+
+    _assert_managed_move_refused(
+        exc_info.value.response,
+        integration_utils,
+        IntegrationType.PROJECT,
+        created,
+        source,
+        target,
+        managed_alias,
+    )
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.parametrize("managed_alias", user_managed_alias_test_data)
+@pytest.mark.oss_standalone
+@pytest.mark.api
+def test_change_project_of_managed_integration_refused_on_user_route(
+    project, integration_utils, create_integration_in_project, managed_alias
+):
+    # @case one-row-transfer-subsystem-rows_TC_002
+    """PUT /v1/settings/user with a changed project_name on a subsystem-managed row gives 422; the row stays."""
+    source = project()
+    target = project()
+    created = create_integration_in_project(
+        source.name, alias=managed_alias, setting_type=IntegrationType.USER
+    )
+
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
+        integration_utils.update_integration(
+            _integration_request(
+                target.name, managed_alias, IntegrationType.USER, created.id
+            )
+        )
+
+    _assert_managed_move_refused(
+        exc_info.value.response,
+        integration_utils,
+        IntegrationType.USER,
+        created,
+        source,
+        target,
+        managed_alias,
+    )
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.oss_standalone
+@pytest.mark.api
+def test_change_project_and_rename_of_managed_integration_refused(
+    project, integration_utils, create_integration_in_project
+):
+    # @case one-row-transfer-subsystem-rows_TC_003
+    """Renaming a managed row to an ordinary alias in the same PUT that changes the project is still refused."""
+    source = project()
+    target = project()
+    new_alias = get_random_name()
+    created = create_integration_in_project(source.name, alias=SCHEDULE_MANAGED_ALIAS)
+
+    with expected_http_errors(), pytest.raises(HTTPError) as exc_info:
+        integration_utils.update_integration(
+            _integration_request(
+                target.name, new_alias, IntegrationType.PROJECT, created.id
+            )
+        )
+
+    _assert_managed_move_refused(
+        exc_info.value.response,
+        integration_utils,
+        IntegrationType.PROJECT,
+        created,
+        source,
+        target,
+        SCHEDULE_MANAGED_ALIAS,
+    )
+    assert_that(
+        integration_utils.get_integration_by_project_and_alias(
+            target.name, new_alias, IntegrationType.PROJECT
+        ),
+        none(),
+        "Managed integration was renamed into the target project despite the refusal.",
+    )
+
+
+@pytest.mark.gitlab
+@pytest.mark.integration
+@pytest.mark.project_integration
+@pytest.mark.parametrize("setting_type", project_change_scope_test_data)
+@pytest.mark.oss_standalone
+@pytest.mark.api
+def test_update_managed_integration_keeping_project_succeeds(
+    project, integration_utils, create_integration_in_project, setting_type
+):
+    # @case one-row-transfer-subsystem-rows_TC_004
+    """PUT on a subsystem-managed row with the same project_name is not refused and the row stays in its project."""
+    source = project()
+    created = create_integration_in_project(
+        source.name, alias=SCHEDULE_MANAGED_ALIAS, setting_type=setting_type
+    )
+
+    response = integration_utils.update_integration(
+        _integration_request(source.name, created.alias, setting_type, created.id)
+    )
+
+    assert_that(
+        response["message"],
+        equal_to(INTEGRATION_UPDATED_MESSAGE),
+        "In-place update of a managed row was not accepted.",
+    )
+    updated = integration_utils.get_integration_by_id(created.id, setting_type)
+    assert_that(
+        updated,
+        not_none(),
+        "Managed integration disappeared after the in-place update.",
+    )
+    assert_that(
+        updated.project_name,
+        equal_to(source.name),
+        "Managed integration changed project during an in-place update.",
+    )
+    assert_that(
+        updated.alias,
+        equal_to(SCHEDULE_MANAGED_ALIAS),
+        "Managed integration alias changed during an in-place update.",
     )

@@ -16,6 +16,7 @@
 
 from dataclasses import dataclass
 
+from codemie_test_harness.tests.test_data.workspace_script_test_data import JIRA_TOOL
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 
 # A valid NL description used to fill the "What should your workflow do?"
@@ -71,3 +72,32 @@ class WorkflowCategoriesUiDataFactory:
             with_category_name=f"{prefix}-with-cat",
             without_category_name=f"{prefix}-no-cat",
         )
+
+
+# Exchange "Read messages" tool bound to a workflow Tool node. Its Folder, Start and
+# Count arguments are required: codemie's args_schema extraction
+# (ToolConfigExtractor) marks a non-optional field required unless its default is frozen,
+# and ReadInput's folder/start/count defaults are plain ones
+# (codemie_tools.ms_exchange.tools). Start is an int with ge=0, so 0 is a valid value.
+EXCHANGE_TOOLKIT_NAME = "Microsoft Exchange"
+EXCHANGE_READ_TOOL_NAME = "Exchange: Read messages"
+EXCHANGE_READ_TOOL_ID = "exchange_read"
+EXCHANGE_READ_FOLDER = "ocr"
+EXCHANGE_READ_COUNT = 10
+EXCHANGE_READ_START = 0
+
+WORKFLOW_UPDATED_TOAST = "Workflow has been updated successfully!"
+
+# Saving a global workflow whose script step may call the Jira tool through the author's own
+# integration: the editor shows this one warning toast, kept open for 8 s (3 s is the default).
+OWNER_INTEGRATION_TOAST = (
+    "Saved. Script steps run these tools under the workflow author's integration "
+    f"for everyone who runs the workflow: {JIRA_TOOL}."
+)
+# Part of the backend's raw warning message, which no toast may show.
+OWNER_INTEGRATION_RAW_MESSAGE = "runs under the workflow author's integration ("
+# Open time is measured from when the test first sees the toast, so it reads a little under the
+# real 8 s; the lower bound rules out anything near the 3 s default, the upper bound leaves room
+# for a slow runner and the closing animation.
+OWNER_INTEGRATION_TOAST_MIN_OPEN_MS = 6_500
+OWNER_INTEGRATION_TOAST_MAX_OPEN_MS = 11_000

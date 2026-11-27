@@ -59,6 +59,20 @@ def poll_until(fetch, predicate, timeout=10.0, interval=0.5):
     return value
 
 
+def call_until(call, predicate, max_attempts):
+    """Call ``call()`` up to ``max_attempts`` times, stopping at the first value that satisfies ``predicate``.
+
+    Returns the last value, whether or not the predicate held. For a call that has to be repeated
+    with a fresh request each time, such as chatting until a budget is used up.
+    """
+    value = None
+    for _ in range(max_attempts):
+        value = call()
+        if predicate(value):
+            break
+    return value
+
+
 def get_random_name():
     """Generate a random entity name, always "autotest-"-prefixed for fast
     search-based org-wide cleanup discovery (see cleanup.py, pytest_sessionfinish).
@@ -178,13 +192,18 @@ def assert_response(response, status_code, message=None):
             )
 
 
-def assert_error_details(response, status_code, message):
+def assert_error_details(response, status_code, message, field="details"):
+    """The response has ``status_code`` and its ``error.<field>`` contains ``message``.
+
+    ``field`` is ``details`` for most errors; a body validation error carries its text in
+    ``message``, prefixed with the field and the validator, so it is matched as a part.
+    """
     assert_that(
         response.status_code, equal_to(status_code), "Status code is not expected."
     )
-    error_details = json.loads(response.content)["error"]["details"]
+    error = json.loads(response.content).get("error", {})
     assert_that(
-        error_details, contains_string(message), "Error message is not expected."
+        error.get(field, ""), contains_string(message), "Error message is not expected."
     )
 
 

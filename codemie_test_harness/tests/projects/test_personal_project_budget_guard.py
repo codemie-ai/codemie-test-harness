@@ -38,12 +38,12 @@ from codemie_test_harness.tests.utils.admin_project_budget_group_utils import (
 @pytest.mark.project
 @pytest.mark.api
 def test_maintainer_create_budget_for_personal_project_returns_403(
-    client, project_utils, maintainer_credentials, maintainer_client
+    client, project_utils, maintainer_user, maintainer_client
 ):
     """
     project is rejected with 403 and the guard message, and no budget group is left behind.
     """
-    personal_project, _ = maintainer_credentials
+    personal_project = maintainer_user.email
     assert_that(
         project_utils.get_project_detail(personal_project).project_type,
         equal_to(PERSONAL_PROJECT_TYPE),

@@ -29,12 +29,12 @@ from codemie_test_harness.tests.test_data.project_ownership_test_data import (
 @pytest.mark.activity
 @pytest.mark.api
 def test_project_ownership_changed_audit_record_stored(
-    activity_utils, maintainer_client, project_utils, non_admin_user, ownership_project
+    activity_utils, maintainer_client, project_utils, platform_user, ownership_project
 ):
     """
     event for the project, carrying the previous and the new owner's usernames (not ids).
     """
-    _, new_owner_id, new_owner_client = non_admin_user
+    new_owner_id, new_owner_client = platform_user.user_id, platform_user.client
 
     project_utils.transfer_ownership(ownership_project.name, new_owner_id)
 

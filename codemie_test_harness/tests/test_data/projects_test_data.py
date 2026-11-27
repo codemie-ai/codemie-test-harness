@@ -85,6 +85,14 @@ list_projects_test_data = [
     ),
 ]
 
+# Cost center filter of the project list: positions (into the two cost centers a test creates)
+# that are selected, and positions whose project must be listed. Each cost center holds one
+# project; a third project has no cost center and is never listed.
+cost_center_filter_selection_test_data = [
+    pytest.param((0,), (0,), id="first_cost_center_only"),
+    pytest.param((0, 1), (0, 1), id="first_and_second_cost_center"),
+]
+
 # Test data for user assignment operations
 user_assignment_test_data = [
     pytest.param(

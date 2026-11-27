@@ -28,6 +28,9 @@ Following the same architecture as other page objects in the framework:
 """
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.components.uploaded_icon import (
+    uploaded_icon_avatar,
+)
 from playwright.sync_api import expect, Locator
 from reportportal_client import step
 
@@ -190,6 +193,61 @@ class ChatsSidebar(BasePage):
     def get_chat_item_by_text(self, chat_text: str) -> Locator:
         """Get specific chat item by partial text content."""
         return self.chat_items.filter(has_text=chat_text)
+
+    def chat_item_by_id(self, chat_id: str) -> Locator:
+        """Sidebar list item of the chat; its name button has the id ``chat-name-<chat id>``
+        (ChatListItem.tsx)."""
+        return self.page.locator("li").filter(
+            has=self.page.locator(f"#chat-name-{chat_id}")
+        )
+
+    @step
+    def should_show_chat_icon(self, chat_id: str, icon_url: str):
+        """Verify the sidebar item of the chat shows the avatar of the uploaded icon file."""
+        icon = uploaded_icon_avatar(self.chat_item_by_id(chat_id), icon_url)
+        expect(icon.first).to_be_visible()
+        return self
+
+    # ==================== CHAT VIEW SETTINGS ====================
+
+    @property
+    def chat_view_settings_button(self) -> Locator:
+        """Button of the sidebar title that toggles the chat view settings popover
+        (aria-label 'Open Chat view settings', ChatViewSettings.tsx)."""
+        return self.sidebar_container.get_by_role(
+            "button", name="Open Chat view settings"
+        )
+
+    def chat_density_radio(self, density: str) -> Locator:
+        """Radio of the 'List density' group; ``density`` is 'detailed' or 'compact'.
+
+        The input id is ``chat-density-<value>`` (ChatViewSettings.tsx)."""
+        return self.page.locator(f"#chat-density-{density}")
+
+    def _open_chat_view_settings(self):
+        if self.chat_view_settings_button.get_attribute("aria-expanded") != "true":
+            self.chat_view_settings_button.click()
+        expect(self.chat_view_settings_button).to_have_attribute(
+            "aria-expanded", "true"
+        )
+
+    def _close_chat_view_settings(self):
+        if self.chat_view_settings_button.get_attribute("aria-expanded") == "true":
+            self.chat_view_settings_button.click()
+        expect(self.chat_view_settings_button).to_have_attribute(
+            "aria-expanded", "false"
+        )
+
+    @step
+    def set_chat_list_density(self, density: str):
+        """Select the list density ('detailed' or 'compact') in the settings popover.
+
+        Only the 'List density' radio changes; the other settings are left as they are."""
+        self._open_chat_view_settings()
+        self.chat_density_radio(density).check()
+        expect(self.chat_density_radio(density)).to_be_checked()
+        self._close_chat_view_settings()
+        return self
 
     # ==================== CHAT ITEM ELEMENTS ====================
 

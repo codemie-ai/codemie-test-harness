@@ -25,11 +25,16 @@ from codemie_sdk.models.skill import SkillVisibility
 from requests import HTTPError
 
 from codemie_test_harness.rp_guard import get_rp_logger, log_with_attachment
+from codemie_test_harness.tests.enums.tools import AgentWorkspaceTool, Toolkit
 from codemie_test_harness.tests.ui import conversation_ids
+from codemie_test_harness.tests.ui.pageobject.chats.chat_page import ChatPage
 from codemie_test_harness.tests.ui.pageobject.login_page import LoginPage
 from codemie_test_harness.tests.ui.test_data.links_names_test_data import AssistantNames
 from codemie_test_harness.tests.ui.test_data.mcp_catalog_test_data import (
     catalog_server_with_one_env_var,
+)
+from codemie_test_harness.tests.ui.test_data.workspace_download_test_data import (
+    WORKSPACE_ASSISTANT_SYSTEM_PROMPT,
 )
 from codemie_test_harness.tests.utils.base_utils import get_random_name
 from codemie_test_harness.tests.utils.client_factory import get_client
@@ -127,9 +132,17 @@ def cleanup_faq_assistant_conversations():
     """Delete all conversations for AI/Run FAQ assistant after each test."""
     yield
     client = get_client()
-    assistants = client.assistants.list(
-        filters={"search": AssistantNames.AI_RUN_FAQ}, per_page=200, scope="marketplace"
-    )
+    try:
+        assistants = client.assistants.list(
+            filters={"search": AssistantNames.AI_RUN_FAQ},
+            per_page=200,
+            scope="marketplace",
+        )
+    except HTTPError:
+        if not EnvironmentResolver.is_oss_standalone():
+            raise
+        # OSS standalone has no assistants, so there is nothing to clean up.
+        return
     assistant = next(
         (a for a in assistants if a.name == AssistantNames.AI_RUN_FAQ), None
     )
@@ -264,6 +277,55 @@ def catalog_server(client):
             logger.warning(
                 f"Failed to delete MCP config {config.id} ({config.name}): {e}"
             )
+
+
+@pytest.fixture
+def workspace_assistant(assistant):
+    """Assistant with the Agent Workspace toolkit (write and list files) enabled.
+
+    Created through the API with a random name; deleted by the ``assistant`` fixture on teardown.
+    """
+    return assistant(
+        Toolkit.AGENT_WORKSPACE,
+        (
+            AgentWorkspaceTool.WRITE_WORKSPACE_FILE.value,
+            AgentWorkspaceTool.LIST_WORKSPACE_FILES.value,
+        ),
+        system_prompt=WORKSPACE_ASSISTANT_SYSTEM_PROMPT,
+    )
+
+
+@pytest.fixture
+def open_workspace_chat(page, workspace_assistant):
+    """Factory ``() -> ChatPage``: a fresh conversation with the workspace assistant, opened in the UI.
+
+    Every call creates a separate chat (its own workspace). The conversation id is
+    registered right after creation, so teardown deletes all of them even when opening
+    the chat fails afterwards.
+    """
+    created_ids = []
+
+    def _open() -> ChatPage:
+        conversation = get_client().conversations.create(
+            ConversationCreateRequest(
+                initial_assistant_id=workspace_assistant.id, folder=""
+            )
+        )
+        chat_id = conversation.get("id")
+        created_ids.append(chat_id)
+        chat_page = ChatPage(page)
+        page.set_viewport_size({"width": 1920, "height": 980})
+        chat_page.navigate_to(chat_id)
+        chat_page.chat_input.wait_for(state="visible", timeout=15000)
+        return chat_page
+
+    yield _open
+
+    for chat_id in created_ids:
+        try:
+            get_client().conversations.delete(chat_id)
+        except Exception as e:
+            logger.warning(f"Failed to delete conversation {chat_id}: {e}")
 
 
 def pytest_sessionfinish(session):

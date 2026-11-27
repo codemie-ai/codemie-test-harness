@@ -245,7 +245,8 @@ FILESYSTEM_MCP_SERVER = MCPServerDetails(
         args=[
             "$WORKING_FOLDER",
         ],
-        env={"WORKING_FOLDER": "/home/codemie"},
+        # CODEMIE_EXPORT_FILES opts the server in to exporting files as chat artifacts
+        env={"WORKING_FOLDER": "/home/codemie", "CODEMIE_EXPORT_FILES": "true"},
     ),
     tools=[tool.value for tool in McpServerFilesystem],
 )

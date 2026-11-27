@@ -24,6 +24,9 @@ from playwright.sync_api import expect, Locator
 from reportportal_client import step
 
 from codemie_test_harness.tests.ui.pageobject.base_page import BasePage
+from codemie_test_harness.tests.ui.pageobject.components.favorite_star import (
+    FavoriteStar,
+)
 from codemie_test_harness.tests.ui.pageobject.skills.create_edit_skill_page import (
     CreateEditSkillPage,
 )
@@ -167,6 +170,21 @@ class SkillsPage(BasePage):
         # The 3-dot menu button is the second button in the card (index 1)
         return card.locator("button").nth(1)
 
+    def skill_favorite_star(self, skill_name: str) -> FavoriteStar:
+        """Favorite star of the named skill card.
+
+        The card is a button whose accessible name starts with the star label
+        ('Add to favorites' / 'Remove from favorites'), then the skill name and
+        ' by <author>'. Matching the name followed by ' by ' avoids prefix collisions.
+        """
+        card = self.page.get_by_role(
+            "button",
+            name=re.compile(
+                rf"^(Add to|Remove from) favorites\s.*{re.escape(skill_name)} by "
+            ),
+        )
+        return FavoriteStar(self.page, card)
+
     @property
     def menu_publish_to_marketplace(self) -> Locator:
         """Publish to Marketplace menu item"""
@@ -195,7 +213,7 @@ class SkillsPage(BasePage):
     @property
     def publish_button(self) -> Locator:
         """Publish button in confirmation dialog"""
-        return self.page.get_by_role("button", name="Publish")
+        return self.page.get_by_role("button", name="Publish", exact=True)
 
     @property
     def cancel_button(self) -> Locator:
@@ -303,6 +321,12 @@ class SkillsPage(BasePage):
         self.page.wait_for_load_state("domcontentloaded")
         return self
 
+    @step("Favorite skill and wait for the save toast")
+    def favorite_skill(self, skill_name: str):
+        """Click the star of the named skill card and wait for the save toast."""
+        self.skill_favorite_star(skill_name).favorite()
+        return self
+
     # =============================================================================
     # FILTER METHODS
     # =============================================================================
@@ -397,6 +421,17 @@ class SkillsPage(BasePage):
         expect(self.skill_card(skill_name)).to_be_visible(timeout=10000)
         return self
 
+    @step("Verify skill card is visible on the current list")
+    def should_see_skill_card(self, skill_name: str):
+        """Wait until the named skill card is rendered on the list that is already open.
+
+        Unlike ``should_see_skill_with_name`` it does not navigate, so it can follow a
+        reload: it waits for the list (and with it the favorites preference) to load.
+        """
+        self.wait_for_page_load()
+        expect(self.skill_card(skill_name)).to_be_visible()
+        return self
+
     @step("Verify skill card is not visible")
     def should_not_see_skill_with_name(self, skill_name: str):
         """Verify that a skill with the given name is NOT visible (doesn't exist)."""
@@ -406,6 +441,18 @@ class SkillsPage(BasePage):
         # The skill card should not exist
         skill_locator = self.skill_card(skill_name)
         expect(skill_locator).not_to_be_visible()
+        return self
+
+    @step("Verify skill star is filled")
+    def should_show_skill_favorited(self, skill_name: str):
+        """Verify the named skill card shows a filled star."""
+        self.skill_favorite_star(skill_name).should_be_filled()
+        return self
+
+    @step("Verify skill star is not filled")
+    def should_show_skill_not_favorited(self, skill_name: str):
+        """Verify the named skill card shows an unfilled star."""
+        self.skill_favorite_star(skill_name).should_be_unfilled()
         return self
 
     @step("Verify filters are visible")

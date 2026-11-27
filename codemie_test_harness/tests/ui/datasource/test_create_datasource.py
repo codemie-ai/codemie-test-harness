@@ -31,6 +31,7 @@ from codemie_test_harness.tests.ui.test_data.datasource_test_data import (
     DataSourceType,
     DataSourceFilterType,
     DataSourceStatus,
+    GIT_REPO_LINK_PLACEHOLDER,
     SUBTITLE_CREATE_DATASOURCE,
     TITLE_CREATE_DATASOURCE,
 )
@@ -55,6 +56,8 @@ def test_open_create_datasource_page_and_elements(
 
     create_page.select_datasource_type(DataSourceType.GIT)
     create_page.should_see_git_fields()
+    # @case git-datasource-form-repository-link_TC_001
+    create_page.should_see_repo_link_placeholder(GIT_REPO_LINK_PLACEHOLDER)
     create_page.should_see_embeddings_model_dropdown_values(
         available_embedding_model_labels
     )

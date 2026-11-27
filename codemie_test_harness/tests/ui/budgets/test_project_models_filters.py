@@ -40,6 +40,7 @@ def _labels_by_premium(client, premium: bool) -> list[str]:
 
 
 @pytest.mark.project
+@pytest.mark.budget
 @pytest.mark.ui
 def test_premium_only_filter_shows_only_premium_models(
     page, project_admin_setup, client
@@ -71,6 +72,7 @@ def test_premium_only_filter_shows_only_premium_models(
 
 
 @pytest.mark.project
+@pytest.mark.budget
 @pytest.mark.ui
 def test_selected_only_filter_shows_only_checked_models(
     page, project_admin_setup, client

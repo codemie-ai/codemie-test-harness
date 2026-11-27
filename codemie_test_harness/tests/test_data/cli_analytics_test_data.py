@@ -226,13 +226,10 @@ HOOK_SENDERS = [
 ]
 
 # What each role reads from the CLI analytics GET endpoints, before and after a project is
-# disabled; disabling must not widen or narrow it. The aggregate reads (overview, repositories)
-# sit behind the router's `_admin_gate` (user.is_admin or user.is_applications_admin). The
-# session list does not: any signed-in user may call it, and a non-admin is scoped to their own
-# Personal sessions only. A maintainer is resolved to is_admin by User.resolve_is_admin, so it
-# reads like a global admin; a project admin passes the gate and sees only its own admin
-# projects. A plain member, an auditor and an unrelated user get 200 from the session list
-# without the seeded project session in it, and 403 from the aggregate reads.
+# disabled; disabling must not widen or narrow it. All roles can call the read endpoints. A
+# maintainer reads like a global admin, an auditor reads all shared sessions, and a project admin
+# sees its own admin projects. A plain member and an unrelated user get successful empty responses
+# for the legacy session, which has no owner binding.
 # The fields of a session row (LocalAnalyticsSessionRow) fixed once the seeded session is listed:
 # identity, owner, repository, start and the token counts. Excluded as genuinely volatile
 # because the backend derives them in the periodic rollup or from pricing: duration_ms, turns,
@@ -257,12 +254,11 @@ HISTORY_READ_ALLOWED = {
     "repositories": 200,
     "listed": True,
 }
-# The session list answers 200 but holds only the caller's own Personal sessions, so the
-# project session stays hidden; the aggregate reads stay refused.
+# The legacy project session stays hidden, and the aggregate reads return empty results.
 HISTORY_READ_OWN_PERSONAL_ONLY = {
     "sessions": 200,
-    "overview": 403,
-    "repositories": 403,
+    "overview": 200,
+    "repositories": 200,
     "listed": False,
 }
 HISTORY_ROLES = [
@@ -276,9 +272,7 @@ HISTORY_ROLES = [
     pytest.param(
         "member", HISTORY_READ_OWN_PERSONAL_ONLY, id="plain-member-own-personal-only"
     ),
-    pytest.param(
-        "auditor", HISTORY_READ_OWN_PERSONAL_ONLY, id="auditor-own-personal-only"
-    ),
+    pytest.param("auditor", HISTORY_READ_ALLOWED, id="auditor-reads-shared-history"),
     pytest.param(
         "unrelated",
         HISTORY_READ_OWN_PERSONAL_ONLY,
@@ -309,6 +303,21 @@ def to_iso(moment: datetime, utc_offset_hours: int = 0) -> str:
     """ISO 8601 text of a moment, written with the given UTC offset."""
     local = moment.astimezone(timezone(timedelta(hours=utc_offset_hours)))
     return local.isoformat(timespec="seconds")
+
+
+def otlp_attr(key: str, value) -> dict:
+    """An OTLP JSON attribute: an int as ``intValue``, a float as ``doubleValue``,
+    anything else as ``stringValue``."""
+    if isinstance(value, float):
+        return {"key": key, "value": {"doubleValue": value}}
+    if isinstance(value, int):
+        return {"key": key, "value": {"intValue": str(value)}}
+    return {"key": key, "value": {"stringValue": value}}
+
+
+def otlp_nanos(moment: datetime) -> str:
+    """An OTLP JSON timestamp: whole seconds of ``moment`` in nanoseconds."""
+    return str(int(moment.timestamp()) * 10**9)
 
 
 @dataclass(frozen=True)
@@ -355,14 +364,30 @@ WINDOW_UTC_OFFSETS = [0, 2, -5]
 
 @dataclass
 class CliSessionSeed:
-    """One CLI session to ingest: a session start plus a single model request.
+    """One CLI session to ingest: a session start plus ``requests`` model requests.
 
     ``started_at`` is the instant of the session; ``utc_offset_hours`` only changes
     how that instant is written in the events. With ``duration`` the session also
-    ends, that long after its start. With ``cost_usd`` the request is reported as
-    an OTel ``api_request`` log record, the only form that carries a cost.
+    does real work at its end, a turn stop, and ends that long after its start: the
+    backend ends a session at its last real-work event, so a lifecycle event such
+    as the session end alone does not move it. With ``cost_usd`` the request is
+    reported as an OTel ``api_request`` log record, the only form that carries a
+    cost.
     ``model`` is the model the request names; a cost-checking seed needs one priced
-    in the platform catalog, since money is tokens × catalog price.
+    in the platform catalog, since money is tokens × catalog price. ``model_raw`` is
+    the model as the API names it, when that differs from ``model``: Claude Code
+    through the LiteLLM proxy reports the route the request ran on as ``model``
+    (``x-litellm-model-name``) and the name it asked for as ``model_raw``.
+    ``branch`` is the git branch the session started on. The token counts are the
+    session's totals, spread over its ``requests`` (the first request takes what does
+    not divide evenly): ``cache_read_tokens`` are the tokens read from the prompt
+    cache, so the session's context per call is ``cache_read_tokens / requests``, and
+    ``cache_creation_5m_tokens`` / ``cache_creation_1h_tokens`` the tokens written to
+    it for five minutes and for an hour. A seed with ``cost_usd`` makes one request.
+    ``tool_calls_succeeded`` and ``tool_calls_failed`` are the
+    tool calls the session makes: each has a tool start, and a tool end when it succeeded or
+    a tool error when it failed, so the session counts that many tool calls and a success
+    rate over them.
     """
 
     key: str
@@ -375,10 +400,29 @@ class CliSessionSeed:
     duration: timedelta | None = None
     cost_usd: float | None = None
     model: str = SEED_MODEL
+    model_raw: str | None = None
     skill_name: str | None = None
+    branch: str | None = None
+    cache_read_tokens: int = 0
+    cache_creation_5m_tokens: int = 0
+    cache_creation_1h_tokens: int = 0
+    requests: int = 1
+    tool_calls_succeeded: int = 0
+    tool_calls_failed: int = 0
     session_id: str = field(
         default_factory=lambda: f"autotest-cli-{uuid.uuid4().hex[:12]}"
     )
+
+    def __post_init__(self) -> None:
+        if self.requests < 1 or (self.cost_usd is not None and self.requests != 1):
+            raise ValueError(
+                f"seed {self.key}: {self.requests} requests; a seed makes at least one, "
+                "and one when it reports a cost"
+            )
+
+    @property
+    def cache_creation_tokens(self) -> int:
+        return self.cache_creation_5m_tokens + self.cache_creation_1h_tokens
 
     def events(self, project_name: str) -> list[dict]:
         """Hook events for ``POST /v1/analytics/cli-analytics/event-hooks``."""
@@ -390,6 +434,8 @@ class CliSessionSeed:
         }
         if self.repository:
             envelope["cwd"] = self.repository
+        if self.branch:
+            envelope["git_branch"] = self.branch
         events = [
             {
                 **envelope,
@@ -398,12 +444,19 @@ class CliSessionSeed:
             }
         ]
         if self.duration is not None:
+            ended_at = to_iso(self.started_at + self.duration, self.utc_offset_hours)
             events.append(
                 {
                     **envelope,
-                    "timestamp": to_iso(
-                        self.started_at + self.duration, self.utc_offset_hours
-                    ),
+                    "timestamp": ended_at,
+                    "type": "agent.session.stop",
+                    "event_id": f"stop:{self.session_id}",
+                }
+            )
+            events.append(
+                {
+                    **envelope,
+                    "timestamp": ended_at,
                     "type": "agent.session.end",
                     "event_id": f"end:{self.session_id}",
                 }
@@ -421,30 +474,79 @@ class CliSessionSeed:
                 }
             )
         if self.cost_usd is None:
-            events.append(self._usage_event(envelope))
+            events.extend(self._usage_events(envelope))
+        events.extend(self._tool_events(envelope))
         return events
 
-    def _usage_event(self, envelope: dict) -> dict:
+    def _tool_events(self, envelope: dict) -> list[dict]:
+        outcomes = ["agent.tool.end"] * self.tool_calls_succeeded + [
+            "agent.tool.error"
+        ] * self.tool_calls_failed
+        events = []
+        for number, outcome in enumerate(outcomes, start=1):
+            call = {
+                **envelope,
+                "tool_name": "Bash",
+                "tool_use_id": f"toolu_{self.session_id}_{number}",
+            }
+            events.append(
+                {
+                    **call,
+                    "type": "agent.tool.start",
+                    "event_id": f"tool-start:{self.session_id}:{number}",
+                }
+            )
+            events.append(
+                {
+                    **call,
+                    "type": outcome,
+                    "event_id": f"tool-result:{self.session_id}:{number}",
+                    **(
+                        {"error_message": "command failed"}
+                        if outcome == "agent.tool.error"
+                        else {}
+                    ),
+                }
+            )
+        return events
+
+    def _share(self, total: int, number: int) -> int:
+        """The part of a session total that request ``number`` (from 1) carries."""
+        share = total // self.requests
+        return share + total % self.requests if number == 1 else share
+
+    def _usage_events(self, envelope: dict) -> list[dict]:
+        return [
+            self._usage_event(envelope, number)
+            for number in range(1, self.requests + 1)
+        ]
+
+    def _usage_event(self, envelope: dict, number: int) -> dict:
+        suffix = "" if number == 1 else f"_{number}"
         return {
             **envelope,
             "type": "agent.usage.request",
-            "event_id": f"usage:{self.session_id}:1:{self.model}",
-            "request_id": f"req_{self.session_id}",
-            "message_id": f"msg_{self.session_id}",
+            "event_id": f"usage:{self.session_id}:{number}:{self.model}",
+            "request_id": f"req_{self.session_id}{suffix}",
+            "message_id": f"msg_{self.session_id}{suffix}",
             "agent_id": "",
             "agent_type": "",
             "scope_kind": "main",
             "scope_name": "",
-            "model_raw": self.model,
+            "model_raw": self.model_raw or self.model,
             "model": self.model,
             "speed": "standard",
             "inference_geo": "not_available",
             "service_tier": "standard",
-            "input_tokens": self.input_tokens,
-            "cache_creation_5m_tokens": 0,
-            "cache_creation_1h_tokens": 0,
-            "cache_read_tokens": 0,
-            "output_tokens": self.output_tokens,
+            "input_tokens": self._share(self.input_tokens, number),
+            "cache_creation_5m_tokens": self._share(
+                self.cache_creation_5m_tokens, number
+            ),
+            "cache_creation_1h_tokens": self._share(
+                self.cache_creation_1h_tokens, number
+            ),
+            "cache_read_tokens": self._share(self.cache_read_tokens, number),
+            "output_tokens": self._share(self.output_tokens, number),
             "thinking_tokens": 0,
             "web_search_requests": 0,
             "web_fetch_requests": 0,
@@ -466,8 +568,8 @@ class CliSessionSeed:
             "cost_usd": {"doubleValue": self.cost_usd},
             "input_tokens": {"intValue": str(self.input_tokens)},
             "output_tokens": {"intValue": str(self.output_tokens)},
-            "cache_read_tokens": {"intValue": "0"},
-            "cache_creation_tokens": {"intValue": "0"},
+            "cache_read_tokens": {"intValue": str(self.cache_read_tokens)},
+            "cache_creation_tokens": {"intValue": str(self.cache_creation_tokens)},
         }
         record = {
             "timeUnixNano": str(int(self.started_at.timestamp()) * 10**9),
@@ -551,8 +653,8 @@ def get_replay_session_seeds() -> list[CliSessionSeed]:
 
 
 def with_session_end(seed: CliSessionSeed) -> CliSessionSeed:
-    """The same session, now ended: its events are those of ``seed`` plus the
-    session end."""
+    """The same session, now ended: its events are those of ``seed`` plus the turn
+    stop and the session end."""
     return replace(seed, duration=timedelta(minutes=5))
 
 
@@ -578,6 +680,115 @@ def get_cost_session_seeds(model: str) -> list[CliSessionSeed]:
         ("owner_2", timedelta(hours=11), {"cost_usd": 1.5}),
         ("member", timedelta(hours=12), {"cost_usd": 4.0, "user": MEMBER}),
         model=model,
+    )
+
+
+def get_hooks_only_cost_seeds(model: str) -> list[CliSessionSeed]:
+    """Two users' sessions of a model the catalog prices for every token kind, whose
+    requests come from hooks only: no OTel ``api_request`` record, so no reported
+    cost. The owner's session also reads from the prompt cache and writes to it for
+    five minutes and for an hour, so each cache rate takes part in its cost."""
+    return _seeds(
+        (
+            "hooks_owner",
+            timedelta(hours=10),
+            {
+                "cache_read_tokens": 30000,
+                "cache_creation_5m_tokens": 4000,
+                "cache_creation_1h_tokens": 2000,
+            },
+        ),
+        ("hooks_member", timedelta(hours=11), {"user": MEMBER}),
+        model=model,
+    )
+
+
+def get_unpriced_model_seed() -> CliSessionSeed:
+    """A hooks-only session of a model the platform catalog does not know, named
+    uniquely so no catalog can ever price it."""
+    model = f"autotest-unpriced-{uuid.uuid4().hex[:8]}"
+    return _seeds(("hooks_unpriced", timedelta(hours=12), {}), model=model)[0]
+
+
+@dataclass(frozen=True)
+class RouteCase:
+    """A request Claude Code made through the LiteLLM proxy: the model it asked for
+    and the route (``x-litellm-model-name``) the request ran on."""
+
+    id: str
+    model_raw: str
+    route: str
+
+
+# Routes of the LiteLLM deployments the CodeMie stands serve; a case whose route the
+# stand's LiteLLM does not serve, or serves at no single price, is skipped.
+ROUTE_PRICED_CASES = [
+    RouteCase(
+        "haiku-4-5-dated-name-on-bedrock",
+        "claude-haiku-4-5-20251001",
+        "bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+    ),
+    RouteCase(
+        "haiku-5-5-on-bedrock",
+        "claude-haiku-5-5",
+        "bedrock/eu.anthropic.claude-haiku-5-5",
+    ),
+    RouteCase(
+        "opus-4-8-on-bedrock",
+        "claude-opus-4-8",
+        "bedrock/eu.anthropic.claude-opus-4-8",
+    ),
+    RouteCase(
+        "opus-4-6-without-plain-name-price",
+        "claude-opus-4-6",
+        "bedrock/eu.anthropic.claude-opus-4-6-v1",
+    ),
+    RouteCase(
+        "fable-5-on-global-bedrock",
+        "claude-fable-5",
+        "bedrock/global.anthropic.claude-fable-5",
+    ),
+    RouteCase(
+        "sonnet-4-5-dated-name-on-vertex",
+        "claude-sonnet-4-5-20250929",
+        "vertex_ai/claude-sonnet-4-5",
+    ),
+    RouteCase(
+        "sonnet-5-on-dial",
+        "claude-sonnet-5",
+        "anthropic/anthropic.claude-sonnet-5",
+    ),
+]
+
+
+def get_route_priced_seeds(cases: list[RouteCase]) -> list[CliSessionSeed]:
+    """One hooks-only session per case: its request names the case's model and ran on
+    the case's route. Token counts differ per session, so a session priced by the
+    wrong route changes the total."""
+    return [
+        CliSessionSeed(
+            key=case.id,
+            started_at=seed_day_start() + timedelta(hours=10, minutes=index),
+            input_tokens=1000 * (index + 1),
+            output_tokens=10 * (index + 1),
+            model=case.route,
+            model_raw=case.model_raw,
+        )
+        for index, case in enumerate(cases)
+    ]
+
+
+def get_unpriced_route_seed() -> CliSessionSeed:
+    """A hooks-only session whose request ran on a route of a model neither the route
+    map nor the catalog prices, named uniquely so none ever can."""
+    model_raw = f"autotest-unpriced-{uuid.uuid4().hex[:8]}"
+    return CliSessionSeed(
+        key="hooks_unpriced_route",
+        started_at=seed_day_start() + timedelta(hours=12),
+        input_tokens=1000,
+        output_tokens=10,
+        model=f"vertex_ai/{model_raw}",
+        model_raw=model_raw,
     )
 
 
@@ -681,10 +892,71 @@ def priced_model(models: list[LLMModel]) -> LLMModel | None:
     return min(priced, key=lambda model: model.base_name, default=None)
 
 
-def session_catalog_cost(seed: CliSessionSeed, price: CostConfig) -> float:
-    """Money of one session: its tokens at the catalog price (seeds carry no cache
-    tokens). The cost the session reported plays no part."""
-    return seed.input_tokens * price.input + seed.output_tokens * price.output
+@dataclass(frozen=True)
+class CatalogRates:
+    """Per-token catalog rates of a model, as ``GET /v1/llm_models`` reports its cost:
+    ``cache_write`` prices the five-minute cache writes, ``cache_write_1h`` the
+    one-hour ones. The SDK's ``CostConfig`` keeps only the input and output rates."""
+
+    input: float
+    output: float
+    cache_read: float | None = None
+    cache_write: float | None = None
+    cache_write_1h: float | None = None
+
+    @classmethod
+    def from_cost(cls, cost: dict) -> "CatalogRates":
+        return cls(
+            input=cost["input"],
+            output=cost["output"],
+            cache_read=cost.get("cache_read_input_token_cost"),
+            cache_write=cost.get("cache_creation_input_token_cost"),
+            cache_write_1h=cost.get("cache_creation_input_token_cost_above_1hr"),
+        )
+
+
+def cache_priced_model(models: list[dict]) -> tuple[str, CatalogRates] | None:
+    """The enabled, non-router model of a raw ``GET /v1/llm_models`` answer whose
+    catalog entry prices every token kind (input, output, cache read, five-minute and
+    one-hour cache write), first by ``base_name``, with its rates."""
+    priced = [
+        (model["base_name"], CatalogRates.from_cost(model["cost"]))
+        for model in models
+        if model.get("enabled") and not model.get("is_router") and model.get("cost")
+    ]
+    priced = [
+        (name, rates)
+        for name, rates in priced
+        if all(
+            rate is not None and rate > 0
+            for rate in (
+                rates.input,
+                rates.output,
+                rates.cache_read,
+                rates.cache_write,
+                rates.cache_write_1h,
+            )
+        )
+    ]
+    return min(priced, key=lambda entry: entry[0], default=None)
+
+
+def session_catalog_cost(
+    seed: CliSessionSeed, price: CostConfig | CatalogRates
+) -> float:
+    """Money of one session: its tokens at the catalog price. The cost the session
+    reported plays no part. Cache tokens are priced only with a ``CatalogRates``
+    price; a ``CostConfig`` has no cache rates, so it serves only where cache tokens
+    cannot change the result (orderings whose cost gaps dwarf them)."""
+    cost = seed.input_tokens * price.input + seed.output_tokens * price.output
+    for tokens, rate in (
+        (seed.cache_read_tokens, getattr(price, "cache_read", None)),
+        (seed.cache_creation_5m_tokens, getattr(price, "cache_write", None)),
+        (seed.cache_creation_1h_tokens, getattr(price, "cache_write_1h", None)),
+    ):
+        if tokens and rate is not None:
+            cost += tokens * rate
+    return cost
 
 
 def catalog_cost(seeds: list[CliSessionSeed], price: CostConfig) -> float:
@@ -735,3 +1007,419 @@ def get_delivery_framework_session_seeds() -> dict[str | None, CliSessionSeed]:
         )
         for index, skill in enumerate(skills)
     }
+
+
+# ── Sessions list: paging, sorting, search and filters ───────────────────────
+
+SESSIONS_PATH = "/v1/analytics/cli-analytics/sessions"
+EFFICIENCY_PATH = "/v1/analytics/cli-analytics/efficiency"
+SORT_BY_START_TIME = "start_time"
+SORT_BY_COST = "cost_usd"
+SORT_BY_CTX_PER_CALL = "ctx_per_call"
+SESSIONS_DEFAULT_PER_PAGE = 20
+SESSIONS_MAX_PER_PAGE = 1000
+FEATURE_BRANCH = "feature/alpha"
+MAIN_BRANCH = "main"
+SUPERPOWERS_SKILL = "superpowers:brainstorming"
+STLC_SKILL = "stlc-feature"
+SUPERPOWERS_LABEL = "Superpowers"
+PURE_CHAT_LABEL = "Pure chat"
+# The label the Sessions view shows for the sessions started by each skill.
+FRAMEWORK_LABEL_OF_SKILL = {
+    None: PURE_CHAT_LABEL,
+    SUPERPOWERS_SKILL: SUPERPOWERS_LABEL,
+    STLC_SKILL: STLC_LABEL,
+}
+
+
+def get_session_list_seeds(model: str) -> list[CliSessionSeed]:
+    """Seven hooks-only sessions of two users whose start, cost and framework differ
+    in every column the Sessions list sorts, searches and filters by. The newest
+    session is not the dearest and the dearest is not the one with the most context;
+    the last session names a model the catalog cannot price, so it costs nothing.
+    The cost and the token counts of the priced sessions differ by a thousand input
+    tokens, so no cache price can swap two of them."""
+    unpriced_model = f"autotest-unpriced-{uuid.uuid4().hex[:8]}"
+    # key, hour, input tokens, user, repository, branch, skill, model
+    specs = [
+        ("list_1", 10, 4000, OWNER, SEED_REPOSITORY, FEATURE_BRANCH, None, model),
+        ("list_2", 11, 1000, OWNER, SEED_REPOSITORY, MAIN_BRANCH, SUPERPOWERS_SKILL, model),
+        ("list_3", 12, 6000, MEMBER, OTHER_SEED_REPOSITORY, MAIN_BRANCH, STLC_SKILL, model),
+        ("list_4", 13, 2000, MEMBER, OTHER_SEED_REPOSITORY, FEATURE_BRANCH, SUPERPOWERS_SKILL, model),
+        ("list_5", 14, 5000, OWNER, None, None, None, model),
+        ("list_6", 15, 3000, MEMBER, SEED_REPOSITORY, MAIN_BRANCH, None, model),
+        ("list_7_unpriced", 9, 2500, OWNER, None, None, None, unpriced_model),
+    ]  # fmt: skip
+    return [
+        CliSessionSeed(
+            key=key,
+            started_at=seed_day_start() + timedelta(hours=hour),
+            input_tokens=input_tokens,
+            output_tokens=input_tokens // 100,
+            user=user,
+            repository=repository,
+            branch=branch,
+            skill_name=skill,
+            model=seed_model,
+        )
+        for key, hour, input_tokens, user, repository, branch, skill, seed_model in specs
+    ]
+
+
+def get_context_session_seeds(model: str) -> list[CliSessionSeed]:
+    """Four sessions that read a different number of tokens from the prompt cache over
+    a different number of requests, so their context per call differs; the newest has
+    none. By total cache reads ctx_2 would lead, but per call ctx_3 does (500 over one
+    request against 900 over three), so a sort by the total fails."""
+    # key, hour, cache read tokens, requests
+    specs = [
+        ("ctx_1", 10, 200, 1),
+        ("ctx_2", 11, 900, 3),
+        ("ctx_3", 12, 500, 1),
+        ("ctx_4", 13, 0, 1),
+    ]
+    return [
+        CliSessionSeed(
+            key=key,
+            started_at=seed_day_start() + timedelta(hours=hour),
+            input_tokens=1000 * (index + 1),
+            output_tokens=10 * (index + 1),
+            cache_read_tokens=cache_read,
+            requests=requests,
+            model=model,
+        )
+        for index, (key, hour, cache_read, requests) in enumerate(specs)
+    ]  # fmt: skip
+
+
+def get_early_session_seeds(model: str) -> list[CliSessionSeed]:
+    """Two sessions that are listed before ``get_new_session_seed`` arrives."""
+    return [
+        CliSessionSeed(
+            key="early_1",
+            started_at=seed_day_start() + timedelta(hours=10),
+            input_tokens=1000,
+            output_tokens=10,
+            cache_read_tokens=300,
+            model=model,
+        ),
+        CliSessionSeed(
+            key="early_2",
+            started_at=seed_day_start() + timedelta(hours=11),
+            input_tokens=3000,
+            output_tokens=30,
+            cache_read_tokens=100,
+            model=model,
+        ),
+    ]
+
+
+def get_new_session_seed(model: str) -> CliSessionSeed:
+    """A session that arrives in a window whose other sessions are already listed:
+    the middle one by cost, the first by context, started by a framework skill."""
+    return CliSessionSeed(
+        key="new_arrival",
+        started_at=seed_day_start() + timedelta(hours=12),
+        input_tokens=2000,
+        output_tokens=20,
+        cache_read_tokens=900,
+        skill_name=SUPERPOWERS_SKILL,
+        model=model,
+    )
+
+
+def context_per_call(seed: CliSessionSeed) -> float:
+    """Cache read tokens per model request, as the Sessions list reports ctx_per_call."""
+    return seed.cache_read_tokens / seed.requests
+
+
+def get_paging_boundary_seeds(model: str) -> list[CliSessionSeed]:
+    """One session more than the default page holds, a minute apart, so the default
+    page must leave out the oldest one."""
+    return [
+        CliSessionSeed(
+            key=f"page_boundary_{index}",
+            started_at=seed_day_start() + timedelta(hours=10, minutes=index),
+            input_tokens=1000 + index,
+            output_tokens=10,
+            model=model,
+        )
+        for index in range(SESSIONS_DEFAULT_PER_PAGE + 1)
+    ]
+
+
+def sorted_session_ids(
+    seeds: list[CliSessionSeed],
+    sort_by: str,
+    prices: dict[str, CostConfig] | None = None,
+) -> list[str]:
+    """Session ids in the order of the Sessions list: the key of ``sort_by``
+    descending, then the session id ascending. The context per call is the cache read
+    tokens over the requests, 0 for a session that read nothing. The cost is the catalog cost of the tokens at
+    the ``prices`` of the model (by name); a model with no price costs nothing."""
+    prices = prices or {}
+    keys = {
+        SORT_BY_START_TIME: lambda seed: seed.started_at.timestamp(),
+        SORT_BY_COST: lambda seed: round(
+            session_catalog_cost(seed, prices[seed.model])
+            if seed.model in prices
+            else 0.0,
+            9,
+        ),
+        SORT_BY_CTX_PER_CALL: context_per_call,
+    }
+    key = keys[sort_by]
+    return [
+        seed.session_id
+        for seed in sorted(seeds, key=lambda seed: (-key(seed), seed.session_id))
+    ]
+
+
+@dataclass(frozen=True)
+class FilterCase:
+    """A Sessions list request narrowed by filters, and the seeds it must keep.
+
+    ``users`` names the role of the user filtered by (resolved to an e-mail address
+    when the request is sent); ``keeps`` is the selection over the seed list."""
+
+    id: str
+    params: dict
+    keeps: object  # Callable[[CliSessionSeed], bool]
+    users: str | None = None
+
+
+def _has_label(label: str):
+    return lambda seed: FRAMEWORK_LABEL_OF_SKILL[seed.skill_name] == label
+
+
+SESSION_LIST_FILTER_CASES = [
+    pytest.param(
+        FilterCase(
+            "repository",
+            {"repositories": SEED_REPOSITORY},
+            lambda seed: seed.repository == SEED_REPOSITORY,
+        ),
+        id="repository",
+    ),
+    pytest.param(
+        FilterCase(
+            "repositories-of-two",
+            {"repositories": ",".join(SEED_REPOSITORIES)},
+            lambda seed: seed.repository in SEED_REPOSITORIES,
+        ),
+        id="two-repositories",
+    ),
+    pytest.param(
+        FilterCase(
+            "branch",
+            {"branch": FEATURE_BRANCH},
+            lambda seed: seed.branch == FEATURE_BRANCH,
+        ),
+        id="branch",
+    ),
+    pytest.param(
+        FilterCase("user", {}, lambda seed: seed.user == MEMBER, users=MEMBER),
+        id="user",
+    ),
+    pytest.param(
+        FilterCase(
+            "framework",
+            {"framework": SUPERPOWERS_LABEL},
+            _has_label(SUPERPOWERS_LABEL),
+        ),
+        id="framework",
+    ),
+    pytest.param(
+        FilterCase(
+            "framework-without-skill",
+            {"framework": PURE_CHAT_LABEL},
+            _has_label(PURE_CHAT_LABEL),
+        ),
+        id="framework-pure-chat",
+    ),
+    pytest.param(
+        FilterCase(
+            "repository-and-branch",
+            {"repositories": OTHER_SEED_REPOSITORY, "branch": FEATURE_BRANCH},
+            lambda seed: seed.repository == OTHER_SEED_REPOSITORY
+            and seed.branch == FEATURE_BRANCH,
+        ),
+        id="repository-and-branch",
+    ),
+    pytest.param(
+        FilterCase(
+            "user-and-repository",
+            {"repositories": SEED_REPOSITORY},
+            lambda seed: seed.user == MEMBER and seed.repository == SEED_REPOSITORY,
+            users=MEMBER,
+        ),
+        id="user-and-repository",
+    ),
+    pytest.param(
+        FilterCase(
+            "framework-and-repository",
+            {"framework": SUPERPOWERS_LABEL, "repositories": OTHER_SEED_REPOSITORY},
+            lambda seed: _has_label(SUPERPOWERS_LABEL)(seed)
+            and seed.repository == OTHER_SEED_REPOSITORY,
+        ),
+        id="framework-and-repository",
+    ),
+    pytest.param(
+        FilterCase(
+            "framework-and-branch-by-cost",
+            {
+                "framework": PURE_CHAT_LABEL,
+                "branch": MAIN_BRANCH,
+                "sort_by": SORT_BY_COST,
+            },
+            lambda seed: _has_label(PURE_CHAT_LABEL)(seed) and seed.branch == MAIN_BRANCH,
+        ),
+        id="framework-and-branch-by-cost",
+    ),
+    pytest.param(
+        FilterCase(
+            "framework-by-cost",
+            {"framework": SUPERPOWERS_LABEL, "sort_by": SORT_BY_COST},
+            _has_label(SUPERPOWERS_LABEL),
+        ),
+        id="framework-by-cost",
+    ),
+    pytest.param(
+        FilterCase(
+            "framework-by-context",
+            {"framework": PURE_CHAT_LABEL, "sort_by": SORT_BY_CTX_PER_CALL},
+            _has_label(PURE_CHAT_LABEL),
+        ),
+        id="framework-by-context",
+    ),
+    pytest.param(
+        FilterCase(
+            "search-and-framework",
+            {"search": SEED_REPOSITORY, "framework": PURE_CHAT_LABEL},
+            lambda seed: seed.repository == SEED_REPOSITORY
+            and _has_label(PURE_CHAT_LABEL)(seed),
+        ),
+        id="search-and-framework",
+    ),
+    pytest.param(
+        FilterCase(
+            "search-and-branch-by-cost",
+            {"search": MAIN_BRANCH, "branch": MAIN_BRANCH, "sort_by": SORT_BY_COST},
+            lambda seed: seed.branch == MAIN_BRANCH,
+        ),
+        id="search-and-branch-by-cost",
+    ),
+]  # fmt: skip
+
+# (search term, selection of the seeds whose repository or branch contains it, ignoring case)
+SESSION_LIST_SEARCH_CASES = [
+    pytest.param(
+        OTHER_SEED_REPOSITORY,
+        lambda seed: seed.repository == OTHER_SEED_REPOSITORY,
+        id="repository",
+    ),
+    pytest.param(
+        OTHER_SEED_REPOSITORY.upper(),
+        lambda seed: seed.repository == OTHER_SEED_REPOSITORY,
+        id="repository-in-other-case",
+    ),
+    pytest.param(
+        "analytics-repo",
+        lambda seed: seed.repository == SEED_REPOSITORY,
+        id="part-of-repository",
+    ),
+    pytest.param(
+        FEATURE_BRANCH,
+        lambda seed: seed.branch == FEATURE_BRANCH,
+        id="branch",
+    ),
+    pytest.param(
+        "AUTOTEST-CLI-ANALYTICS",
+        lambda seed: seed.repository is not None,
+        id="every-seeded-repository",
+    ),
+    pytest.param("no-session-has-this-text", lambda seed: False, id="no-match"),
+    pytest.param("%", lambda seed: False, id="percent-sign-is-literal"),
+    pytest.param("_", lambda seed: False, id="underscore-is-literal"),
+]
+
+# (page, per_page, sessions that page holds out of the seven seeded)
+SESSION_LIST_PAGE_CASES = [
+    pytest.param(0, 1, 1, id="first-of-single-session-pages"),
+    pytest.param(6, 1, 1, id="last-session-alone"),
+    pytest.param(7, 1, 0, id="just-after-last-session"),
+    pytest.param(0, 4, 4, id="full-first-page"),
+    pytest.param(1, 4, 3, id="partial-last-page"),
+    pytest.param(2, 4, 0, id="page-after-partial-last"),
+    pytest.param(0, 7, 7, id="page-of-exactly-all-sessions"),
+    pytest.param(1, 7, 0, id="page-after-exact-fit"),
+    pytest.param(0, SESSIONS_MAX_PER_PAGE, 7, id="largest-page-size"),
+    pytest.param(100000, 20, 0, id="far-beyond-last-page"),
+]
+
+# Parameters the list refuses.
+SESSION_LIST_INVALID_PARAMS = [
+    pytest.param({"page": -1}, id="negative-page"),
+    pytest.param({"per_page": 0}, id="zero-per-page"),
+    pytest.param({"per_page": SESSIONS_MAX_PER_PAGE + 1}, id="per-page-over-limit"),
+    pytest.param({"sort_by": "no_such_key"}, id="unknown-sort-key"),
+]
+
+# What every session row of the list carries, with the types of its values.
+SESSION_ROW_TYPES = {
+    "trace_id": str,
+    "developer_name": str,
+    "user_email": str,
+    "repository": (str, type(None)),
+    "branch": (str, type(None)),
+    "prompt": str,
+    "start_time": str,
+    "duration_ms": int,
+    "model_name": str,
+    "turns": (int, type(None)),
+    "summary_state": str,
+    "summary_metrics": list,
+    "tool_call_count": int,
+    "tool_calls_total": (int, type(None)),
+    "api_call_count": int,
+    "input_tokens": int,
+    "output_tokens": int,
+    "cache_read_tokens": int,
+    "cache_creation_tokens": int,
+    "ctx_per_call": (int, float),
+    "cost_usd": (int, float),
+    "cost_available": bool,
+    "net_lines": (int, type(None)),
+    "bloat_pct": (int, float),
+    "delivery_framework": (str, type(None)),
+    "subscription_type": str,
+    "project_origin": str,
+}
+SESSION_LIST_KEYS = ("sessions", "page", "per_page", "total")
+SESSION_METADATA_TYPES = {
+    "timestamp": str,
+    "data_as_of": str,
+    "execution_time_ms": (int, float),
+    "unpriced_models": list,
+    "cost_incomplete": bool,
+}
+# Row fields whose value the list and the detail of the same session must agree on.
+# Left out: api_call_count and ctx_per_call. For a session whose requests came from hook
+# events the list counts the request and the detail reports no API calls, so the two differ
+# for a reason that has nothing to do with how the list is paged, sorted or filtered.
+SESSION_DETAIL_FIELDS = (
+    "trace_id",
+    "developer_name",
+    "user_email",
+    "repository",
+    "branch",
+    "start_time",
+    "duration_ms",
+    "model_name",
+    "input_tokens",
+    "output_tokens",
+    "cache_read_tokens",
+    "cache_creation_tokens",
+    "cost_available",
+    "delivery_framework",
+)

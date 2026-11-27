@@ -59,16 +59,14 @@ class CLIAnalyticsPage(BasePage):
     """CLI Analytics dashboard and its section navigation."""
 
     PATH = "/analytics?tab=cliAnalytics"
-    TAB_NAME = "CLI Analytics"
+    TAB_NAME = "AI Attribution"
     API_PATH = "/v1/analytics/cli-analytics/"
     SECTIONS = {
         CLIAnalyticsSection.OVERVIEW: SectionSpec(
             "Net Lines Over Time", ("overview", "repositories")
         ),
-        CLIAnalyticsSection.USERS: SectionSpec("All Users", ("users", "user-charts")),
-        CLIAnalyticsSection.REPOSITORIES: SectionSpec(
-            "Repositories", ("repositories",)
-        ),
+        CLIAnalyticsSection.USERS: SectionSpec("All Users", ("users",)),
+        CLIAnalyticsSection.REPOSITORIES: SectionSpec("Repositories", ("projects",)),
         CLIAnalyticsSection.TOOLS_AND_MODELS: SectionSpec(
             "Most Used Tools", ("tools",)
         ),
@@ -179,14 +177,53 @@ class CLIAnalyticsPage(BasePage):
             .filter(has_not=self.page.get_by_text(self.EMPTY_TABLE_TEXT, exact=True))
         )
 
-    def _user_row_tool_success_cell(self, row: Locator) -> Locator:
-        """Tool Success cell in a Users table row (5th column, index 4).
+    @property
+    def users_tool_success_header(self) -> Locator:
+        """'Tool Success' column header of the Users table."""
+        return self.section_panel.get_by_role("columnheader").filter(
+            has_text=re.compile(r"^Tool Success$")
+        )
 
-        Columns: USER(0) SESSIONS(1) TURNS(2) TOOL CALLS(3) TOOL SUCCESS(4) ...
-        The live component renders no data-testid on table cells; positional lookup
-        is used instead.
+    def metric_card(self, label: str) -> Locator:
+        """Metric card of the active section by its exact label.
+
+        A card is a div holding the label, the value and the description as paragraphs; the
+        live component renders no data-testid on it, so it is found from its label.
         """
-        return row.get_by_role("cell").nth(4)
+        return self.section_panel.get_by_text(label, exact=True).locator("xpath=../..")
+
+    def user_row(self, email: str) -> Locator:
+        """Users table row of a user, by the e-mail it lists."""
+        return self.users_data_rows.filter(has_text=email)
+
+    def users_header(self, name: str) -> Locator:
+        """Column header of the Users table by its exact text."""
+        return self.section_panel.get_by_role("columnheader").filter(
+            has_text=re.compile(rf"^{re.escape(name)}$", re.IGNORECASE)
+        )
+
+    def user_cell(self, email: str, column: str) -> Locator:
+        """Cell of a user's Users table row under the column header.
+
+        The position is read from the column header: the cells carry no data-testid and
+        columns have been inserted before these ones (Est. Cost).
+        """
+        index = self.users_header(column).evaluate(
+            "header => Array.from(header.parentElement.children).indexOf(header)"
+        )
+        return self.user_row(email).get_by_role("cell").nth(index)
+
+    def _user_row_tool_success_cell(self, row: Locator) -> Locator:
+        """Tool Success cell in a Users table row.
+
+        The live component renders no data-testid on table cells, and columns have
+        been inserted before this one (Est. Cost), so the position is read from the
+        column header instead of being hard-coded.
+        """
+        column = self.users_tool_success_header.evaluate(
+            "header => Array.from(header.parentElement.children).indexOf(header)"
+        )
+        return row.get_by_role("cell").nth(column)
 
     # ── Actions ──────────────────────────────────────────────────────────────────
 
@@ -290,6 +327,14 @@ class CLIAnalyticsPage(BasePage):
         return self
 
     @step
+    def open_user_modal(self, email: str) -> CLIAnalyticsUserModal:
+        """Click the Users table row of the user and return the open user detail modal."""
+        row = self.user_row(email)
+        expect(row, f"Users table should list {email}").to_be_visible(timeout=15000)
+        row.get_by_role("cell").first.click()
+        return CLIAnalyticsUserModal(self.page).should_be_visible()
+
+    @step
     def open_first_user_modal(self) -> CLIAnalyticsUserModal:
         """Click the first Users table row and return the open user detail modal."""
         row = self.users_data_rows.first
@@ -365,6 +410,42 @@ class CLIAnalyticsPage(BasePage):
             self.overview_tool_success_desc,
             "metric-desc-total_tool_calls should display the em dash when tool_calls = 0",
         ).to_have_text(self.EM_DASH, timeout=15000)
+        return self
+
+    @step
+    def should_show_overview_tool_calls(self, count: str):
+        """Assert the Overview TOOL CALLS card counts the tool calls."""
+        expect(
+            self.metric_card("Tool Calls").get_by_text(count, exact=True),
+            f"Overview Tool Calls should be {count}",
+        ).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_show_overview_tool_success(self, text: str):
+        """Assert the subtitle of the Overview TOOL CALLS card (its Tool Success) reads as given."""
+        expect(
+            self.metric_card("Tool Calls").get_by_text(text, exact=True),
+            f"Overview Tool Calls card should show Tool Success '{text}'",
+        ).to_be_visible(timeout=15000)
+        return self
+
+    @step
+    def should_show_user_tool_calls(self, email: str, count: str):
+        """Assert the TOOL CALLS cell of the user's Users table row."""
+        expect(
+            self.user_cell(email, "Tool Calls"),
+            f"Tool Calls of {email} should be {count}",
+        ).to_have_text(count, timeout=15000)
+        return self
+
+    @step
+    def should_show_user_tool_success(self, email: str, text: str):
+        """Assert the TOOL SUCCESS cell of the user's Users table row."""
+        expect(
+            self.user_cell(email, "Tool Success"),
+            f"Tool Success of {email} should be '{text}'",
+        ).to_have_text(text, timeout=15000)
         return self
 
     @step

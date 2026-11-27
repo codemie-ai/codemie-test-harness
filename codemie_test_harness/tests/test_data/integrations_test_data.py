@@ -346,6 +346,10 @@ testable_integrations = [
         CredentialsManager.servicenow_credentials(),
         marks=[
             pytest.mark.servicenow,
+            pytest.mark.xfail(
+                reason="ServiceNow environment is temporary not available",
+                strict=False,
+            ),
         ],
         id=CredentialTypes.SERVICE_NOW,
     ),
@@ -454,6 +458,10 @@ invalid_integrations = [
         'ServiceNow tool exception. Status: 401. Response: {"error":{"message":"User is not authenticated","detail":"Required to provide Auth information"},"status":"failure"}',
         marks=[
             pytest.mark.servicenow,
+            pytest.mark.xfail(
+                reason="ServiceNow environment is temporary not available",
+                strict=False,
+            ),
         ],
         id=CredentialTypes.SERVICE_NOW,
     ),
@@ -605,6 +613,10 @@ empty_credentials_integrations = [
         """,
         marks=[
             pytest.mark.servicenow,
+            pytest.mark.xfail(
+                reason="ServiceNow environment is temporary not available",
+                strict=False,
+            ),
         ],
         id=f"{CredentialTypes.SERVICE_NOW}_empty",
     ),

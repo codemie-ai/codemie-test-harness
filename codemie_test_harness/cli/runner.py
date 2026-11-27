@@ -78,7 +78,7 @@ def build_pytest_cmd(
     tests_path, root_dir = resolve_tests_path_and_root()
     cmd = [sys.executable, "-m", "pytest", tests_path]
     if workers:
-        cmd += ["-n", str(workers)]
+        cmd += ["-n", str(workers), "--dist=loadgroup"]
     if marks:
         cmd += ["-m", str(marks)]
     if reruns and int(reruns) > 0:
