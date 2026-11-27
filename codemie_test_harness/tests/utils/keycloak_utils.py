@@ -98,7 +98,7 @@ class KeycloakUtils:
     def _create_user(
         self,
         email: str,
-        project_name: str,
+        project_name: str | None,
         role_names: tuple,
         username: str | None = None,
         extra_attributes: dict[str, list[str]] | None = None,
@@ -149,9 +149,10 @@ class KeycloakUtils:
         user_data = get_user_response.json()
 
         attributes = user_data.get("attributes", {})
-        attributes["applications"] = (
-            [email, project_name] if project_name != email else [email]
-        )
+        if project_name is not None:
+            attributes["applications"] = (
+                [email, project_name] if project_name != email else [email]
+            )
         attributes.update(extra_attributes or {})
         user_data["attributes"] = attributes
 
@@ -162,18 +163,27 @@ class KeycloakUtils:
 
         return password
 
-    def create_external_user(self, email: str) -> str:
-        """Create a user with developer role only whose ``user_type`` attribute is ``external``.
+    def create_platform_user_of_type(
+        self, email: str, user_type: str, personal_project: bool = True
+    ) -> str:
+        """Create a developer-role user whose ``user_type`` attribute is `user_type`.
 
         The platform reads the attribute as the ``user_type`` claim of the user's token, so the
-        account counts as an external user from its first sign-in.
+        account has that type from its first sign-in. With `personal_project` the user's own
+        project is in its ``applications`` attribute, as for every other user created here;
+        without it the attribute is left out, so the user has no project at all until a test
+        adds one.
         """
         return self._create_user(
             email,
-            email,
+            email if personal_project else None,
             role_names=("developer",),
-            extra_attributes={"user_type": ["external"]},
+            extra_attributes={"user_type": [user_type]},
         )
+
+    def create_external_user(self, email: str) -> str:
+        """Create an external user (developer role only) that has its personal project."""
+        return self.create_platform_user_of_type(email, "external")
 
     def delete_user(self, email: str) -> None:
         headers = self._get_headers()

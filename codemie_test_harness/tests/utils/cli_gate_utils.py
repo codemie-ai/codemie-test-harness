@@ -112,15 +112,23 @@ def is_listed(api: CliAnalyticsApi, session_id: str, repo: str) -> bool:
     return any(row["trace_id"] == session_id for row in sessions_with(api, repo))
 
 
-def listed_with_prefix(api: CliAnalyticsApi, prefix: str) -> set:
-    """Ids of every listed session matching `prefix`, in as many requests as the pages need.
+def listed_with_prefix(
+    api: CliAnalyticsApi, prefix: str, filters: dict | None = None
+) -> set:
+    """Ids of every listed session matching `prefix`, in as many requests as the pages need,
+    narrowed by the listing `filters` (e.g. ``{"personal_only": "true"}``).
     Fails instead of returning a partial set: a truncated read would show a false absence."""
     rows, page = [], 0
     while True:
         r = api.request(
             "GET",
             f"{INGEST_PREFIX}/sessions",
-            params={"search": prefix, "per_page": _SESSIONS_PAGE, "page": page},
+            params={
+                "search": prefix,
+                "per_page": _SESSIONS_PAGE,
+                "page": page,
+                **(filters or {}),
+            },
         )
         assert_that(
             r.status_code, equal_to(200), f"sessions: {r.status_code} {r.text[:200]}"
@@ -161,12 +169,15 @@ def observe_absence_window(
     last_send_at: float,
     window_s: float = ABSENCE_WINDOW_S,
     poll_s: float = ABSENCE_POLL_S,
+    filters: dict | None = None,
 ) -> None:
     """Observe for `window_s` seconds measured from `last_send_at` (a time.monotonic() value
     taken after the last send), polling at EVERY poll both marker presence and leak absence.
 
     markers: {session_id: repo} of accepted sessions that must be listed.
     leaks: {discard class name: {session_id: repo}} that must never be listed.
+    filters: listing filters of every poll, e.g. ``{"personal_only": "true"}`` to observe the
+    caller's own Personal list instead of the shared one.
     A leak at any poll fails at once naming its class. Passes only if every marker was listed
     AND the whole window elapsed with no leak. The window is a bounded test heuristic (see
     ABSENCE_WINDOW_S), not an ingestion SLA: "not observed within the window" is all it proves.
@@ -180,7 +191,7 @@ def observe_absence_window(
     assert_that(foreign, empty(), "sessions not made by make_batch cannot be observed")
 
     def _poll() -> int:
-        stored = listed_with_prefix(api, SESSION_PREFIX)
+        stored = listed_with_prefix(api, SESSION_PREFIX, filters)
         listed.update(set(markers) & stored)
         for leak_class, sessions in leaks.items():
             leaked = sorted(set(sessions) & stored)
