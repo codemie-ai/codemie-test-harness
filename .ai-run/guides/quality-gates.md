@@ -1,6 +1,38 @@
 # Quality Gates
 
-Run every command from the repository root. The "Ran" column records what was executed on 2026-11-05 in a scratch clone of this branch (the `license-check` and `license-scan` rows on 2026-11-06), with Poetry 2.5.1 and Python 3.12 (`poetry run`) or Python 3.15 (`python3`). "not run" means nobody ran the command for this guide.
+Run order is fastest-to-slowest.
+
+---
+
+### lint
+
+**Run**: `poetry run ruff check .`
+**Pass**: exit 0 (`All checks passed!`)
+**Fail**: non-zero exit with findings listed
+**Auto-fix**: make ruff-fix
+
+### format
+
+**Run**: `poetry run ruff format --check .`
+**Pass**: exit 0, no file would change
+**Fail**: exit 1 naming files that would be reformatted
+**Auto-fix**: make ruff-format
+**Notes**: Not a CI gate; only the pre-commit hook runs it
+
+### license-check
+
+**Run**: `make license-check`
+**Pass**: exit 0 (`checked N files`)
+**Fail**: exit 1 listing `missing licence header: <path>` or `cannot read <path>`, or on an empty or mismatched file list
+**Auto-fix**: make license-fix
+**Notes**: Not a CI gate; run before a PR
+
+### secret-scan
+
+**Run**: `make scan-internal`
+**Pass**: exit 0
+**Fail**: exit 1 on any match; exit 2 when no pattern is configured
+**Notes**: The pre-commit hook skips the scan with a notice when neither variable is set; the make target does not
 
 ## Commands
 
@@ -45,12 +77,12 @@ Checked in a scratch clone on 2026-11-05: a ruff error blocks the commit, a miss
 
 | Job name | Definition | Fail means |
 |---|---|---|
-| `Build` | `.github/workflows/ci.yml`, job `build`, lines 17-43 | install, build or the CLI smoke test failed |
-| `Lint` | `.github/workflows/ci.yml`, job `lint`, lines 45-66 | `ruff check .` reported a finding |
-| `Internal references` | `.github/workflows/ci.yml`, job `internal-refs`, line 68 | a private host, ticket key or personal e-mail is in the tree |
-| `Security` | `.github/workflows/ci.yml`, job `secrets-detection`, line 74; rules in `.gitleaks.toml` | a secret is in the change |
-| `PR Title` | `.github/workflows/pr-title-lint.yml`, job `pr-title`, line 17 | the PR title is not Conventional Commits |
-| `CodeQL (<language>)` | `.github/workflows/codeql.yml`, job `codeql`, line 22 | CodeQL reported a finding |
+| `Build` | `.github/workflows/ci.yml::jobs.build` | install, build or the CLI smoke test failed |
+| `Lint` | `.github/workflows/ci.yml::jobs.lint` | `ruff check .` reported a finding |
+| `Internal references` | `.github/workflows/ci.yml::jobs.internal-refs` | a private host, ticket key or personal e-mail is in the tree |
+| `Security` | `.github/workflows/ci.yml::jobs.secrets-detection`; rules in `.gitleaks.toml` | a secret is in the change |
+| `PR Title` | `.github/workflows/pr-title-lint.yml::jobs.pr-title` | the PR title is not Conventional Commits |
+| `CodeQL (<language>)` | `.github/workflows/codeql.yml::jobs.codeql` | CodeQL reported a finding |
 
 `Internal references`, `Security`, `PR Title` and `CodeQL` call reusable workflows from `codemie-ai/ci-workflows`; their rules are not in this repository. The local `make scan-internal` is a separate check and does not replace the CI job.
 
