@@ -684,6 +684,17 @@ class UserManagementPage(BasePage):
         return self
 
     @step
+    def reset_saved_filters(self):
+        """Open the page and press 'Clear All' when any filter is set, so the filters the
+        page keeps for the signed-in user (filters.ts setFilters) are back to their initial
+        state. Meant for fixture teardown, whatever state the test left the page in."""
+        self.navigate_to()
+        if self.clear_all_filters_button.is_visible():
+            self.clear_all_filters()
+        expect(self.clear_all_filters_button).to_have_count(0, timeout=15000)
+        return self
+
+    @step
     def should_be_filtered_by_budget_only_in_url(self, budget_id: str):
         """Assert the browser is on the Users management page with exactly ?budgets=<id> and
         no other query parameter."""

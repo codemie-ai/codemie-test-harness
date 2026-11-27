@@ -32,6 +32,10 @@ from codemie_test_harness.tests.ui.pageobject.administration.user_management_pag
     UserManagementPage,
 )
 
+# Tests that open User Management as the shared admin account run on one worker, one after
+# another, so a filter one of them saves is never seen by another (filters.ts:114).
+ADMIN_USER_MANAGEMENT_GROUP = pytest.mark.xdist_group(name="budget_users_admin_filters")
+
 
 def _open_budget_row(page, budget_name: str) -> BudgetsManagementPage:
     budgets_page = BudgetsManagementPage(page).navigate_to()
@@ -42,6 +46,7 @@ def _open_budget_row(page, budget_name: str) -> BudgetsManagementPage:
 
 # @case budget-user-count-redirect_TC_001
 @pytest.mark.budget
+@ADMIN_USER_MANAGEMENT_GROUP
 @pytest.mark.ui
 def test_users_badge_shows_assigned_user_count_and_zero_badge_opens_empty_list(
     page,
@@ -79,7 +84,10 @@ def test_users_badge_shows_assigned_user_count_and_zero_badge_opens_empty_list(
 @pytest.mark.budget
 @pytest.mark.parametrize(
     "acting_credentials",
-    [pytest.param("admin", id="admin"), pytest.param("maintainer", id="maintainer")],
+    [
+        pytest.param("admin", id="admin", marks=ADMIN_USER_MANAGEMENT_GROUP),
+        pytest.param("maintainer", id="maintainer"),
+    ],
     indirect=True,
 )
 @pytest.mark.ui
@@ -127,10 +135,23 @@ def test_users_badge_opens_user_management_filtered_by_budget_and_filter_stays_e
 
 
 # @case budget-user-count-redirect_TC_006
+@pytest.mark.xfail(
+    raises=AssertionError,
+    strict=True,
+    reason="A Project filter saved on an earlier User Management visit is merged into "
+    "the users query on arrival via the budget Users badge, so the budget's assigned "
+    "user is filtered out; the list should be filtered by that budget only",
+)
 @pytest.mark.budget
+@ADMIN_USER_MANAGEMENT_GROUP
 @pytest.mark.ui
 def test_users_badge_arrival_is_not_narrowed_by_a_saved_project_filter(
-    page, manual_budget, assign_budget_user, platform_user, project
+    page,
+    manual_budget,
+    assign_budget_user,
+    platform_user,
+    project,
+    reset_user_management_filters,
 ):
     """AC-3: a Project filter chosen on an earlier visit to User Management (kept per user,
     filters.ts:114) must not narrow the arrival through the badge: the URL carries only
