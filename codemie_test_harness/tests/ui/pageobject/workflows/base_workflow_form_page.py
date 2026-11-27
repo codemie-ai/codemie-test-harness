@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 import time
 from collections import Counter
 
+from hamcrest import assert_that, has_length
 from playwright.sync_api import Locator, Page, expect
 from reportportal_client import step
 
@@ -26,6 +28,19 @@ from codemie_test_harness.tests.ui.pageobject.workflows.node_state_settings_pane
 from codemie_test_harness.tests.ui.pageobject.workflows.workflow_config_panel import (
     WorkflowConfigPanel,
 )
+from codemie_test_harness.tests.ui.pageobject.workflows.workflow_issues_panel import (
+    WorkflowIssuesPanel,
+)
+
+# Node outline of a node flagged by issues (frontend editor/nodes/common.ts NODE_OUTLINE_CLASS).
+NODE_OUTLINE_CLASS = {
+    "error": "outline-failed-secondary",
+    "warning": "outline-aborted-secondary",
+}
+
+# Quiet window with no new update request before counting them, and the cap on waiting for it.
+UPDATE_REQUESTS_SETTLE_MS = 2_000
+UPDATE_REQUESTS_SETTLE_TIMEOUT_MS = 10_000
 
 
 class BaseWorkflowFormPage(BasePage):
@@ -36,6 +51,9 @@ class BaseWorkflowFormPage(BasePage):
         self.sidebar = WorkflowSidebar(page)
         self._menu = Menu(page)
         self._config_panel = WorkflowConfigPanel(page)
+        self.issues_panel = WorkflowIssuesPanel(page)
+        self._update_requests: list[str] = []
+        self._update_request_listener = None
 
     # ==============================================
     # PROPERTIES - UI ELEMENTS
@@ -60,7 +78,32 @@ class BaseWorkflowFormPage(BasePage):
         """Save and Run button in the header."""
         return self.page.get_by_role("button", name="Save and Run")
 
+    @property
+    def done_button(self) -> Locator:
+        """'Done' header button, shown instead of Cancel after a save with warnings."""
+        return self.page.get_by_role("button", name="Done", exact=True)
+
+    @property
+    def saved_button(self) -> Locator:
+        """Disabled 'Saved' header button, shown instead of Save after a save with warnings."""
+        return self.page.get_by_role("button", name="Saved", exact=True)
+
+    @property
+    def run_anyway_button(self) -> Locator:
+        """'Run anyway' header button, shown instead of Save and Run after a save with warnings."""
+        return self.page.get_by_role("button", name="Run anyway")
+
+    @property
+    def run_popup(self) -> Locator:
+        """'New Workflow Execution' dialog that starts a run."""
+        return self.page.get_by_role("dialog", name="New Workflow Execution")
+
     # ------ Toolbar Elements ------
+
+    @property
+    def check_button(self) -> Locator:
+        """'Check' toolbar button: validates the current draft without saving it."""
+        return self.page.get_by_role("button", name="Check", exact=True)
 
     @property
     def load_example_button(self) -> Locator:
@@ -254,7 +297,44 @@ class BaseWorkflowFormPage(BasePage):
         """Click the save and run button."""
         self.save_and_run_button.click()
 
+    @step
+    def click_done(self):
+        """Click 'Done' in the header (saved-with-warnings state)."""
+        self.done_button.click()
+
+    @step
+    def click_run_anyway(self):
+        """Click 'Run anyway' in the header (saved-with-warnings state)."""
+        self.run_anyway_button.click()
+
+    @step
+    def start_counting_update_requests(self, workflow_id: str):
+        """Record every update request (PUT v1/workflows/<id>) the page sends from now on."""
+        self.stop_counting_update_requests()
+        self._update_requests = []
+        suffix = f"/v1/workflows/{workflow_id}"
+
+        def _record(request):
+            if request.method == "PUT" and request.url.split("?")[0].endswith(suffix):
+                self._update_requests.append(request.url)
+
+        self.page.on("request", _record)
+        self._update_request_listener = _record
+        return self
+
+    def stop_counting_update_requests(self):
+        """Remove the listener added by ``start_counting_update_requests``, if any."""
+        if self._update_request_listener is not None:
+            self.page.remove_listener("request", self._update_request_listener)
+            self._update_request_listener = None
+        return self
+
     # ------ Toolbar Actions ------
+    @step
+    def click_check(self):
+        """Click the 'Check' toolbar button."""
+        self.check_button.click()
+
     @step
     def open_workflow_config_panel(self) -> WorkflowConfigPanel:
         """
@@ -280,6 +360,22 @@ class BaseWorkflowFormPage(BasePage):
         self.yaml_button.click()
         expect(self._config_panel.yaml_tab).to_be_visible()
         return self._config_panel
+
+    @property
+    def workflow_config_panel(self) -> WorkflowConfigPanel:
+        """The workflow configuration panel, whichever tab it shows."""
+        return self._config_panel
+
+    @step
+    def replace_yaml_config(self, yaml_config: str):
+        """Replace the whole YAML in the YAML panel and commit it with the panel's Save.
+
+        The workflow itself is not saved; use the header Save, Save and Run or Check next.
+        """
+        yaml_panel = self.open_yaml_panel()
+        yaml_panel.fill_yaml_config(yaml_config)
+        yaml_panel.click_save()
+        return self
 
     @step
     def click_beautify(self):
@@ -313,6 +409,11 @@ class BaseWorkflowFormPage(BasePage):
     def add_iterator_node(self):
         """Add iterator node to canvas by clicking it in palette."""
         self.iterator_node_button.click()
+
+    @step
+    def add_node_from_sidebar(self, label: str):
+        """Add a node by clicking its button (exact label) in the nodes palette."""
+        self.page.get_by_role("button", name=label, exact=True).click()
 
     @step
     def click_first_generated_node(self):
@@ -402,6 +503,93 @@ class BaseWorkflowFormPage(BasePage):
     # ==============================================
     # METHODS - VERIFICATION & ASSERTIONS
     # ==============================================
+
+    # ------ Save Outcome Verifications ------
+    @step
+    def should_have_editing_header(self):
+        """Header shows Cancel, Save and Save and Run, and none of the saved-with-warnings buttons."""
+        expect(self.cancel_button).to_be_visible()
+        expect(self.save_button).to_be_visible()
+        expect(self.save_and_run_button).to_be_visible()
+        expect(self.done_button).to_have_count(0)
+        expect(self.run_anyway_button).to_have_count(0)
+        return self
+
+    @step
+    def should_have_saved_with_warnings_header(self):
+        """Header shows Done, a disabled Saved and Run anyway instead of the save buttons."""
+        expect(self.done_button).to_be_visible()
+        expect(self.saved_button).to_be_disabled()
+        expect(self.run_anyway_button).to_be_visible()
+        expect(self.page.get_by_role("button", name="Save", exact=True)).to_have_count(
+            0
+        )
+        expect(self.save_and_run_button).to_have_count(0)
+        return self
+
+    @step
+    def should_show_run_popup(self):
+        """The 'New Workflow Execution' dialog is open."""
+        expect(self.run_popup).to_be_visible()
+        return self
+
+    @step
+    def should_not_show_run_popup(self):
+        """No 'New Workflow Execution' dialog is open."""
+        expect(self.run_popup).to_have_count(0)
+        return self
+
+    @step
+    def should_have_node_outline(self, state_id: str, outline: str):
+        """The canvas node of ``state_id`` has the 'error' (red) or 'warning' (amber) outline."""
+        node = self.canvas_node_for_state(state_id).locator(".workflow-base-node")
+        expect(node).to_have_class(re.compile(NODE_OUTLINE_CLASS[outline]))
+        return self
+
+    @step
+    def should_have_no_issue_outline(self, state_id: str):
+        """The canvas node of ``state_id`` has neither the red nor the amber issue outline."""
+        node = self.canvas_node_for_state(state_id).locator(".workflow-base-node")
+        expect(node).to_be_visible()
+        expect(node).not_to_have_class(
+            re.compile("|".join(NODE_OUTLINE_CLASS.values()))
+        )
+        return self
+
+    @step
+    def should_have_sent_update_requests(self, count: int):
+        """Exactly ``count`` update requests were sent since ``start_counting_update_requests``.
+
+        Waits until no new update request has arrived for ``UPDATE_REQUESTS_SETTLE_MS``, so
+        a duplicate update sent asynchronously right after the UI settles is still counted.
+        """
+        deadline_ms = UPDATE_REQUESTS_SETTLE_TIMEOUT_MS
+        seen = len(self._update_requests)
+        while deadline_ms > 0:
+            self.page.wait_for_timeout(UPDATE_REQUESTS_SETTLE_MS)
+            deadline_ms -= UPDATE_REQUESTS_SETTLE_MS
+            if len(self._update_requests) == seen:
+                break
+            seen = len(self._update_requests)
+        assert_that(
+            self._update_requests,
+            has_length(count),
+            "update requests (PUT v1/workflows/<id>) sent by the editor",
+        )
+        return self
+
+    @step
+    def should_be_on_edit_page_of_new_workflow(self):
+        """The route was replaced with the edit page of a workflow (``/workflows/<id>/edit``)."""
+        expect(self.page).to_have_url(re.compile(r"/workflows/[^/?]+/edit(\?|$)"))
+        expect(self.page).not_to_have_url(re.compile(r"/workflows/new"))
+        return self
+
+    @step
+    def should_have_left_editor(self):
+        """The page is neither the new-workflow page nor an edit page any more."""
+        expect(self.page).not_to_have_url(re.compile(r"/workflows/(new|[^/]+/edit)"))
+        return self
 
     # ------ Canvas Verifications ------
     @step

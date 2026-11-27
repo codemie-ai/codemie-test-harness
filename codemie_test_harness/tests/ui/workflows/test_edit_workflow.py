@@ -30,6 +30,14 @@ from codemie_test_harness.tests.ui.pageobject.workflows.edit_workflow_page impor
 from codemie_test_harness.tests.ui.pageobject.workflows.workflows_page import (
     WorkflowsPage,
 )
+from codemie_test_harness.tests.ui.test_data.workflow_contracts_test_data import (
+    PRODUCER_STATE_ID,
+    REMOVED_KEY_MESSAGE,
+    SAVED_WITH_ONE_WARNING_TOAST,
+    SAVED_WITH_WARNINGS_NOTE,
+    WORKFLOW_CONTRACTS_COMPONENT_ID,
+    contract_warning_assistants_and_states,
+)
 from codemie_test_harness.tests.ui.test_data.workflows_test_data import (
     OWNER_INTEGRATION_RAW_MESSAGE,
     OWNER_INTEGRATION_TOAST,
@@ -449,5 +457,54 @@ def test_save_global_workflow_shows_owner_integration_warning(
         OWNER_INTEGRATION_TOAST_MAX_OPEN_MS,
     )
     # Checked over the whole save, so a toast shown late or already closed still counts.
+    edit_page.toast.should_have_recorded_none_with(OWNER_INTEGRATION_RAW_MESSAGE)
+    edit_page.toast.should_have_recorded_one("warn")
+
+
+# @case save-time-contract-editor-controls_TC_011
+@pytest.mark.jira
+@pytest.mark.workflow
+@pytest.mark.requires_capability(WORKFLOW_CONTRACTS_COMPONENT_ID)
+@pytest.mark.requires_capability(FEATURE_COMPONENT_ID)
+@pytest.mark.ui
+def test_save_global_workflow_with_contract_warning_keeps_owner_integration_toast(
+    page,
+    create_script_workflow,
+    publish_workflow_as_global,
+    jira_user_integration,
+    default_llm,
+):
+    """A global workflow whose save also returns a contract warning stays open "Saved with
+    warnings": the owner-integration warning is still toasted, the contract warning is not.
+    """
+    run_tool, run_state = tool_state(
+        "run_script",
+        AgentWorkspaceTool.EXECUTE_WORKSPACE_SCRIPT.value,
+        {"script_path": unique_script_name("owner")},
+        next_state=PRODUCER_STATE_ID,
+        tool_access=[
+            ToolModel(name=JIRA_TOOL, integration_alias=jira_user_integration.alias)
+        ],
+    )
+    assistants, contract_states = contract_warning_assistants_and_states(
+        default_llm.base_name
+    )
+    workflow = create_script_workflow(
+        [run_tool], [run_state, *contract_states], assistants
+    )
+    publish_workflow_as_global(workflow.id)
+
+    edit_page = EditWorkflowPage(page)
+    edit_page.navigate_to(workflow.id)
+    edit_page.should_be_on_edit_workflow_page()
+    edit_page.toast.start_recording()
+    edit_page.click_save()
+
+    edit_page.issues_panel.should_have_context_note(SAVED_WITH_WARNINGS_NOTE)
+    edit_page.should_have_saved_with_warnings_header()
+    edit_page.toast.should_show_only_one(OWNER_INTEGRATION_TOAST, "warn")
+    edit_page.toast.should_show(SAVED_WITH_ONE_WARNING_TOAST)
+    # Checked over the whole save, so a toast shown late or already closed still counts.
+    edit_page.toast.should_have_recorded_none_with(REMOVED_KEY_MESSAGE)
     edit_page.toast.should_have_recorded_none_with(OWNER_INTEGRATION_RAW_MESSAGE)
     edit_page.toast.should_have_recorded_one("warn")

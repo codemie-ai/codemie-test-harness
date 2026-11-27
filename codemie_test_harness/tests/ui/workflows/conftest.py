@@ -95,19 +95,7 @@ def cleanup_generated_workflow(workflow_utils):
 
     for name in tracked_names:
         try:
-            match = None
-            page_num = 0
-            while True:
-                workflows_page = get_client().workflows.list(
-                    page=page_num, per_page=200, filter_by_user=True
-                )
-                if not workflows_page:
-                    break
-                match = next((w for w in workflows_page if w.name == name), None)
-                if match or len(workflows_page) < 200:
-                    break
-                page_num += 1
-            if match:
+            for match in workflow_utils.find_workflows_by_name(name):
                 workflow_utils.delete_workflow(match)
         except Exception:
             pass
