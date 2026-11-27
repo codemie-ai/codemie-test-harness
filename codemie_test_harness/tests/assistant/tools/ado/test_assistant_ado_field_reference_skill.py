@@ -37,7 +37,7 @@ ACCEPTANCE_CRITERIA_REST_NAME = "Microsoft.VSTS.Common.AcceptanceCriteria"
 @pytest.mark.assistant
 @pytest.mark.api
 def test_ado_work_item_toolkit_alone_does_not_expose_field_reference_skill(
-    assistant_utils, assistant, integration_utils
+    assistant_utils, assistant, integration
 ):
     """Covers extend-context-for-ado-tools_TC_002: enabling the Azure
     DevOps Work Item toolkit alone, with no Skill attached, must not expose
@@ -46,9 +46,7 @@ def test_ado_work_item_toolkit_alone_does_not_expose_field_reference_skill(
     """
     # @case extend-context-for-ado-tools_TC_002
     credential_values = CredentialsManager.azure_devops_credentials()
-    settings = integration_utils.create_integration(
-        CredentialTypes.AZURE_DEVOPS, credential_values
-    )
+    settings = integration(CredentialTypes.AZURE_DEVOPS, credential_values)
     created_assistant = assistant(
         Toolkit.AZURE_DEVOPS_WORK_ITEM,
         AzureDevOpsWorkItemTool.GET_WORK_ITEM,
@@ -73,7 +71,7 @@ def test_ado_work_item_toolkit_alone_does_not_expose_field_reference_skill(
 def test_skill_attached_in_chat_returns_field_reference_on_demand(
     assistant_utils,
     assistant,
-    integration_utils,
+    integration,
     skill_utils,
     ado_field_reference_skill,
 ):
@@ -83,9 +81,7 @@ def test_skill_attached_in_chat_returns_field_reference_on_demand(
     """
     # @case extend-context-for-ado-tools_TC_003
     credential_values = CredentialsManager.azure_devops_credentials()
-    settings = integration_utils.create_integration(
-        CredentialTypes.AZURE_DEVOPS, credential_values
-    )
+    settings = integration(CredentialTypes.AZURE_DEVOPS, credential_values)
     created_assistant = assistant(
         Toolkit.AZURE_DEVOPS_WORK_ITEM,
         AzureDevOpsWorkItemTool.GET_WORK_ITEM,
@@ -114,7 +110,7 @@ def test_skill_attached_in_chat_returns_field_reference_on_demand(
 def test_attaching_skill_auto_merges_ado_work_item_toolkit(
     assistant_utils,
     assistant_factory,
-    integration_utils,
+    integration,
     skill_utils,
     ado_field_reference_skill,
     ado_seed,
@@ -127,9 +123,7 @@ def test_attaching_skill_auto_merges_ado_work_item_toolkit(
     """
     # @case extend-context-for-ado-tools_TC_005
     credential_values = CredentialsManager.azure_devops_credentials()
-    integration_utils.create_integration(
-        CredentialTypes.AZURE_DEVOPS, credential_values
-    )
+    integration(CredentialTypes.AZURE_DEVOPS, credential_values)
 
     bare_assistant = assistant_factory.create()
     # list()/create() return the lean AssistantBase (no toolkits field);
