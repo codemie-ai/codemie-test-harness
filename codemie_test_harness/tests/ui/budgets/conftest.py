@@ -436,3 +436,28 @@ def login(page, project_admin_setup):
     user = get_client(username=email, password=password).users.about_me()
     frontend_url = CredentialsManager.get_parameter("FRONTEND_URL", "")
     login_page.login_suppressing_popups(email, password, user.user_id, frontend_url)
+
+
+@pytest.fixture(scope="function")
+def two_member_override_ui_ready(
+    project_admin_setup,
+    admin_project_utils,
+    member_override_ui_ready,
+    second_platform_user,
+):
+    """``member_override_ui_ready`` plus a second plain member of the same project.
+
+    Yields:
+        tuple: ((email, password, user_id) of the first member, same for the second member).
+    """
+    project_name = project_admin_setup[0]
+    email, password = second_platform_user.email, second_platform_user.password
+    user_id = get_client(username=email, password=password).users.about_me().user_id
+    admin_project_utils.assign_user_to_project(
+        project_name, user_id, is_project_admin=False
+    )
+    yield member_override_ui_ready, (email, password, user_id)
+    try:
+        admin_project_utils.remove_user_from_project(project_name, user_id)
+    except Exception:
+        pass

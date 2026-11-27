@@ -262,6 +262,15 @@ class ProjectMembersBudgetSection(BasePage):
         return self
 
     @step
+    def should_not_show_bulk_selection_bar(self):
+        """Verify no 'N selected' bar is offered, so no bulk actions menu either.
+
+        The 'Bulk Actions' trigger and its 'Override budgets' item live inside this bar.
+        """
+        expect(self.bulk_actions_bar).to_have_count(0)
+        return self
+
+    @step
     def should_not_show_category_allocation(self, email: str, category_label: str):
         """Verify the member's row shows no allocation (and no spend) for the category."""
         expect(self.category_allocation(email, category_label)).to_have_count(0)

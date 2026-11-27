@@ -52,12 +52,53 @@ class BulkBudgetOverrideModalPage(BasePage):
         """Any 'Reset budget usage for N users' button inside the modal."""
         return self.dialog.get_by_role("button", name=re.compile(r"Reset budget usage"))
 
+    @property
+    def use_project_allocation_button(self):
+        """Any 'Use project allocation' action of the modal's category cards."""
+        return self.dialog.get_by_role("button", name="Use project allocation")
+
+    def category_card(self, label: str):
+        """One category's card (e.g. 'Platform', 'CLI') of the bulk modal, resolved from its heading.
+
+        The card is the nearest grid ancestor of the category heading, as in the member modal.
+        """
+        heading = self.dialog.get_by_role("heading", name=label, exact=True)
+        return heading.locator("xpath=ancestor::div[contains(@class, 'grid')][1]")
+
     # ── Actions ───────────────────────────────────────────────────────────────
 
     @step
     def cancel(self):
         """Click 'Cancel' to dismiss the modal without saving."""
         self.cancel_button.click()
+        return self
+
+    @step
+    def use_project_allocation_for(self, label: str):
+        """Click 'Use project allocation' on one category's card only."""
+        self.category_card(label).get_by_role(
+            "button", name="Use project allocation"
+        ).click()
+        return self
+
+    @step
+    def undo_for(self, label: str):
+        """Click 'Undo' on one category's card to cancel its pending 'use project allocation'."""
+        self.category_card(label).get_by_role("button", name="Undo").click()
+        return self
+
+    @step
+    def set_hard_limit_for(self, label: str, value: float):
+        """Enter the hard limit of one category's card."""
+        self.category_card(label).get_by_role("textbox", name="Hard Limit").fill(
+            str(value)
+        )
+        return self
+
+    @step
+    def save_override(self):
+        """Click 'Save Override' in the modal footer."""
+        self.save_override_button.click()
         return self
 
     # ── Assertions ────────────────────────────────────────────────────────────
@@ -83,7 +124,53 @@ class BulkBudgetOverrideModalPage(BasePage):
         return self
 
     @step
+    def should_offer_use_project_allocation_for(self, label: str):
+        """Verify one category's card offers 'Use project allocation'."""
+        expect(
+            self.category_card(label).get_by_role(
+                "button", name="Use project allocation"
+            )
+        ).to_be_visible()
+        return self
+
+    @step
+    def should_not_offer_use_project_allocation(self):
+        """Verify no category card of the modal offers 'Use project allocation'."""
+        expect(self.use_project_allocation_button).to_have_count(0)
+        return self
+
+    @step
+    def should_show_undo_for(self, label: str):
+        """Verify one category's card is pending 'use project allocation' ('Undo' offered)."""
+        card = self.category_card(label)
+        expect(card.get_by_role("button", name="Undo")).to_be_visible()
+        expect(card.get_by_role("button", name="Use project allocation")).to_have_count(
+            0
+        )
+        return self
+
+    @step
+    def should_show_hard_limit_for(self, label: str, value: re.Pattern):
+        """Verify one category's card shows the given hard limit."""
+        expect(
+            self.category_card(label).get_by_role("textbox", name="Hard Limit")
+        ).to_have_value(value)
+        return self
+
+    @step
+    def should_show_saved_toast(self, text: str):
+        """Verify the success toast of a saved bulk override is shown."""
+        self.toast.should_show(text)
+        return self
+
+    @step
     def should_be_closed(self):
         """Verify the bulk modal is closed."""
         expect(self.dialog).not_to_be_visible()
+        return self
+
+    @step
+    def should_disable_save_override(self):
+        """Verify 'Save Override' is disabled, i.e. no category is pending a change."""
+        expect(self.save_override_button).to_be_disabled()
         return self

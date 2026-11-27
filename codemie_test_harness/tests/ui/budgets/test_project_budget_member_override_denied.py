@@ -41,6 +41,7 @@ def login(page, project_admin_setup, member_override_ui_setup):
     )
 
 
+# @case bulk-override-use-project-allocation_TC_003
 @pytest.mark.budget
 @pytest.mark.ui
 def test_regular_member_does_not_see_member_override_controls(
@@ -59,5 +60,6 @@ def test_regular_member_does_not_see_member_override_controls(
     members.should_list_member(pa_email)
     members.should_not_show_allocation_column()
     members.should_not_show_override_controls()
+    members.should_not_show_bulk_selection_bar()
     details_page.should_not_have_manage_budget_button()
     details_page.should_not_show_budgets_and_integrations_tabs()
